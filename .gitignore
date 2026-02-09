@@ -1,0 +1,176 @@
+# ===== IDE / Editor =====
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.#*
+*.sublime-project
+*.sublime-workspace
+
+# ===== Local Tool Config =====
+.opencode/
+.opencodeignore
+opencode.json
+CLAUDE.md
+.cursorrules
+
+# ===== Private / Working Notes =====
+notes/
+guides/
+.obsidian/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+Pipfile.lock
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.pyenv/
+
+# uv
+.uv/
+uv.lock
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.pytest_cache/
+htmlcov/
+.hypothesis/
+
+# MyPy / Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Jupyter
+.ipynb_checkpoints
+
+# ===== Node.js / Frontend =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+.next/
+out/
+.nuxt/
+.cache/
+.parcel-cache/
+.vite/
+
+# ===== Environment / Secrets =====
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+secrets/
+*.secret
+*.password
+
+# ===== Database =====
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+
+# ===== Logs =====
+logs/
+*.log
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# ===== Temporary / Backup =====
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# ===== Archives =====
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# ===== Large Binary Files =====
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.iso
+*.dmg
+
+# ===== Benchmark Results =====
+benchmarks/results/*.json
+benchmarks/results/*.html
+benchmarks/results/*.csv
+
+# ===== HAProxy / Coraza Runtime =====
+*.sock
+*.pid
+haproxy.stats
+
+# ===== Thesis Artifacts =====
+docs/thesis/*
+
+# ===== Keep Empty Directories =====
+!.gitkeep
