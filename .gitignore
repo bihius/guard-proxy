@@ -17,10 +17,10 @@ CLAUDE.md
 .cursorrules
 
 # ===== Private / Working Notes =====
-notes/
+notes/*
 guides/
 .obsidian/
-!notes/decisions/*
+!notes/decisions/
 
 # ===== Python =====
 __pycache__/
