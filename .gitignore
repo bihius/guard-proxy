@@ -20,6 +20,7 @@ CLAUDE.md
 notes/
 guides/
 .obsidian/
+!notes/decisions/*
 
 # ===== Python =====
 __pycache__/
