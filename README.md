@@ -6,7 +6,7 @@
 
 Guard Proxy is a Web Application Firewall (WAF) solution designed for self-hosted environments. It combines HAProxy as a reverse proxy with Coraza WAF engine and OWASP Core Rule Set for threat detection, managed through a web-based admin panel.
 
-This project is being developed as a master's thesis (praca inzynierska) at Wroclaw University of Science and Technology.
+This project is being developed as a master's thesis at Wroclaw University DSW. 
 
 ## Planned Features
 
@@ -43,7 +43,7 @@ Full details: [Technology Stack](docs/stack.md)
 
 **Status**: Early development (Phase 1: Research & Foundation)
 
-See [progress.md](progress.md) for detailed task breakdown.
+See [progress.md](progress_tracker.md) for detailed task breakdown.
 
 ## Documentation
 

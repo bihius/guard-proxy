@@ -2,7 +2,19 @@
 
 > Self-hosted Reverse Proxy WAF with HAProxy and OWASP Coraza
 
-Last updated: 2026-02-09
+Last updated: 2026-02-15
+
+---
+
+### TL;DR
+
+| Category | Technologies |
+|----------|-------------|
+| **Proxy & WAF** | HAProxy, Coraza, OWASP CRS |
+| **Backend** | FastAPI, SQLAlchemy, PostgreSQL |
+| **Frontend** | React, TypeScript, Vite, TanStack Query, Tailwind |
+| **Infrastructure** | Docker Compose, Prometheus, Grafana |
+| **Testing** | pytest, Vitest, wrk, OWASP ZAP |
 
 ---
 
@@ -67,7 +79,6 @@ Alternatives considered:
 - Flask: Synchronous, no built-in validation
 - Django: Too heavy for API-only use case
 
-See: ADR-001 (FastAPI over Flask/Django)
 
 ---
 
@@ -83,7 +94,6 @@ See: ADR-001 (FastAPI over Flask/Django)
 
 Development alternative: SQLite 3 (zero-config, file-based)
 
-See: ADR-002 (PostgreSQL with SQLite for dev)
 
 ---
 
@@ -119,7 +129,6 @@ See: ADR-003 (React + TypeScript)
 **Role**: Containerization and deployment
 **Why**: Consistent environments, easy multi-service orchestration
 
-See: ADR-004 (Docker Compose deployment)
 
 ---
 
@@ -133,7 +142,7 @@ See: ADR-004 (Docker Compose deployment)
 
 - **pytest** - Python unit/integration testing
 - **Vitest** - Frontend testing (Vite-native)
-- **wrk / k6** - Load testing and benchmarking
+- **k6** - Load testing and benchmarking
 - **OWASP ZAP** - Automated security scanning
 
 ---
@@ -145,14 +154,5 @@ See: ADR-004 (Docker Compose deployment)
 - **Ruff** - Python linter/formatter (Rust-based, fast)
 - **ESLint + Prettier** - TypeScript linting/formatting
 
----
 
-## Summary
 
-| Category | Technologies |
-|----------|-------------|
-| **Proxy & WAF** | HAProxy, Coraza, OWASP CRS |
-| **Backend** | FastAPI, SQLAlchemy, PostgreSQL |
-| **Frontend** | React, TypeScript, Vite, TanStack Query, Tailwind |
-| **Infrastructure** | Docker Compose, Prometheus, Grafana |
-| **Testing** | pytest, Vitest, wrk, OWASP ZAP |
