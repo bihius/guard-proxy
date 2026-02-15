@@ -1,0 +1,43 @@
+% =============================================================================
+% DSW Title Page Template
+% =============================================================================
+% Matches the official DSW title page format (Załącznik wzór strony tytułowej)
+% =============================================================================
+
+\begin{titlepage}
+\begin{center}
+
+% --- University Name ---
+\vspace*{0pt}
+{\normalsize\bfseries \metaUniversity}\\[0.3cm]
+{\normalsize\bfseries \metaFaculty}\\[0.2cm]
+{\normalsize\bfseries \metaDegreeLevel}\\[2\baselineskip]
+
+% --- Field of Study ---
+\begin{flushleft}
+{\normalsize Kierunek studiów: \metaField}\\[8pt]
+{\normalsize Zakres kształcenia: \metaSpecialization}\\[8pt]
+\end{flushleft}
+
+\vspace{5\baselineskip}
+
+% --- Author ---
+{\normalsize \metaAuthor}\\[24pt]
+
+% --- Title ---
+{\normalsize\bfseries \metaTitle}\\[5\baselineskip]
+
+% --- Work Type ---
+\begin{flushleft}
+{\normalsize \metaWorkType}\\[0.3cm]
+{\normalsize napisana pod kierunkiem}\\[0.2cm]
+{\normalsize \metaSupervisor}\\[0pt]
+\end{flushleft}
+
+\vspace{4\baselineskip}
+
+% --- City and Year ---
+{\normalsize \metaCityYear}
+
+\end{center}
+\end{titlepage}

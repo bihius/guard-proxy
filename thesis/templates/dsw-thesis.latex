@@ -1,0 +1,316 @@
+% =============================================================================
+% DSW Thesis LaTeX Template for Pandoc
+% =============================================================================
+% Uniwersytet Dolnośląski DSW we Wrocławiu
+% Wymogi edytorskie prac dyplomowych i projektowych
+% =============================================================================
+
+\documentclass[$for(classoption)$$classoption$$sep$,$endfor$]{$documentclass$}
+
+% =============================================================================
+% PACKAGES
+% =============================================================================
+
+% --- Page Layout ---
+\usepackage[$for(geometry)$$geometry$$sep$,$endfor$]{geometry}
+
+% --- Font Setup (XeLaTeX) ---
+\usepackage{fontspec}
+\setmainfont{$mainfont$}[$for(mainfontoptions)$$mainfontoptions$$sep$,$endfor$]
+
+% --- Polish Language Support ---
+\usepackage{polyglossia}
+\setdefaultlanguage{polish}
+
+% --- Line Spacing ---
+% DSW requirement: "interlinia 1.5" means Word-style 1.5 line spacing.
+% \onehalfspacing from setspace applies the correct factor (1.241 for 12pt),
+% NOT \setstretch{1.5} which produces near-double spacing.
+\usepackage{setspace}
+% \onehalfspacing
+% \setstretch{1.25}
+
+% --- Prevent blank pages and bottom margin overflow with twoside ---
+\raggedbottom
+
+% --- Paragraph Indentation: 1.25cm (DSW requirement) ---
+\usepackage{indentfirst}
+\setlength{\parindent}{1.25cm}
+% Paragraph spacing: 0pt before, 8pt after (Word template equivalent)
+\setlength{\parskip}{8pt}
+
+% --- NO Hyphenation (DSW requirement: wyłączone dzielenie wyrazów) ---
+\usepackage[none]{hyphenat}
+\sloppy
+
+% --- Headers and Footers ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+% Page number: bottom-right (DSW requirement: cyfry w prawym dolnym rogu)
+\fancyfoot[R]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+% Also apply to plain pages (chapter starts, toc, etc.)
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[R]{\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
+
+% --- Section Formatting ---
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Chapter-level sections (e.g., "1. Wstęp")
+\titleformat{\section}
+  {\normalfont\Large\bfseries}
+  {\thesection.}{0.5em}{}
+\titlespacing{\section}{0pt}{12pt}{12pt}
+
+% Subsection (e.g., "1.1. Cel i zakres pracy")
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}
+  {\thesubsection.}{0.5em}{}
+\titlespacing{\subsection}{0pt}{2pt}{12pt}
+
+% Subsubsection
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries}
+  {\thesubsubsection.}{0.5em}{}
+\titlespacing{\subsubsection}{0pt}{8pt}{8pt}
+
+% --- Table of Contents Spacing ---
+% TOC entries: 0pt before, 5pt after
+\setlength{\cftbeforesecskip}{0pt}
+\setlength{\cftbeforesubsecskip}{0pt}
+\setlength{\cftbeforesubsubsecskip}{0pt}
+\renewcommand{\cftsecafterpnum}{\vskip5pt}
+\renewcommand{\cftsubsecafterpnum}{\vskip5pt}
+\renewcommand{\cftsubsubsecafterpnum}{\vskip5pt}
+
+% Reduce widow/orphan penalties (10000 was too aggressive, caused blank pages)
+\widowpenalty=150
+\clubpenalty=150
+
+% Allow page breaks between consecutive headings (prevents vbox overflow
+% when chapters are skeleton outlines with no body text between headings).
+% By default, LaTeX's \@afterheading sets \@nobreaktrue which inserts
+% \penalty 10000 (absolute no-break) after every heading. When consecutive
+% headings have no body text, this creates an unbreakable chain that
+% overflows the page. We override \@afterheading to allow breaks.
+\makeatletter
+\let\orig@afterheading\@afterheading
+\renewcommand{\@afterheading}{%
+  \@nobreakfalse
+  \everypar{%
+    \if@nobreak
+      \@nobreakfalse
+      \clubpenalty \@M
+      \if@afterindent \else
+        {\setbox\z@\lastbox}%
+      \fi
+    \else
+      \clubpenalty \@clubpenalty
+      \everypar{}%
+    \fi}%
+}
+\makeatother
+
+% --- Footnotes (DSW requirements) ---
+% 10pt, Times New Roman, justified, single spacing, no indent
+\usepackage[bottom,hang]{footmisc}
+\setlength{\footnotemargin}{0pt}
+\renewcommand{\footnotelayout}{\fontsize{10pt}{12pt}\selectfont}
+
+% Single spacing in footnotes (use \setstretch to avoid extra vertical space)
+\let\oldfootnote\footnote
+\renewcommand{\footnote}[1]{%
+  \oldfootnote{\setstretch{1.0}\noindent #1}%
+}
+
+% --- Smart Quotes ---
+\usepackage[autostyle=true,polish=guillemets]{csquotes}
+
+% --- Tables ---
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+
+% --- Figures ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  format=hang,
+  justification=justified
+}
+
+% --- Code Listings ---
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny,
+  tabsize=2,
+  captionpos=b,
+  inputencoding=utf8,
+  literate={ą}{{\k{a}}}1 {ć}{{\'c}}1 {ę}{{\k{e}}}1 {ł}{{\l{}}}1
+           {ń}{{\'n}}1 {ó}{{\'o}}1 {ś}{{\'s}}1 {ź}{{\'z}}1 {ż}{{\.z}}1
+           {Ą}{{\k{A}}}1 {Ć}{{\'C}}1 {Ę}{{\k{E}}}1 {Ł}{{\L{}}}1
+           {Ń}{{\'N}}1 {Ó}{{\'O}}1 {Ś}{{\'S}}1 {Ź}{{\'Z}}1 {Ż}{{\.Z}}1
+}
+
+% --- Colors ---
+\usepackage{xcolor}
+
+% --- Hyperlinks ---
+\usepackage[
+  colorlinks=false,
+  pdfborder={0 0 0},
+  bookmarks=true,
+  bookmarksnumbered=true,
+  pdfauthor={$author$},
+  pdftitle={$title$},
+  pdfsubject={$work-type$},
+  pdfkeywords={WAF, HAProxy, Coraza, SPOE, OWASP CRS},
+  pdflang={pl-PL}
+]{hyperref}
+
+% --- URL formatting ---
+\usepackage{xurl}
+\urlstyle{same}
+
+% --- Numbered labels in bibliography ---
+\makeatletter
+\renewcommand{\@biblabel}[1]{#1.}
+% Pandoc may emit \bibitem[\citeproctext]{...} with empty/constant optional labels.
+% Ignore optional labels and always use native enumerate numbering from thebibliography.
+\def\@lbibitem[#1]#2{%
+  \item
+  \if@filesw
+    {\let\protect\noexpand
+     \immediate\write\@auxout{\string\bibcite{#2}{\theenumiv}}}%
+  \fi
+  \ignorespaces
+}
+\makeatother
+
+% =============================================================================
+% PANDOC CITEPROC SUPPORT
+% =============================================================================
+
+% Citeproc citation commands (required by pandoc --citeproc)
+\NewDocumentCommand\citeproctext{}{}
+\NewDocumentCommand\citeproc{mm}{%
+  \begingroup\def\citeproctext{#2}\cite{#1}\endgroup}
+\makeatletter
+ \@ifpackageloaded{hyperref}%
+  {\newcommand{\cite@proc@fullcite}[2]{\footnote{\citeproc{#1}{#2}}}}%
+  {\newcommand{\cite@proc@fullcite}[2]{\footnote{#2}}}%
+ \let\citeproc\cite@proc@fullcite
+\makeatother
+
+% CSLReferences environment (generated by pandoc --citeproc)
+% #1 = entry spacing, #2 = hanging indent (0 or 1)
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.25cm}
+\newlength{\csllabelwidth}
+\setlength{\csllabelwidth}{0pt}
+\newenvironment{CSLReferences}[2]
+ {%
+  % DSW requirement: bibliography on a separate page.
+  \clearpage
+  \renewcommand{\refname}{Bibliografia}
+  \begin{thebibliography}{99}
+    \addcontentsline{toc}{section}{Bibliografia}
+    \setlength{\itemsep}{0pt}%
+    \setlength{\parsep}{0pt}%
+    \setlength{\topsep}{0pt}%
+ }
+ {%
+  \end{thebibliography}
+ }
+\usepackage{calc}
+\newcommand{\CSLBlock}[1]{#1}
+\newcommand{\CSLLeftMargin}[1]{}
+\newcommand{\CSLRightInline}[1]{#1}
+\newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
+
+% =============================================================================
+% CUSTOM COMMANDS
+% =============================================================================
+
+% Metadata commands for files loaded via \input (Pandoc variables are expanded here)
+\newcommand{\metaTitle}{$title$}
+\newcommand{\metaAuthor}{$author$}
+\newcommand{\metaSupervisor}{$supervisor$}
+\newcommand{\metaUniversity}{$university$}
+\newcommand{\metaFaculty}{$faculty$}
+\newcommand{\metaDegreeLevel}{$degree-level$}
+\newcommand{\metaField}{$field$}
+\newcommand{\metaSpecialization}{$specialization$}
+\newcommand{\metaWorkType}{$work-type$}
+\newcommand{\metaCityYear}{$city-year$}
+
+% For unnumbered sections that still appear in ToC
+\newcommand{\unnumberedsection}[1]{%
+  \section*{#1}%
+  \addcontentsline{toc}{section}{#1}%
+}
+
+% =============================================================================
+% DOCUMENT BODY
+% =============================================================================
+
+\begin{document}
+
+% Apply global body line spacing from metadata (e.g., 1.25 ~= Word 1.5 at 12pt)
+$if(linestretch)$
+\setstretch{$linestretch$}
+$endif$
+
+% --- Title Page ---
+\input{templates/titlepage.latex}
+
+% --- Table of Contents ---
+\newpage
+\setcounter{page}{2}
+$if(toc)$
+{
+  \hypersetup{linkcolor=black}
+  \setcounter{tocdepth}{$toc-depth$}
+  \tableofcontents
+}
+$endif$
+\clearpage
+
+% --- List of Figures (if enabled) ---
+$if(lof)$
+\listoffigures
+\newpage
+$endif$
+
+% --- List of Tables (if enabled) ---
+$if(lot)$
+\listoftables
+\newpage
+$endif$
+
+% --- Main Body ---
+$body$
+
+% --- List of Figures/Tables at End (DSW: Wykaz tabel, schematów) ---
+% Uncomment if needed at end of document:
+% \newpage
+% \unnumberedsection{Spis tabel}
+% \listoftables
+% \unnumberedsection{Spis rysunków}
+% \listoffigures
+
+\end{document}
