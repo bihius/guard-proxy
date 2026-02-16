@@ -11,12 +11,6 @@
 \fontsize{11pt}{11pt}\selectfont
 \sloppy
 
-% --- Logo (overlay so it does not push content down) ---
-\noindent\raisebox{0pt}[0pt][0pt]{%
-  \hspace*{-0.1cm}\includegraphics[width=5.35cm]{assets/dsw_logo.jpg}%
-}
-\vspace*{0.3\baselineskip}
-
 % --- Header block (centered, bold) ---
 \begin{center}
 \textbf{\metaUniversity}\\
@@ -30,20 +24,20 @@
 \noindent Kierunek studiów: \metaField\\
 \noindent Zakres kształcenia: \metaSpecialization
 
-\vspace{\fill}
+\vspace{5.0cm}
 
 % --- Author and title (centered) ---
 \begin{center}
 \metaAuthor
 \end{center}
 
-\vspace{\baselineskip}
+\vspace{0.2cm}
 
 \begin{center}
 \textbf{\begin{minipage}{0.86\textwidth}\centering \metaTitle \end{minipage}}
 \end{center}
 
-\vspace{0.4cm}
+\vspace{1.9cm}
 
 % --- Work type block (indented left, as in official model) ---
 \noindent\hspace*{8.75cm}%
@@ -53,7 +47,7 @@ napisana pod kierunkiem\\
 \metaSupervisor
 \end{minipage}
 
-\vfill
+\vspace{5.2cm}
 
 % --- City and year ---
 \begin{center}

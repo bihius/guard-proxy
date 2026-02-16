@@ -36,8 +36,8 @@
 % --- Paragraph Indentation: 1.25cm (DSW requirement) ---
 \usepackage{indentfirst}
 \setlength{\parindent}{1.25cm}
-% Keep paragraph spacing at 0pt (formal requirement: interline spacing, not extra paragraph gaps)
-\setlength{\parskip}{0pt}
+% Paragraph spacing after: 10pt
+\setlength{\parskip}{10pt}
 
 % --- NO Hyphenation (DSW requirement: wyłączone dzielenie wyrazów) ---
 \usepackage[none]{hyphenat}
@@ -67,13 +67,13 @@
 \titleformat{\section}
   {\normalfont\fontsize{18pt}{22pt}\selectfont\bfseries}
   {\thesection.}{0.5em}{}
-\titlespacing{\section}{0pt}{12pt}{12pt}
+\titlespacing{\section}{0pt}{10pt}{12pt}
 
 % Subsection (e.g., "1.1. Cel i zakres pracy")
 \titleformat{\subsection}
   {\normalfont\fontsize{16pt}{20pt}\selectfont\bfseries}
   {\thesubsection.}{0.5em}{}
-\titlespacing{\subsection}{0pt}{2pt}{12pt}
+\titlespacing{\subsection}{0pt}{10pt}{12pt}
 
 % Subsubsection
 \titleformat{\subsubsection}

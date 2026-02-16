@@ -6,6 +6,8 @@ Reverse proxy to serwer pośredniczący, który przyjmuje żądania od klientów
 
 HAProxy jest jednym z najpopularniejszych rozwiązań reverse proxy, oferującym zaawansowane mechanizmy równoważenia obciążenia oraz możliwość integracji z zewnętrznymi agentami przetwarzania poprzez protokół SPOE[@haproxy-rate-limiting].
 
+
+
 ## Web Application Firewall (WAF) -- rola, tryby pracy
 
 <!-- 
