@@ -8,11 +8,6 @@ const pct = total ? Math.round((done / total) * 100) : 0;
 dv.header(2,`${pct}% done (${done}/${total} task${total === 1 ? '' : 's'})`);
 ```
 
-### 2026-02-16 updates
-- Public thesis template: neutral example bibliography + universal writing instructions (`thesis/instrukcja.md`).
-- Expanded `thesis/README.md` with purpose, structure, and workflow notes.
-- Added private bibliography flow (`bibliography/references.private.bib`) and updated metadata example.
-- Set `thesis/metadata.yaml` to use private bibliography; restored public example in `thesis/metadata.yaml.example`.
 
 
 ## 1. Research i Fundamenty [15%]
