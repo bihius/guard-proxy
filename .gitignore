@@ -171,8 +171,9 @@ benchmarks/results/*.csv
 haproxy.stats
 
 
-# ===== Thesis Build Output =====
+# ===== Thesis  =====
 thesis/
+
 
 # ===== Keep Empty Directories =====
 !.gitkeep
