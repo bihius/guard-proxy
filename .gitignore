@@ -21,8 +21,6 @@ notes/*
 guides/
 .obsidian/
 !notes/decisions/
-thesis/output/
-thesis/metadata.yaml
 
 # ===== Python =====
 __pycache__/
@@ -172,11 +170,9 @@ benchmarks/results/*.csv
 *.pid
 haproxy.stats
 
-# ===== Thesis Artifacts =====
-docs/thesis/*
 
 # ===== Thesis Build Output =====
-thesis/output/
+thesis/
 
 # ===== Keep Empty Directories =====
 !.gitkeep
