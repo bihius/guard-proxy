@@ -5,39 +5,59 @@
 % =============================================================================
 
 \begin{titlepage}
+\thispagestyle{empty}
+\begingroup
+\setstretch{1.5}
+\fontsize{11pt}{11pt}\selectfont
+\sloppy
+
+% --- Logo (overlay so it does not push content down) ---
+\noindent\raisebox{0pt}[0pt][0pt]{%
+  \hspace*{-0.1cm}\includegraphics[width=5.35cm]{assets/dsw_logo.jpg}%
+}
+\vspace*{0.3\baselineskip}
+
+% --- Header block (centered, bold) ---
 \begin{center}
-
-% --- University Name ---
-\vspace*{0pt}
-{\normalsize\bfseries \metaUniversity}\\[0.3cm]
-{\normalsize\bfseries \metaFaculty}\\[0.2cm]
-{\normalsize\bfseries \metaDegreeLevel}\\[2\baselineskip]
-
-% --- Field of Study ---
-\begin{flushleft}
-{\normalsize Kierunek studiów: \metaField}\\[8pt]
-{\normalsize Zakres kształcenia: \metaSpecialization}\\[8pt]
-\end{flushleft}
-
-\vspace{5\baselineskip}
-
-% --- Author ---
-{\normalsize \metaAuthor}\\[24pt]
-
-% --- Title ---
-{\normalsize\bfseries \metaTitle}\\[5\baselineskip]
-
-% --- Work Type ---
-\begin{flushleft}
-{\normalsize \metaWorkType}\\[0.3cm]
-{\normalsize napisana pod kierunkiem}\\[0.2cm]
-{\normalsize \metaSupervisor}\\[0pt]
-\end{flushleft}
-
-\vspace{4\baselineskip}
-
-% --- City and Year ---
-{\normalsize \metaCityYear}
-
+\textbf{\metaUniversity}\\
+\textbf{\metaFaculty}\\
+\textbf{\metaDegreeLevel}
 \end{center}
+
+\vspace{0.8\baselineskip}
+
+% --- Study field block (left aligned) ---
+\noindent Kierunek studiów: \metaField\\
+\noindent Zakres kształcenia: \metaSpecialization
+
+\vspace{\fill}
+
+% --- Author and title (centered) ---
+\begin{center}
+\metaAuthor
+\end{center}
+
+\vspace{\baselineskip}
+
+\begin{center}
+\textbf{\begin{minipage}{0.86\textwidth}\centering \metaTitle \end{minipage}}
+\end{center}
+
+\vspace{0.4cm}
+
+% --- Work type block (indented left, as in official model) ---
+\noindent\hspace*{8.75cm}%
+\begin{minipage}[t]{7.4cm}
+\metaWorkType\\
+napisana pod kierunkiem\\
+\metaSupervisor
+\end{minipage}
+
+\vfill
+
+% --- City and year ---
+\begin{center}
+\metaCityYear
+\end{center}
+\endgroup
 \end{titlepage}
