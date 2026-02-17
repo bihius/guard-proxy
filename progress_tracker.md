@@ -8,8 +8,6 @@ const pct = total ? Math.round((done / total) * 100) : 0;
 dv.header(2,`${pct}% done (${done}/${total} task${total === 1 ? '' : 's'})`);
 ```
 
-
-
 ## 1. Research i Fundamenty [15%]
 - [x] **Analiza HAProxy + SPOE protocol** (4%)
     - [x] Przeczytać dokumentację HAProxy SPOE
