@@ -9,12 +9,11 @@
 *.sublime-project
 *.sublime-workspace
 
-# ===== Local Tool Config =====
+# ===== AI Agent Config =====
+CLAUDE.md
 .opencode/
 .opencodeignore
 opencode.json
-CLAUDE.md
-.cursorrules
 
 # ===== Private / Working Notes =====
 notes/*

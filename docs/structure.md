@@ -1,40 +1,34 @@
 # Project Structure - Guard Proxy
 
-Last updated: 2026-02-09
+Last updated: 2026-02-22
 
 ## Current State
 
 ```
 guard-proxy/
-├── docs/                       # Documentation
+├── docs/                       # Documentation (technology stack, structure)
 │   ├── stack.md                # Technology stack and rationale
-│   ├── structure.md            # This file
-│   └── thesis/                 # Thesis document
-│       └── praca_inz_52703.docx
+│   └── structure.md            # This file
 │
 ├── src/                        # Source code (empty - development not started)
-├── deploy/                     # Deployment configs (empty)
-├── configs/                    # Example configurations (empty)
-├── benchmarks/                 # Performance testing (empty)
+│   ├── haproxy/                # HAProxy config files and SPOE config
+│   ├── coraza/                 # Coraza WAF config, CRS rules, custom rules
+│   └── panel/
+│       ├── backend/            # FastAPI application (API, models, services)
+│       └── frontend/           # React admin panel
 │
+├── configs/                    # Example configurations (empty)
+├── deploy/                     # Docker Compose, systemd units (empty)
+├── benchmarks/                 # Performance test scripts and payloads (empty)
+│
+├── README.md                   # Project overview
+├── README.architecture.md      # System architecture and data flow
+├── README.commands.md          # All development commands
+├── README.testing.md           # Testing strategy and targets
+├── progress_tracker.md         # Detailed task tracker
 ├── .gitignore
-├── README.md
-├── progress.md                 # Detailed task tracker
 └── LICENSE                     # MIT
 ```
-
-## Planned Structure
-
-As development progresses, `src/` will contain:
-
-- `src/haproxy/` - HAProxy configuration files and SPOE config
-- `src/coraza/` - Coraza WAF config, CRS rules, custom rules
-- `src/panel/backend/` - FastAPI application (API, models, services)
-- `src/panel/frontend/` - React admin panel
-
-`deploy/` will contain Docker Compose files and monitoring configs (Prometheus, Grafana).
-
-`benchmarks/` will hold performance test scripts and security scan payloads.
 
 ## Conventions
 

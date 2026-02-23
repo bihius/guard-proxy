@@ -37,16 +37,17 @@ Management: React UI -> FastAPI -> PostgreSQL
 - **Frontend**: React, TypeScript, Tailwind CSS
 - **Infrastructure**: Docker Compose, Prometheus, Grafana
 
-Full details: [Technology Stack](docs/stack.md)
-
 ## Project Status
 
 **Status**: Early development (Phase 1: Research & Foundation)
 
-See [progress.md](progress_tracker.md) for detailed task breakdown.
+See [progress_tracker.md](progress_tracker.md) for detailed task breakdown.
 
 ## Documentation
 
+- [Architecture](README.architecture.md) - System architecture and data flow
+- [Development Commands](README.commands.md) - All development commands
+- [Testing Strategy](README.testing.md) - Testing approach and targets
 - [Technology Stack](docs/stack.md) - Technologies and rationale
 - [Project Structure](docs/structure.md) - Directory organization
 

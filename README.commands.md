@@ -1,0 +1,62 @@
+# Development Commands - Guard Proxy
+
+> Single source of truth for all development commands.
+
+## Python (Backend)
+
+```bash
+# Tests
+pytest                                     # Run all tests
+pytest --cov=app --cov-report=term-missing # With coverage
+pytest tests/unit/                         # Unit tests only
+pytest tests/integration/                  # Integration tests only
+pytest -k "sqli"                           # Tests matching pattern
+pytest -x -v                               # Stop on first failure, verbose
+
+# Type checking & linting
+mypy app/
+ruff check app/
+ruff format app/
+```
+
+## TypeScript (Frontend)
+
+```bash
+npm test              # Run tests
+npm run type-check    # TypeScript compiler check
+npm run lint          # ESLint
+npm run format        # Prettier
+npm run build         # Production build
+npm run dev           # Dev server (port 3000)
+```
+
+## HAProxy
+
+```bash
+haproxy -c -f configs/haproxy/haproxy.cfg  # Validate config
+systemctl reload haproxy                    # Graceful reload (NEVER restart in prod)
+tcpdump -i lo -A -s 0 port 9000            # Debug SPOE traffic
+```
+
+## Docker
+
+```bash
+docker compose config                      # Validate compose file
+docker compose up -d                       # Start all services
+docker compose logs -f haproxy             # Follow service logs
+docker compose down                        # Stop all services
+```
+
+## Security Testing
+
+```bash
+sqlmap -u "http://localhost:8080/test?id=1" --batch   # SQL injection
+zap-cli quick-scan -s all http://localhost:8080        # OWASP ZAP
+```
+
+## Performance Testing
+
+```bash
+wrk -t4 -c100 -d30s --latency http://localhost:8080/test  # HTTP benchmark
+k6 run benchmarks/scripts/k6_test.js                       # Load testing
+```
