@@ -68,10 +68,6 @@ services:
   postgres:   # Port 5432
 ```
 
-### Production (Proxmox)
-- LXC 1: HAProxy + Coraza (2 vCPU, 2GB)
-- LXC 2: Backend + Frontend + DB (2 vCPU, 4GB)
-- LXC 3+: Application servers
 
 ## Key Decisions
 

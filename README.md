@@ -17,16 +17,21 @@ This project is being developed as a master's thesis at Wroclaw University DSW.
 - **Admin panel** (FastAPI + React) for managing policies and monitoring
 - **Docker-based deployment** for easy setup
 
-## Architecture (Planned)
+## Architecture
 
-```
-Client -> HAProxy (reverse proxy + SPOE) -> Coraza SPOA (WAF engine)
-                                                |
-                                           Allow / Deny
-                                                |
-                                          Backend Apps
-
-Management: React UI -> FastAPI -> PostgreSQL
+```mermaid
+sequenceDiagram
+    Client->>HAProxy: HTTP Request
+    HAProxy->>Coraza: SPOE (request data)
+    Coraza->>Coraza: Evaluate rules
+    alt Score >= Threshold
+        Coraza->>HAProxy: DENY
+        HAProxy->>Client: 403 Forbidden
+    else Score < Threshold
+        Coraza->>HAProxy: ALLOW
+        HAProxy->>Backend: Forward
+        Backend->>Client: Response
+    end
 ```
 
 ## Tech Stack
