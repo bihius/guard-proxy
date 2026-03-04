@@ -96,6 +96,8 @@ Mapowanie na model Coraza:
 
 Ważne: SPOA obsługuje fazy 1-2 (request). Fazy 3-4 (response) wymagają osobnej konfiguracji i nie zawsze są wspierane w trybie SPOE.
 
+Coraza obsluguje rowniez GEO IP scoring! 
+
 ## Źródła
 
 - https://coraza.io/docs/reference/internals
