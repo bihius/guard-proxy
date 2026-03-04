@@ -41,9 +41,10 @@ graph TB
 
 ## Project Status
 
-**Status**: Early development (Phase 1: Research & Foundation)
+**Status**: Phase 1 - research 
 
-See [progress_tracker.md](progress_tracker.md) for detailed task breakdown.
+See [project board](https://github.com/users/bihius/projects/1) for detailed task breakdown.
+Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
 
 ## Documentation
 
