@@ -16,9 +16,8 @@ CLAUDE.md
 opencode.json
 
 # ===== Private / Working Notes =====
-notes/*
-!notes/research/
-guides/
+
+
 .obsidian/
 
 # ===== Python =====
