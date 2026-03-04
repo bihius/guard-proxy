@@ -20,18 +20,15 @@ This project is being developed as a master's thesis at Wroclaw University DSW.
 ## Architecture
 
 ```mermaid
-sequenceDiagram
-    Client->>HAProxy: HTTP Request
-    HAProxy->>Coraza: SPOE (request data)
-    Coraza->>Coraza: Evaluate rules
-    alt Score >= Threshold
-        Coraza->>HAProxy: DENY
-        HAProxy->>Client: 403 Forbidden
-    else Score < Threshold
-        Coraza->>HAProxy: ALLOW
-        HAProxy->>Backend: Forward
-        Backend->>Client: Response
-    end
+graph TB
+    C[Clients] -->|HTTP/HTTPS| H[HAProxy]
+    H -.->|SPOE| CS[Coraza WAF]
+    CS -.->|Allow/Deny| H
+    H --> APP[Backend Apps]
+
+    FE[React UI] -->|API| BE[FastAPI]
+    BE -->|Config| H
+    BE --> DB[(PostgreSQL)]
 ```
 
 ## Tech Stack
