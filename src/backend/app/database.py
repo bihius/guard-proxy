@@ -3,7 +3,6 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
 
-
 # Dla SQLite potrzebujemy connect_args, dla PostgreSQL nie
 connect_args = {}
 if settings.database_url.startswith("sqlite"):
