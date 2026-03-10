@@ -41,7 +41,7 @@ graph TB
 
 ## Project Status
 
-**Status**: Phase 1 - research 
+**Status**: Phase idk which - we are developing backend to pass side course
 
 See [project board](https://github.com/users/bihius/projects/1) for detailed task breakdown.
 Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
