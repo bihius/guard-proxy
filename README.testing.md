@@ -4,8 +4,8 @@
 
 | Level | Location | Tools | Coverage Goal |
 |-------|----------|-------|---------------|
-| **Unit** (many, fast) | `src/*/tests/unit/` | pytest, Vitest | >80% |
-| **Integration** (some) | `src/*/tests/integration/` | pytest, Docker | Key flows |
+| **Unit** (many, fast) | `src/backend/tests/unit/` | pytest, Vitest | >80% |
+| **Integration** (some) | `src/backend/tests/integration/` | pytest, Docker | Key flows |
 | **Security** | `tests/security/` | sqlmap, OWASP ZAP, custom payloads | OWASP Top 10 |
 | **Performance** | `benchmarks/` | wrk, k6, Locust | <20% WAF overhead |
 
