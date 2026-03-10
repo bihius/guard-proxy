@@ -18,14 +18,15 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
+from app.config import settings
 from app.database import Base
 from app.models import *  # noqa: F403 — importuje wszystkie modele
-target_metadata = Base.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+# Nadpisz URL z .env (settings.database_url) zamiast hardcoded z alembic.ini
+# Dzięki temu: dev=SQLite, prod=PostgreSQL — automatycznie z DATABASE_URL w .env
+config.set_main_option("sqlalchemy.url", settings.database_url)
+
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
@@ -66,9 +67,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
