@@ -1,11 +1,18 @@
 """Policy model — szablony konfiguracji WAF."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.rule_override import RuleOverride
+    from app.models.vhost import VHost
 
 
 class Policy(Base):
@@ -63,10 +70,17 @@ class Policy(Base):
     # "RuleOverride" — nazwa klasy (string żeby uniknąć circular imports)
     # back_populates — po drugiej stronie relacji jest pole 'policy'
     # cascade="all, delete-orphan" — usuń rule_overrides gdy usuwasz policy
-    rule_overrides: Mapped[list["RuleOverride"]] = relationship(  # noqa: F821
+    rule_overrides: Mapped[list[RuleOverride]] = relationship(  # noqa: F821
         "RuleOverride",
         back_populates="policy",
         cascade="all, delete-orphan",
+    )
+
+    # Jeden policy może być przypisany do wielu vhostów
+    # back_populates="policy" odpowiada polu 'policy' w modelu VHost
+    vhosts: Mapped[list[VHost]] = relationship(  # noqa: F821
+        "VHost",
+        back_populates="policy",
     )
 
     def __repr__(self) -> str:
