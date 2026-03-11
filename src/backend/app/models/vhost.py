@@ -67,9 +67,11 @@ class VHost(Base):
     )
 
     # Relacja ORM — policy.vhosts albo vhost.policy
+    # back_populates="vhosts" odpowiada polu 'vhosts' w modelu Policy
     policy: Mapped[Policy | None] = relationship(  # noqa: F821
         "Policy",
         foreign_keys=[policy_id],
+        back_populates="vhosts",
     )
 
     def __repr__(self) -> str:
