@@ -1,12 +1,18 @@
 """RuleOverride model — nadpisania reguł OWASP CRS w ramach polityki WAF."""
 
+from __future__ import annotations
+
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.policy import Policy
 
 
 class RuleAction(enum.StrEnum):
@@ -57,7 +63,7 @@ class RuleOverride(Base):
     )
 
     # Relacja ORM do Policy (druga strona relacji z policy.rule_overrides)
-    policy: Mapped["Policy"] = relationship(  # noqa: F821
+    policy: Mapped[Policy] = relationship(  # noqa: F821
         "Policy",
         back_populates="rule_overrides",
     )
