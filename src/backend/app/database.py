@@ -1,3 +1,5 @@
+from collections.abc import Generator
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -19,10 +21,11 @@ SessionLocal = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy models."""
+
     pass
 
 
-def get_db():
+def get_db() -> Generator[Session]:
     """Dependency that provides a database session."""
     db = SessionLocal()
     try:

@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +23,17 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def jwt_secret_key_must_not_be_empty(cls, v: str) -> str:
+        """Ensure JWT secret key is set — an empty key would be a security hole."""
+        if not v.strip():
+            raise ValueError(
+                "JWT_SECRET_KEY must not be empty. "
+                "Set it in .env or as an environment variable."
+            )
+        return v
 
 
 settings = Settings()
