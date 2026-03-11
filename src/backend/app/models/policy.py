@@ -12,6 +12,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.rule_override import RuleOverride
+    from app.models.vhost import VHost
 
 
 class Policy(Base):
@@ -73,6 +74,13 @@ class Policy(Base):
         "RuleOverride",
         back_populates="policy",
         cascade="all, delete-orphan",
+    )
+
+    # Jeden policy może być przypisany do wielu vhostów
+    # back_populates="policy" odpowiada polu 'policy' w modelu VHost
+    vhosts: Mapped[list[VHost]] = relationship(  # noqa: F821
+        "VHost",
+        back_populates="policy",
     )
 
     def __repr__(self) -> str:

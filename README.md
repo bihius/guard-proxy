@@ -41,7 +41,7 @@ graph TB
 
 ## Project Status
 
-**Status**: Phase 1 - research 
+**Status**: In development — backend MVP
 
 See [project board](https://github.com/users/bihius/projects/1) for detailed task breakdown.
 Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
@@ -51,8 +51,6 @@ Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
 - [Architecture](README.architecture.md) - System architecture and data flow
 - [Development Commands](README.commands.md) - All development commands
 - [Testing Strategy](README.testing.md) - Testing approach and targets
-- [Technology Stack](docs/stack.md) - Technologies and rationale
-- [Project Structure](docs/structure.md) - Directory organization
 
 ## License
 

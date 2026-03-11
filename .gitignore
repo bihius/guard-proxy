@@ -18,6 +18,7 @@ opencode.json
 # ===== Private / Working Notes =====
 notes/implementation/
 notes/daily/
+!notes/decisions/
 
 .obsidian/
 
@@ -54,7 +55,7 @@ venv.bak/
 
 # uv
 .uv/
-uv.lock
+# uv.lock is intentionally tracked (dependency lockfile)
 
 # Testing
 .tox/

@@ -35,10 +35,10 @@ sequenceDiagram
 
 | Component | Role | Location |
 |-----------|------|----------|
-| **HAProxy** | Reverse proxy, HTTPS termination, vhost routing, SPOE | `src/haproxy/` |
-| **Coraza SPOA** | WAF engine, OWASP CRS, anomaly scoring, per-vhost rules | `src/coraza/` |
-| **FastAPI Backend** | Policy management API, config generation | `src/panel/backend/` |
-| **React Frontend** | Admin panel UI, policy editor | `src/panel/frontend/` |
+| **HAProxy** | Reverse proxy, HTTPS termination, vhost routing, SPOE | `configs/haproxy/` |
+| **Coraza SPOA** | WAF engine, OWASP CRS, anomaly scoring, per-vhost rules | *(planned)* |
+| **FastAPI Backend** | Policy management API, config generation | `src/backend/` |
+| **React Frontend** | Admin panel UI, policy editor | `src/frontend/` *(planned)* |
 
 ## Data Flow
 
