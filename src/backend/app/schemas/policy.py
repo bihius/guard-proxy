@@ -51,6 +51,13 @@ class PolicyUpdate(BaseModel):
             raise ValueError("Paranoia level must be between 1 and 4")
         return v
 
+    @field_validator("anomaly_threshold")
+    @classmethod
+    def anomaly_threshold_positive(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("Anomaly threshold must be at least 1")
+        return v
+
 
 class PolicyResponse(BaseModel):
     """Response body dla GET /policies (lista) — BEZ rule_overrides."""

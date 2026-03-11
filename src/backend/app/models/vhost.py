@@ -1,11 +1,17 @@
 """VHost model — domeny obsługiwane przez HAProxy."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.policy import Policy
 
 
 class VHost(Base):
@@ -61,7 +67,7 @@ class VHost(Base):
     )
 
     # Relacja ORM — policy.vhosts albo vhost.policy
-    policy: Mapped["Policy | None"] = relationship(  # noqa: F821
+    policy: Mapped[Policy | None] = relationship(  # noqa: F821
         "Policy",
         foreign_keys=[policy_id],
     )

@@ -22,21 +22,29 @@ class VHostCreate(BaseModel):
     def domain_no_protocol(cls, v: str) -> str:
         """Domena nie powinna zawierać protokołu (http:// itp.).
 
+        strip() przed sprawdzeniem — spacja na początku/końcu (np. z copy-paste)
+        nie ominie walidacji.
+
         Poprawne:   "example.com", "sub.example.com"
         Niepoprawne: "http://example.com"
         """
+        v = v.strip().lower()
         if v.startswith(("http://", "https://")):
             raise ValueError("Domain should not include protocol (http:// or https://)")
-        return v.lower().strip()
+        return v
 
     @field_validator("backend_url")
     @classmethod
     def backend_url_has_protocol(cls, v: str) -> str:
         """Backend URL musi zawierać protokół.
 
+        strip() przed sprawdzeniem — spacja na początku/końcu (np. z copy-paste)
+        nie ominie walidacji.
+
         Poprawne:   "http://localhost:3000", "http://192.168.1.10:8080"
         Niepoprawne: "localhost:3000"
         """
+        v = v.strip()
         if not v.startswith(("http://", "https://")):
             raise ValueError("Backend URL must start with http:// or https://")
         return v
