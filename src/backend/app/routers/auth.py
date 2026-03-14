@@ -7,11 +7,16 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.auth import LoginRequest, Token
+from app.schemas.auth import LoginRequest, RefreshRequest, Token
 from app.schemas.user import UserResponse
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Stały dummy hash — bcrypt musi wykonać się zawsze, nawet gdy user nie istnieje.
+# Bez tego atakujący mógłby odróżnić "zły email" od "złe hasło" po czasie odpowiedzi
+# (timing attack): brak usera → brak bcrypt → odpowiedź szybciej.
+_DUMMY_HASH: str = auth_service.hash_password("dummy-guard-proxy")
 
 
 @router.post("/login", response_model=Token)
@@ -24,12 +29,11 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> Token:
     """
     user = db.query(User).filter(User.email == body.email).first()
 
-    # Sprawdzamy oba warunki przed zwróceniem błędu — zapobiega timing attack.
-    # Gdybyśmy zwracali błąd od razu gdy user nie istnieje, atakujący mógłby
-    # odróżnić "zły email" od "złe hasło" po czasie odpowiedzi.
-    password_ok = user is not None and auth_service.verify_password(
-        body.password, user.hashed_password
-    )
+    # Zawsze wywołujemy bcrypt — niezależnie czy user istnieje.
+    # hash_to_check = prawdziwy hash jeśli user istnieje, dummy jeśli nie.
+    # Dzięki temu czas odpowiedzi jest stały i timing attack jest niemożliwy.
+    hash_to_check = user.hashed_password if user is not None else _DUMMY_HASH
+    password_ok = auth_service.verify_password(body.password, hash_to_check)
 
     if not password_ok or user is None:
         raise HTTPException(
@@ -52,7 +56,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> Token:
 
 
 @router.post("/refresh", response_model=Token)
-def refresh(body: Token, db: Session = Depends(get_db)) -> Token:
+def refresh(body: RefreshRequest, db: Session = Depends(get_db)) -> Token:
     """Odświeżanie tokenów — przyjmuje refresh token, zwraca nową parę.
 
     Klient powinien wywołać ten endpoint gdy access token wygaśnie (HTTP 401).

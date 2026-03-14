@@ -12,6 +12,13 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
+
+# Ładujemy .env zanim cokolwiek zaimportujemy z app.* —
+# w przeciwnym razie os.getenv() nie widzi zmiennych z pliku .env,
+# a import app.config crashuje jeśli JWT_SECRET_KEY nie jest w środowisku.
+load_dotenv()
+
 # Dodajemy katalog nadrzędny (src/backend/) do PYTHONPATH,
 # żeby importy "app.*" działały gdy uruchamiamy skrypt bezpośrednio.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

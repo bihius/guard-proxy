@@ -306,6 +306,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "types-passlib" },
 ]
 
 [package.dev-dependencies]
@@ -328,6 +329,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "sqlalchemy", specifier = ">=2.0.36" },
+    { name = "types-passlib", marker = "extra == 'dev'", specifier = ">=1.7.7.20260211" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]
 provides-extras = ["dev"]

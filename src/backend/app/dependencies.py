@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services import auth_service
 
 # HTTPBearer czyta nagłówek "Authorization: Bearer <token>" z każdego requestu.
@@ -71,7 +71,7 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     Raises:
         403 — zalogowany user nie jest adminem
     """
-    if user.role != "admin":
+    if user.role != UserRole.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin role required",
