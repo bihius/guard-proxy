@@ -28,8 +28,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Weryfikuje czy podane hasło zgadza się z hashem z bazy.
 
     Zwraca True jeśli hasło poprawne, False jeśli nie.
+    Zwraca False (zamiast rzucać) gdy hash jest uszkodzony lub nieobsługiwany —
+    passlib może rzucić wyjątek w takim przypadku.
     """
-    return bool(_pwd_context.verify(plain_password, hashed_password))
+    try:
+        return bool(_pwd_context.verify(plain_password, hashed_password))
+    except Exception:
+        return False
 
 
 def create_access_token(user_id: int, role: str) -> str:
@@ -85,7 +90,10 @@ def decode_access_token(token: str) -> TokenData:
     )
     if payload.get("type") != "access":
         raise jwt.InvalidTokenError("Not an access token")
-    return TokenData(sub=int(payload["sub"]), role=payload["role"])
+    try:
+        return TokenData(sub=int(payload["sub"]), role=payload["role"])
+    except (KeyError, ValueError) as exc:
+        raise jwt.InvalidTokenError("Invalid token payload") from exc
 
 
 def decode_refresh_token(token: str) -> int:
@@ -101,4 +109,7 @@ def decode_refresh_token(token: str) -> int:
     )
     if payload.get("type") != "refresh":
         raise jwt.InvalidTokenError("Not a refresh token")
-    return int(payload["sub"])
+    try:
+        return int(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise jwt.InvalidTokenError("Invalid token payload") from exc
