@@ -24,8 +24,9 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> Token:
     """Logowanie — zwraca access token i refresh token.
 
     Zwraca 401 jeśli email nie istnieje, hasło jest złe lub konto nieaktywne.
-    Celowo nie rozróżniamy "zły email" od "złe hasło" — to dobra praktyka
-    bezpieczeństwa (nie ujawniamy czy email istnieje w systemie).
+    Celowo nie rozróżniamy żadnego z tych przypadków — to dobra praktyka
+    bezpieczeństwa: atakujący nie może odróżnić złego emaila, złego hasła
+    ani nieaktywnego konta po treści odpowiedzi.
     """
     user = db.query(User).filter(User.email == body.email).first()
 
@@ -35,17 +36,13 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> Token:
     hash_to_check = user.hashed_password if user is not None else _DUMMY_HASH
     password_ok = auth_service.verify_password(body.password, hash_to_check)
 
-    if not password_ok or user is None:
+    # is_active sprawdzamy razem z password_ok — nie zwracamy osobnego błędu
+    # dla nieaktywnych kont, bo to potwierdziłoby atakującemu że email+hasło
+    # są poprawne (credential confirmation / account enumeration).
+    if not password_ok or user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account is inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

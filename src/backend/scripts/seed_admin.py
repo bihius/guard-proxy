@@ -9,6 +9,8 @@ ADMIN_EMAIL and ADMIN_PASSWORD from the environment (or .env file).
 
 The script is idempotent: if any admin user already exists in the database
 (regardless of email), it exits without making any changes.
+
+The password must be at least 12 characters long.
 """
 
 import argparse
@@ -82,6 +84,9 @@ def seed_admin(email: str, password: str, full_name: str = "Administrator") -> N
         db.close()
 
 
+MIN_PASSWORD_LENGTH = 12
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create initial admin user")
     parser.add_argument("--email", default=os.getenv("ADMIN_EMAIL"))
@@ -95,6 +100,13 @@ def main() -> None:
         print(
             "Error: provide --email and --password, "
             "or set ADMIN_EMAIL and ADMIN_PASSWORD in environment.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if len(args.password) < MIN_PASSWORD_LENGTH:
+        print(
+            f"Error: password must be at least {MIN_PASSWORD_LENGTH} characters long.",
             file=sys.stderr,
         )
         sys.exit(1)
