@@ -26,6 +26,8 @@ load_dotenv()
 # żeby importy "app.*" działały gdy uruchamiamy skrypt bezpośrednio.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from sqlalchemy.exc import IntegrityError  # noqa: E402
+
 from app.database import SessionLocal  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.services.auth_service import hash_password  # noqa: E402
@@ -37,6 +39,9 @@ def seed_admin(email: str, password: str, full_name: str = "Administrator") -> N
     Sprawdzamy czy istnieje *jakikolwiek* user z rolą admin — nie tylko
     czy podany email jest zajęty. Dzięki temu skrypt jest idempotentny
     i nie tworzy duplikatów adminów przy ponownym uruchomieniu.
+
+    Przed insertem sprawdzamy też czy podany email nie jest już zajęty
+    przez innego usera — unikamy IntegrityError na unikalnym kolumnie email.
     """
     db = SessionLocal()
     try:
@@ -44,6 +49,15 @@ def seed_admin(email: str, password: str, full_name: str = "Administrator") -> N
         if existing_admin is not None:
             print(f"Admin user already exists ({existing_admin.email!r}) — skipping.")
             return
+
+        existing_email = db.query(User).filter(User.email == email).first()
+        if existing_email is not None:
+            print(
+                f"Error: email {email!r} is already taken by a non-admin user. "
+                "Provide a different email or promote that user manually.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         admin = User(
             email=email,
@@ -53,7 +67,16 @@ def seed_admin(email: str, password: str, full_name: str = "Administrator") -> N
             is_active=True,
         )
         db.add(admin)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            print(
+                f"Error: could not create admin user — "
+                f"database constraint violation: {exc.orig}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         print(f"Admin user {email!r} created successfully.")
     finally:
         db.close()
