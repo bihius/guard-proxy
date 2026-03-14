@@ -42,7 +42,7 @@ def create_access_token(user_id: int, role: str) -> str:
 
     Payload zawiera:
     - sub  — subject = user ID (standard JWT)
-    - role — rola usera (żeby nie pytać DB przy każdym requeście)
+    - role — rola usera
     - type — "access" (odróżnia od refresh tokena)
     - exp  — czas wygaśnięcia (standard JWT)
     """
