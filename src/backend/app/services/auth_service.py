@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 import jwt
 from passlib.context import CryptContext
 
-from app.config import settings
 from app.schemas.auth import TokenData
 
 logger = logging.getLogger(__name__)
@@ -60,6 +59,8 @@ def create_access_token(user_id: int, role: str) -> str:
     - type — "access" (odróżnia od refresh tokena)
     - exp  — czas wygaśnięcia (standard JWT)
     """
+    from app.config import settings
+
     expire = datetime.now(UTC) + timedelta(
         minutes=settings.jwt_access_token_expire_minutes
     )
@@ -80,6 +81,8 @@ def create_refresh_token(user_id: int) -> str:
     Refresh token zawiera tylko user ID — nie zawiera roli.
     Przy odświeżaniu i tak weryfikujemy usera w bazie (może być nieaktywny).
     """
+    from app.config import settings
+
     expire = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days)
     payload = {
         "sub": str(user_id),
@@ -97,6 +100,8 @@ def decode_access_token(token: str) -> TokenData:
     Raises:
         jwt.InvalidTokenError — token niepoprawny, wygasły lub zły typ.
     """
+    from app.config import settings
+
     payload = jwt.decode(
         token,
         settings.jwt_secret_key,
@@ -116,6 +121,8 @@ def decode_refresh_token(token: str) -> int:
     Raises:
         jwt.InvalidTokenError — token niepoprawny, wygasły lub zły typ.
     """
+    from app.config import settings
+
     payload = jwt.decode(
         token,
         settings.jwt_secret_key,
