@@ -32,12 +32,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
     Zwraca True jeśli hasło poprawne, False jeśli nie.
 
-    Wyjątki są przechwytywane i logowane zamiast propagować — funkcja
-    zawsze zwraca bool (fail closed). Rozróżniamy dwa przypadki:
-    - ValueError (UnknownHashError) — hash nieznany lub uszkodzony,
-      oczekiwany błąd danych, logujemy jako WARNING.
-    - RuntimeError (MissingBackendError, InternalBackendError) — problem
-      z konfiguracją lub backendem bcrypt, logujemy jako ERROR z traceback.
+    ValueError (UnknownHashError) oznacza uszkodzony lub nieznany hash w bazie —
+    to błąd danych, logujemy jako WARNING i zwracamy False (fail closed).
+
+    RuntimeError (MissingBackendError, InternalBackendError) oznacza brak
+    backendu bcrypt lub błąd infrastruktury — propagujemy dalej, żeby FastAPI
+    zwrócił 500 zamiast maskować awarię jako 401.
     """
     try:
         return bool(_pwd_context.verify(plain_password, hashed_password))
@@ -45,10 +45,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         # Hash nierozpoznany lub uszkodzony — dane w bazie są nieprawidłowe.
         logger.warning("Password verification failed: unrecognized or malformed hash")
         return False
-    except RuntimeError:
-        # Brak backendu bcrypt lub błąd wewnętrzny — problem z konfiguracją.
-        logger.error("Password verification error: backend failure", exc_info=True)
-        return False
+    # RuntimeError (MissingBackendError, InternalBackendError) celowo nie jest
+    # łapany — propaguje do warstwy API jako 500 Internal Server Error.
 
 
 def create_access_token(user_id: int, role: str) -> str:
