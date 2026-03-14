@@ -1,5 +1,6 @@
 """Auth service — password hashing and JWT token management."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -7,6 +8,8 @@ from passlib.context import CryptContext
 
 from app.config import settings
 from app.schemas.auth import TokenData
+
+logger = logging.getLogger(__name__)
 
 # CryptContext konfiguruje bcrypt jako algorytm hashowania haseł.
 # deprecated="auto" oznacza że stare hashe będą automatycznie oznaczane
@@ -28,12 +31,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Weryfikuje czy podane hasło zgadza się z hashem z bazy.
 
     Zwraca True jeśli hasło poprawne, False jeśli nie.
-    Zwraca False (zamiast rzucać) gdy hash jest uszkodzony lub nieobsługiwany —
-    passlib może rzucić wyjątek w takim przypadku.
+
+    Wyjątki są przechwytywane i logowane zamiast propagować — funkcja
+    zawsze zwraca bool (fail closed). Rozróżniamy dwa przypadki:
+    - ValueError (UnknownHashError) — hash nieznany lub uszkodzony,
+      oczekiwany błąd danych, logujemy jako WARNING.
+    - RuntimeError (MissingBackendError, InternalBackendError) — problem
+      z konfiguracją lub backendem bcrypt, logujemy jako ERROR z traceback.
     """
     try:
         return bool(_pwd_context.verify(plain_password, hashed_password))
-    except Exception:
+    except ValueError:
+        # Hash nierozpoznany lub uszkodzony — dane w bazie są nieprawidłowe.
+        logger.warning("Password verification failed: unrecognized or malformed hash")
+        return False
+    except RuntimeError:
+        # Brak backendu bcrypt lub błąd wewnętrzny — problem z konfiguracją.
+        logger.error("Password verification error: backend failure", exc_info=True)
         return False
 
 

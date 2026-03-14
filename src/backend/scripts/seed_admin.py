@@ -6,6 +6,9 @@ Usage:
 
 If --email / --password are not provided, the script reads
 ADMIN_EMAIL and ADMIN_PASSWORD from the environment (or .env file).
+
+The script is idempotent: if any admin user already exists in the database
+(regardless of email), it exits without making any changes.
 """
 
 import argparse
@@ -29,12 +32,17 @@ from app.services.auth_service import hash_password  # noqa: E402
 
 
 def seed_admin(email: str, password: str, full_name: str = "Administrator") -> None:
-    """Tworzy admina jeśli nie istnieje. Pomija jeśli email już jest w bazie."""
+    """Tworzy pierwszego admina jeśli żaden nie istnieje w bazie.
+
+    Sprawdzamy czy istnieje *jakikolwiek* user z rolą admin — nie tylko
+    czy podany email jest zajęty. Dzięki temu skrypt jest idempotentny
+    i nie tworzy duplikatów adminów przy ponownym uruchomieniu.
+    """
     db = SessionLocal()
     try:
-        existing = db.query(User).filter(User.email == email).first()
-        if existing is not None:
-            print(f"User {email!r} already exists — skipping.")
+        existing_admin = db.query(User).filter(User.role == UserRole.admin).first()
+        if existing_admin is not None:
+            print(f"Admin user already exists ({existing_admin.email!r}) — skipping.")
             return
 
         admin = User(

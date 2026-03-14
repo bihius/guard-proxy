@@ -60,7 +60,10 @@ def refresh(body: RefreshRequest, db: Session = Depends(get_db)) -> Token:
     """Odświeżanie tokenów — przyjmuje refresh token, zwraca nową parę.
 
     Klient powinien wywołać ten endpoint gdy access token wygaśnie (HTTP 401).
-    Po udanym refresh obie strony dostają nowe tokeny (rotation).
+    Zwracamy nowe tokeny (access + refresh), ale stary refresh token NIE jest
+    unieważniany — pozostaje ważny aż do naturalnego wygaśnięcia (7 dni).
+    Pełna invalidacja (denylist tokenów) wymaga osobnej tabeli w bazie i jest
+    poza zakresem obecnej implementacji.
     """
     try:
         user_id = auth_service.decode_refresh_token(body.refresh_token)
