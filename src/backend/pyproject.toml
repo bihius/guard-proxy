@@ -43,5 +43,10 @@ pythonpath = ["."]
 
 [dependency-groups]
 dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+    "mypy>=1.13.0",
+    "ruff>=0.8.0",
     "types-passlib>=1.7.7.20260211",
 ]
