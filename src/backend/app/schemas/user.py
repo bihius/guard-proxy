@@ -21,9 +21,9 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def password_min_length(cls, v: str) -> str:
-        """Hasło musi mieć co najmniej 8 znaków."""
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
+        """Hasło musi mieć co najmniej 12 znaków."""
+        if len(v) < 12:
+            raise ValueError("Password must be at least 12 characters")
         return v
 
 
@@ -43,8 +43,8 @@ class UserUpdate(BaseModel):
     @field_validator("password")
     @classmethod
     def password_min_length(cls, v: str | None) -> str | None:
-        if v is not None and len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
+        if v is not None and len(v) < 12:
+            raise ValueError("Password must be at least 12 characters")
         return v
 
 
