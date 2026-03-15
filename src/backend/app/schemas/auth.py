@@ -23,6 +23,16 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class RefreshRequest(BaseModel):
+    """Request body dla POST /auth/refresh.
+
+    Klient wysyła tylko refresh_token — access_token nie jest potrzebny
+    bo i tak jest wygasły lub niedostępny w tym momencie.
+    """
+
+    refresh_token: str
+
+
 class TokenData(BaseModel):
     """Payload zakodowany wewnątrz JWT tokena.
 
