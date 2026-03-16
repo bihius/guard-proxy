@@ -26,9 +26,9 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 # JWT_SECRET_KEY musi być ustawiony zanim jakikolwiek import app.* rozwiąże Settings.
-# os.environ.setdefault gwarantuje że wartość jest zawsze obecna — nie nadpisuje
-# zmiennej jeśli już istnieje w środowisku (np. w CI).
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
+# Na potrzeby testów zawsze wymuszamy deterministyczną, testową wartość klucza,
+# niezależnie od tego, co jest ustawione w środowisku (hermetyczność testów).
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-onlyx"
 
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
