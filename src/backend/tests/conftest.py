@@ -11,20 +11,23 @@ Hierarchia fixtures:
   engine (session-scoped) ← jeden silnik współdzielony przez całą sesję testów
     └─ db (function-scoped) ← świeża transakcja per test, zawsze rollbackowana po teście
          └─ client (function-scoped) ← TestClient podpięty do testowej bazy
-  └─ admin_user / viewer_user / inactive_user ← obiekty ORM User
-       w testowej bazie
-       └─ admin_token / viewer_token ← nagłówki Authorization
-            z ważnym tokenem JWT
+   └─ admin_user / viewer_user / inactive_user ← obiekty ORM User
+        w testowej bazie
+        └─ admin_token / viewer_token ← nagłówki Authorization
+             z ważnym tokenem JWT
 """
 
 import os
+from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 # JWT_SECRET_KEY musi być ustawiony zanim jakikolwiek import app.* rozwiąże Settings.
+# os.environ.setdefault gwarantuje że wartość jest zawsze obecna — nie nadpisuje
+# zmiennej jeśli już istnieje w środowisku (np. w CI).
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
 from app.database import Base, get_db  # noqa: E402
@@ -43,7 +46,7 @@ _TEST_DB_URL = "sqlite://"
 
 
 @pytest.fixture(scope="session")
-def engine():
+def engine() -> Generator[Engine]:
     """Jeden silnik SQLAlchemy podpięty pod bazę SQLite w pamięci.
 
     Session-scoped: tworzony raz i reużywany przez cały przebieg testów.
@@ -68,7 +71,7 @@ def engine():
 
 
 @pytest.fixture()
-def db(engine: Session) -> Session:
+def db(engine: Engine) -> Generator[Session]:
     """Izolowana sesja bazy danych dla pojedynczego testu.
 
     Otwiera połączenie i rozpoczyna transakcję, potem zwraca Session powiązaną
@@ -96,7 +99,7 @@ def db(engine: Session) -> Session:
 
 
 @pytest.fixture()
-def client(db: Session) -> TestClient:
+def client(db: Session) -> Generator[TestClient]:
     """TestClient FastAPI podpięty pod testową sesję bazy danych.
 
     Nadpisuje zależność get_db, żeby każdy handler requestu dostał tę samą
@@ -104,7 +107,7 @@ def client(db: Session) -> TestClient:
     i odwrotnie, wszystko w ramach tej samej rollbackowanej transakcji.
     """
 
-    def override_get_db():  # type: ignore[return]
+    def override_get_db() -> Generator[Session]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
