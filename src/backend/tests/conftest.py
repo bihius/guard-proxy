@@ -18,7 +18,7 @@ Hierarchia fixtures:
 """
 
 import os
-from collections.abc import Generator
+from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -46,7 +46,7 @@ _TEST_DB_URL = "sqlite://"
 
 
 @pytest.fixture(scope="session")
-def engine() -> Generator[Engine]:
+def engine() -> Iterator[Engine]:
     """Jeden silnik SQLAlchemy podpięty pod bazę SQLite w pamięci.
 
     Session-scoped: tworzony raz i reużywany przez cały przebieg testów.
@@ -71,7 +71,7 @@ def engine() -> Generator[Engine]:
 
 
 @pytest.fixture()
-def db(engine: Engine) -> Generator[Session]:
+def db(engine: Engine) -> Iterator[Session]:
     """Izolowana sesja bazy danych dla pojedynczego testu.
 
     Otwiera połączenie i rozpoczyna transakcję, potem zwraca Session powiązaną
@@ -99,7 +99,7 @@ def db(engine: Engine) -> Generator[Session]:
 
 
 @pytest.fixture()
-def client(db: Session) -> Generator[TestClient]:
+def client(db: Session) -> Iterator[TestClient]:
     """TestClient FastAPI podpięty pod testową sesję bazy danych.
 
     Nadpisuje zależność get_db, żeby każdy handler requestu dostał tę samą
@@ -107,7 +107,7 @@ def client(db: Session) -> Generator[TestClient]:
     i odwrotnie, wszystko w ramach tej samej rollbackowanej transakcji.
     """
 
-    def override_get_db() -> Generator[Session]:
+    def override_get_db() -> Iterator[Session]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db

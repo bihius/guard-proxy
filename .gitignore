@@ -11,6 +11,8 @@
 
 # ===== AI Agent Config =====
 CLAUDE.md
+AGENTS.md
+CODEX.md
 .opencode/
 .opencodeignore
 opencode.json
