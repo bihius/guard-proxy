@@ -1,6 +1,7 @@
 """Schematy Pydantic — walidacja requestów i serializacja odpowiedzi API."""
 
 from app.schemas.auth import LoginRequest, Token, TokenData
+from app.schemas.log import LogListResponse, LogResponse
 from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, PolicyUpdate
 from app.schemas.rule_override import RuleOverrideCreate, RuleOverrideResponse
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
@@ -11,6 +12,9 @@ __all__ = [
     "LoginRequest",
     "Token",
     "TokenData",
+    # Logs
+    "LogResponse",
+    "LogListResponse",
     # Users
     "UserCreate",
     "UserUpdate",
