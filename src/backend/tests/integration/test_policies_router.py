@@ -1,6 +1,7 @@
 """Testy integracyjne routera policies (CRUD + autoryzacja)."""
 
 from fastapi.testclient import TestClient
+from typing import Any
 
 from app.models.user import User
 
@@ -13,7 +14,7 @@ def _create_policy(
     description: str = "Domyslna polityka",
     paranoia_level: int = 2,
     anomaly_threshold: int = 5,
-) -> dict:
+) -> dict[str, Any]:
     """Pomocniczo tworzy politykę i zwraca body JSON."""
     resp = client.post(
         "/policies",
@@ -243,6 +244,38 @@ def test_patch_policy_not_found_returns_404(
     )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Policy not found"
+
+
+def test_patch_policy_name_null_returns_422(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """PATCH z name=null powinien być odrzucony jako 422."""
+    created = _create_policy(client, admin_token, name="Null Name")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json={"name": None},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Field 'name' cannot be null"
+
+
+def test_patch_policy_paranoia_level_null_returns_422(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """PATCH z paranoia_level=null powinien być odrzucony jako 422."""
+    created = _create_policy(client, admin_token, name="Null Paranoia")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json={"paranoia_level": None},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Field 'paranoia_level' cannot be null"
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,19 @@ from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, Polic
 
 router = APIRouter(prefix="/policies", tags=["policies"])
 
+NON_NULLABLE_PATCH_FIELDS = {
+    "name",
+    "paranoia_level",
+    "anomaly_threshold",
+    "is_active",
+}
+
+
+def _is_policy_name_unique_violation(error: IntegrityError) -> bool:
+    """Sprawdza, czy IntegrityError dotyczy unikalnej nazwy policy."""
+    error_text = str(error.orig).lower()
+    return "unique" in error_text and "name" in error_text
+
 
 def _get_policy_or_404(db: Session, policy_id: int) -> Policy:
     """Zwraca politykę po ID albo 404 gdy nie istnieje."""
@@ -91,18 +104,28 @@ def update_policy(
 ) -> Policy:
     """Aktualizuje wskazane pola polityki (tylko admin)."""
     policy = _get_policy_or_404(db, policy_id)
+    patch_data = body.model_dump(exclude_unset=True)
 
-    for field, value in body.model_dump(exclude_unset=True).items():
+    for field in NON_NULLABLE_PATCH_FIELDS:
+        if field in patch_data and patch_data[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Field '{field}' cannot be null",
+            )
+
+    for field, value in patch_data.items():
         setattr(policy, field, value)
 
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as error:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Policy name already exists",
-        )
+        if _is_policy_name_unique_violation(error):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Policy name already exists",
+            )
+        raise
     db.refresh(policy)
     return policy
 
