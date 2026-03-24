@@ -147,6 +147,12 @@ def test_policy_update_anomaly_zero_invalid() -> None:
         PolicyUpdate(anomaly_threshold=0)
 
 
+def test_policy_update_name_null_is_allowed_by_schema() -> None:
+    """Schema dopuszcza null; odrzucenie robi router (422)."""
+    p = PolicyUpdate(name=None)
+    assert p.name is None
+
+
 # ---------------------------------------------------------------------------
 # VHostCreate
 # ---------------------------------------------------------------------------
