@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import settings
-from app.routers import auth, policies
+from app.routers import auth, logs, policies
 
 
 @asynccontextmanager
@@ -22,6 +22,7 @@ app = FastAPI(
 )
 
 app.include_router(auth.router)
+app.include_router(logs.router)
 app.include_router(policies.router)
 
 
