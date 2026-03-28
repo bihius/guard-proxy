@@ -22,12 +22,13 @@ ruff format app/
 ## TypeScript (Frontend)
 
 ```bash
-npm test              # Run tests
-npm run type-check    # TypeScript compiler check
-npm run lint          # ESLint
-npm run format        # Prettier
-npm run build         # Production build
-npm run dev           # Dev server (port 3000)
+pnpm install          # Install frontend dependencies
+pnpm test             # Run tests
+pnpm run type-check   # TypeScript compiler check
+pnpm run lint         # ESLint
+pnpm run format       # Prettier
+pnpm run build        # Production build
+pnpm run dev          # Dev server (port 3000)
 ```
 
 ## HAProxy

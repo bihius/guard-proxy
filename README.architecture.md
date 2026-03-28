@@ -38,7 +38,7 @@ sequenceDiagram
 | **HAProxy** | Reverse proxy, HTTPS termination, vhost routing, SPOE | `configs/haproxy/` *(planned)* |
 | **Coraza SPOA** | WAF engine, OWASP CRS, anomaly scoring, per-vhost rules | *(planned)* |
 | **FastAPI Backend** | Policy management API, config generation | `src/backend/` |
-| **React Frontend** | Admin panel UI, policy editor | `src/frontend/` *(planned)* |
+| **React Frontend** | Admin panel UI, policy editor, Vite app managed with pnpm | `src/frontend/` *(planned)* |
 
 ## Data Flow
 
@@ -64,7 +64,7 @@ services:
   haproxy:    # Port 80, 443
   coraza:     # Port 9000 (SPOE)
   backend:    # Port 8000 (API)
-  frontend:   # Port 3000 (dev server)
+  frontend:   # Port 3000 (pnpm + Vite dev server)
   postgres:   # Port 5432
 ```
 
