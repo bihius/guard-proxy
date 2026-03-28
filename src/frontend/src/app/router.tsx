@@ -9,10 +9,6 @@ import { VHostsPage } from "@/pages/vhosts/VHostsPage";
 
 export const router = createBrowserRouter([
   {
-    path: "/",
-    element: <Navigate to="/dashboard" replace />,
-  },
-  {
     path: "/login",
     element: <LoginPage />,
   },
@@ -21,19 +17,23 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       {
-        path: "/dashboard",
+        index: true,
+        element: <Navigate to="/dashboard" replace />,
+      },
+      {
+        path: "dashboard",
         element: <DashboardPage />,
       },
       {
-        path: "/vhosts",
+        path: "vhosts",
         element: <VHostsPage />,
       },
       {
-        path: "/vhosts/:vhostId",
+        path: "vhosts/:vhostId",
         element: <VHostDetailPage />,
       },
       {
-        path: "/policies",
+        path: "policies",
         element: <PoliciesPage />,
       },
     ],

@@ -1,8 +1,10 @@
 <!doctype html>
-<html lang="en" data-theme="emerald">
+<html lang="en" data-theme="emerald" class="no-transition">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1a2e1a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -10,6 +12,24 @@
       rel="stylesheet"
     />
     <title>Guard Proxy</title>
+    <script>
+      (function() {
+        var t = 'guard-proxy-theme';
+        try {
+          var s = localStorage.getItem(t);
+          if (s === 'frost' || s === 'emerald') {
+            document.documentElement.dataset.theme = s;
+            if (s === 'frost') {
+              document.querySelector('meta[name="theme-color"]')
+                ?.setAttribute('content', '#141a2e');
+            }
+          }
+        } catch(e) {}
+        requestAnimationFrame(function() {
+          document.documentElement.classList.remove('no-transition');
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
