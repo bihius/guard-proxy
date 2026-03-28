@@ -19,6 +19,7 @@ opencode.json
 
 # ===== Private / Working Notes =====
 notes/implementation/
+notes/implementation/frontend-bootstrap-playbook.md
 notes/daily/
 !notes/decisions/
 
