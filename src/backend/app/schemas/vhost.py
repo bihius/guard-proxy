@@ -63,6 +63,28 @@ class VHostUpdate(BaseModel):
     is_active: bool | None = None
     policy_id: int | None = None
 
+    @field_validator("domain")
+    @classmethod
+    def domain_no_protocol(cls, v: str | None) -> str | None:
+        """Jeśli domain jest podane w PATCH, walidujemy je tak samo jak w POST."""
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if v.startswith(("http://", "https://")):
+            raise ValueError("Domain should not include protocol (http:// or https://)")
+        return v
+
+    @field_validator("backend_url")
+    @classmethod
+    def backend_url_has_protocol(cls, v: str | None) -> str | None:
+        """Jeśli backend_url jest podane w PATCH, musi nadal mieć protokół."""
+        if v is None:
+            return None
+        v = v.strip()
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("Backend URL must start with http:// or https://")
+        return v
+
 
 class VHostResponse(BaseModel):
     """Response body dla GET /vhosts (lista) — BEZ zagnieżdżonej polityki."""

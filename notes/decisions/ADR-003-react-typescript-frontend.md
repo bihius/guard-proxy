@@ -15,7 +15,7 @@ The Guard Proxy system needs an admin panel for managing WAF policies. The panel
 The frontend is an internal admin tool, not a public-facing website. It needs to be functional, maintainable, and reasonably polished -- but not a design showcase.
 
 ## Decision
-Use **React 18** with **TypeScript 5** (strict mode), **Vite 5** as build tool, **TanStack Query** for server state, **React Hook Form** for forms, and **shadcn/ui** (Radix UI + Tailwind CSS 3) for components.
+Use **React 18** with **TypeScript 5** (strict mode), **Vite 5** as build tool, **TanStack Query** for server state, **React Hook Form** for forms, **shadcn/ui** (Radix UI + Tailwind CSS 3) for components, and **pnpm** as the only frontend package manager.
 
 ## Rationale
 
@@ -64,7 +64,7 @@ Use **React 18** with **TypeScript 5** (strict mode), **Vite 5** as build tool, 
 
 ### Neutral
 - Need to maintain TypeScript types that mirror the FastAPI Pydantic schemas (could auto-generate from OpenAPI spec)
-- pnpm as package manager (faster than npm, disk-efficient)
+- Frontend commands, onboarding, and CI should consistently use pnpm
 
 ## Validation
 This decision is correct if:
