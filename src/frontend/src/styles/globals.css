@@ -1,17 +1,57 @@
+/* ═══════════════════════════════════════════════════════════
+   EMERALD DEPTHS — Guard Proxy admin panel theme
+   Deep charcoal-green backgrounds, emerald/teal accents,
+   DM Sans geometric type, soft elevated cards.
+   ═══════════════════════════════════════════════════════════ */
+
 @import "tailwindcss";
 
 @theme {
-  --color-app-bg-from: oklch(0.15 0.02 253);
-  --color-app-bg-via: oklch(0.21 0.03 251);
-  --color-app-bg-to: oklch(0.25 0.02 257);
-  --color-surface: oklch(0.27 0.02 257);
-  --color-surface-border: oklch(0.35 0.02 257);
-  --font-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  /* ── Backgrounds ── */
+  --color-app-bg: oklch(0.14 0.015 160);
+  --color-app-bg-from: oklch(0.12 0.018 160);
+  --color-app-bg-via: oklch(0.16 0.015 158);
+  --color-app-bg-to: oklch(0.19 0.012 155);
+
+  /* ── Surfaces ── */
+  --color-surface: oklch(0.22 0.012 158);
+  --color-surface-hover: oklch(0.26 0.014 158);
+  --color-surface-raised: oklch(0.24 0.013 158);
+  --color-border: oklch(0.32 0.012 158);
+
+  /* ── Foreground ── */
+  --color-fg: oklch(0.93 0.01 90);
+  --color-fg-muted: oklch(0.68 0.01 160);
+
+  /* ── Accent: Emerald ── */
+  --color-accent: oklch(0.72 0.19 163);
+  --color-accent-hover: oklch(0.78 0.19 163);
+  --color-accent-soft: oklch(0.72 0.19 163 / 0.12);
+
+  /* ── Status ── */
+  --color-success: oklch(0.75 0.18 155);
+  --color-success-soft: oklch(0.75 0.18 155 / 0.12);
+  --color-warning: oklch(0.80 0.16 80);
+  --color-warning-soft: oklch(0.80 0.16 80 / 0.12);
+  --color-error: oklch(0.70 0.19 25);
+  --color-error-soft: oklch(0.70 0.19 25 / 0.12);
+  --color-info: oklch(0.72 0.15 230);
+  --color-info-soft: oklch(0.72 0.15 230 / 0.12);
+
+  /* ── Typography ── */
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+
+  /* ── Radius ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
 }
 
 @layer base {
   :root {
-    color: #e2e8f0;
+    color: var(--color-fg);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -31,7 +71,8 @@
 
   body {
     min-width: 320px;
-    @apply bg-slate-950 text-slate-100;
+    background-color: var(--color-app-bg);
+    color: var(--color-fg);
   }
 
   button,
@@ -45,7 +86,63 @@
 @layer utilities {
   .bg-app {
     background:
-      radial-gradient(circle at top, rgba(8, 145, 178, 0.22), transparent 35%),
-      linear-gradient(180deg, #020617 0%, #0f172a 55%, #111827 100%);
+      radial-gradient(ellipse at 20% 0%, oklch(0.72 0.19 163 / 0.07), transparent 50%),
+      radial-gradient(ellipse at 80% 0%, oklch(0.72 0.15 195 / 0.05), transparent 45%),
+      linear-gradient(
+        180deg,
+        var(--color-app-bg-from) 0%,
+        var(--color-app-bg-via) 50%,
+        var(--color-app-bg-to) 100%
+      );
+  }
+
+  .shadow-card {
+    box-shadow:
+      0 1px 2px oklch(0 0 0 / 0.15),
+      0 4px 16px oklch(0 0 0 / 0.12),
+      0 8px 32px oklch(0 0 0 / 0.08);
+  }
+
+  .shadow-card-lg {
+    box-shadow:
+      0 2px 4px oklch(0 0 0 / 0.18),
+      0 8px 24px oklch(0 0 0 / 0.14),
+      0 16px 56px oklch(0 0 0 / 0.10);
+  }
+
+  .card-gradient {
+    background: linear-gradient(
+      180deg,
+      oklch(0.25 0.013 158) 0%,
+      var(--color-surface) 100%
+    );
+  }
+
+  .btn-primary {
+    background-color: var(--color-accent);
+    color: oklch(0.15 0.015 160);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .btn-primary:hover {
+    background-color: var(--color-accent-hover);
+    transform: scale(1.02);
+  }
+  .btn-primary:active {
+    transform: scale(0.98);
+    box-shadow: inset 0 1px 3px oklch(0 0 0 / 0.2);
+  }
+
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--color-fg-muted);
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .btn-ghost:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-fg);
   }
 }
