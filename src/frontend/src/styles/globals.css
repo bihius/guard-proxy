@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app-bg-from: oklch(0.15 0.02 253);
+  --color-app-bg-via: oklch(0.21 0.03 251);
+  --color-app-bg-to: oklch(0.25 0.02 257);
+  --color-surface: oklch(0.27 0.02 257);
+  --color-surface-border: oklch(0.35 0.02 257);
+  --font-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+@layer base {
+  :root {
+    color: #e2e8f0;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    margin: 0;
+  }
+
+  body {
+    min-width: 320px;
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  .bg-app {
+    background:
+      radial-gradient(circle at top, rgba(8, 145, 178, 0.22), transparent 35%),
+      linear-gradient(180deg, #020617 0%, #0f172a 55%, #111827 100%);
+  }
+}
