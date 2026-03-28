@@ -1,20 +1,14 @@
 import { Outlet } from "react-router-dom";
 
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Topbar } from "@/components/layout/Topbar";
+import { NavBar } from "@/components/layout/NavBar";
 
 export function AppLayout() {
   return (
-    <div className="min-h-screen bg-app text-slate-100">
-      <div className="mx-auto grid min-h-screen max-w-[1600px] lg:grid-cols-[260px_minmax(0,1fr)]">
-        <Sidebar />
-        <div className="flex min-h-screen flex-col">
-          <Topbar />
-          <main className="flex-1 px-6 py-6 sm:px-8 lg:px-10">
-            <Outlet />
-          </main>
-        </div>
-      </div>
+    <div className="min-h-screen bg-app text-[var(--color-fg)]">
+      <NavBar />
+      <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
+        <Outlet />
+      </main>
     </div>
   );
 }
