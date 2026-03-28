@@ -62,7 +62,7 @@ export function NavBar() {
         : "rounded-[var(--radius-md)] px-4 py-2",
       "text-sm font-medium transition-all duration-150",
       isActive
-        ? "bg-accent-soft text-accent"
+        ? "nav-link-active bg-accent-soft text-accent"
         : "text-fg-muted hover:bg-surface-hover hover:text-fg",
     ].join(" ");
 
@@ -101,7 +101,7 @@ export function NavBar() {
             {theme === "emerald" ? <LeafIcon /> : <SnowflakeIcon />}
           </button>
 
-          <span className="rounded-[var(--radius-full)] bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
+          <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
             Dev Mode
           </span>
           <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
@@ -192,7 +192,7 @@ export function NavBar() {
             <div className="my-3 h-px bg-border" />
 
             <div className="flex flex-wrap gap-2 px-1">
-              <span className="rounded-[var(--radius-full)] bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
+              <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
                 Dev Mode
               </span>
               <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
