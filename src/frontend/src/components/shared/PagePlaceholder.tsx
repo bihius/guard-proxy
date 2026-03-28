@@ -24,7 +24,7 @@ export function PagePlaceholder({
       </header>
 
       <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-        <div className="card-gradient shadow-card rounded-[var(--radius-lg)] border border-border p-6">
+        <div className="placeholder-card card-gradient shadow-card rounded-[var(--radius-lg)] border border-border p-6">
           <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] bg-accent-soft">
             <InfoIcon />
           </div>
@@ -38,7 +38,7 @@ export function PagePlaceholder({
           </p>
         </div>
 
-        <div className="shadow-card rounded-[var(--radius-lg)] border border-border bg-surface p-6">
+        <div className="placeholder-card shadow-card rounded-[var(--radius-lg)] border border-border bg-surface p-6">
           <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] bg-surface-hover">
             <ArrowIcon />
           </div>

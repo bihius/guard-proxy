@@ -15,9 +15,9 @@
   --color-surface-raised: oklch(0.24 0.013 158);
   --color-border: oklch(0.32 0.012 158);
   --color-border-subtle: oklch(0.27 0.011 158);
-  --color-fg: oklch(0.93 0.01 90);
-  --color-fg-muted: oklch(0.68 0.01 160);
-  --color-fg-subtle: oklch(0.48 0.01 160);
+  --color-fg: oklch(0.96 0.008 90);
+  --color-fg-muted: oklch(0.8 0.01 160);
+  --color-fg-subtle: oklch(0.68 0.01 160);
   --color-accent: oklch(0.72 0.19 163);
   --color-accent-hover: oklch(0.78 0.19 163);
   --color-accent-soft: oklch(0.72 0.19 163 / 0.12);
@@ -48,9 +48,9 @@
   --color-surface-raised: oklch(0.19 0.015 242);
   --color-border: oklch(0.28 0.016 242);
   --color-border-subtle: oklch(0.22 0.014 242);
-  --color-fg: oklch(0.92 0.008 242);
-  --color-fg-muted: oklch(0.58 0.018 242);
-  --color-fg-subtle: oklch(0.40 0.016 242);
+  --color-fg: oklch(0.95 0.008 242);
+  --color-fg-muted: oklch(0.78 0.014 242);
+  --color-fg-subtle: oklch(0.66 0.012 242);
   --color-accent: oklch(0.68 0.17 168);
   --color-accent-hover: oklch(0.74 0.17 168);
   --color-accent-soft: oklch(0.68 0.17 168 / 0.14);
@@ -134,26 +134,27 @@
 
   .shadow-card {
     box-shadow:
-      0 1px 2px oklch(0 0 0 / 0.15),
-      0 4px 16px oklch(0 0 0 / 0.12),
-      0 8px 32px oklch(0 0 0 / 0.08);
+      0 1px 2px oklch(0 0 0 / 0.14),
+      0 10px 24px oklch(0 0 0 / 0.10);
   }
 
   .shadow-card-lg {
     box-shadow:
-      0 2px 4px oklch(0 0 0 / 0.18),
-      0 8px 24px oklch(0 0 0 / 0.14),
-      0 16px 56px oklch(0 0 0 / 0.10);
+      0 2px 4px oklch(0 0 0 / 0.16),
+      0 16px 36px oklch(0 0 0 / 0.12);
   }
 
   .card-gradient {
-    background:
-      linear-gradient(180deg, oklch(1 0 0 / 0.04) 0px, oklch(1 0 0 / 0) 2px),
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, var(--color-surface-raised), var(--color-surface) 40%) 0%,
-        var(--color-surface) 100%
-      );
+    background-color: color-mix(
+      in oklch,
+      var(--color-surface-raised),
+      var(--color-surface) 55%
+    );
+    background-image: linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.03) 0%,
+      oklch(1 0 0 / 0) 12%
+    );
   }
 
   .btn-primary {
@@ -249,6 +250,52 @@
       oklch(0.11 0.018 242) 50%,
       oklch(0.14 0.016 242) 100%
     );
+}
+
+/* ── Dark Reader compatibility ── */
+
+html[data-darkreader-mode] .bg-app {
+  background-image: none;
+}
+
+html[data-darkreader-mode] .nav-surface {
+  background-color: var(--color-surface);
+  background-image: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-darkreader-mode] .card-gradient {
+  background-color: var(--color-surface-raised);
+  background-image: none;
+}
+
+html[data-darkreader-mode] .placeholder-card {
+  background-color: var(--color-surface-raised);
+  background-image: none;
+}
+
+html[data-darkreader-mode] .nav-link-active {
+  background-color: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+
+html[data-darkreader-mode] .badge-accent {
+  background-color: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+
+html[data-darkreader-mode] .shadow-card,
+html[data-darkreader-mode] .shadow-card-lg,
+html[data-darkreader-mode] .btn-primary:active,
+html[data-darkreader-mode] .input-field:focus {
+  box-shadow: none;
+}
+
+html[data-darkreader-mode] .backdrop-blur-sm,
+html[data-darkreader-mode] .backdrop-blur-xl {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ── Animations ── */
