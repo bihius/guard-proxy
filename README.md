@@ -36,7 +36,7 @@ graph TB
 - **Proxy**: HAProxy 2.8+ with SPOE
 - **WAF**: Coraza 3.x + OWASP CRS 4.x
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy, PostgreSQL
-- **Frontend**: React, TypeScript, Tailwind CSS
+- **Frontend**: React, TypeScript, Vite, Tailwind CSS, pnpm
 - **Infrastructure**: Docker Compose, Prometheus, Grafana
 
 ## Project Status
