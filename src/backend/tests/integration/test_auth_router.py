@@ -94,6 +94,36 @@ def test_login_all_failure_messages_identical(
     assert len(details) == 1
 
 
+def test_login_preflight_returns_cors_headers(client: TestClient) -> None:
+    """Preflight OPTIONS dla /auth/login powinien być obsłużony przez CORS."""
+    resp = client.options(
+        "/auth/login",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "POST" in resp.headers["access-control-allow-methods"]
+
+
+def test_me_preflight_allows_authorization_header(client: TestClient) -> None:
+    """Preflight dla /auth/me powinien dopuścić nagłówek Authorization."""
+    resp = client.options(
+        "/auth/me",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "authorization" in resp.headers["access-control-allow-headers"].lower()
+
+
 # ---------------------------------------------------------------------------
 # POST /auth/refresh
 # ---------------------------------------------------------------------------
