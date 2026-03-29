@@ -1,3 +1,8 @@
+import { EmptyState } from "./EmptyState";
+import { PageHeader } from "./PageHeader";
+import { SectionCard } from "./SectionCard";
+import { StatusBadge } from "./StatusBadge";
+
 type PagePlaceholderProps = {
   title: string;
   description: string;
@@ -11,45 +16,36 @@ export function PagePlaceholder({
 }: PagePlaceholderProps) {
   return (
     <section className="space-y-8">
-      <header className="space-y-3">
-        <span className="inline-block rounded-[var(--radius-full)] bg-accent-soft px-3 py-1 text-xs font-semibold tracking-wide uppercase text-accent">
-          {eyebrow}
-        </span>
-        <h1 className="text-3xl font-bold tracking-tight text-fg sm:text-4xl">
-          {title}
-        </h1>
-        <p className="max-w-3xl text-base leading-7 text-fg-muted">
-          {description}
-        </p>
-      </header>
+      <PageHeader
+        eyebrow={eyebrow}
+        title={title}
+        description={description}
+        actions={<StatusBadge label="Bootstrap" tone="info" />}
+      />
 
       <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-        <div className="placeholder-card card-gradient shadow-card rounded-[var(--radius-lg)] border border-border p-6">
-          <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] bg-accent-soft">
-            <InfoIcon />
-          </div>
-          <h2 className="text-lg font-semibold text-fg">
-            Why it exists
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-fg-muted">
-            Shared placeholder so every route lives inside the same application
-            shell. Replace only the page content without rebuilding layout,
-            navigation, or chrome.
+        <SectionCard
+          title="Why it exists"
+          description="Shared placeholder so every route lives inside the same application shell."
+          icon={<InfoIcon />}
+        >
+          <p className="text-sm leading-6 text-fg-muted">
+            Replace only the page content without rebuilding layout, navigation,
+            or chrome. This helps the team work in parallel without fragmenting
+            the app structure.
           </p>
-        </div>
+        </SectionCard>
 
-        <div className="placeholder-card shadow-card rounded-[var(--radius-lg)] border border-border bg-surface p-6">
-          <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] bg-surface-hover">
-            <ArrowIcon />
-          </div>
-          <h2 className="text-lg font-semibold text-fg">
-            Next step
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-fg-muted">
-            Replace this block with the real feature when the assigned frontend
-            task starts.
-          </p>
-        </div>
+        <SectionCard
+          title="Next step"
+          description="This is the handoff point for the real feature implementation."
+          icon={<ArrowIcon />}
+        >
+          <EmptyState
+            title="Feature UI has not been started yet"
+            description="Replace this area with the real screen when the assigned task begins. Until then, this placeholder keeps routing, layout, and shared component usage consistent."
+          />
+        </SectionCard>
       </div>
     </section>
   );
