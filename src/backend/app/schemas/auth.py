@@ -10,27 +10,18 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class Token(BaseModel):
+class AccessTokenResponse(BaseModel):
     """Response body dla POST /auth/login i POST /auth/refresh.
 
-    access_token  — krótkotrwały token (30 min), wysyłany w każdym requeście
-    refresh_token — długotrwały token (7 dni), tylko do odświeżania access tokena
-    token_type    — zawsze "bearer" (standard OAuth2)
+    access_token — krótkotrwały token (30 min), wysyłany w każdym requestcie
+    token_type   — zawsze "bearer" (standard OAuth2)
+
+    Refresh token nie wraca już w JSON — jest ustawiany jako HttpOnly cookie
+    przez backend, więc JavaScript po stronie frontendu nie może go odczytać.
     """
 
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
-
-
-class RefreshRequest(BaseModel):
-    """Request body dla POST /auth/refresh.
-
-    Klient wysyła tylko refresh_token — access_token nie jest potrzebny
-    bo i tak jest wygasły lub niedostępny w tym momencie.
-    """
-
-    refresh_token: str
 
 
 class TokenData(BaseModel):

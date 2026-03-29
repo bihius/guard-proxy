@@ -1,3 +1,11 @@
+import type { ReactNode } from "react";
+
+import {
+  AlertTriangleIcon,
+  PulseIcon,
+  ServerIcon,
+  ShieldIcon,
+} from "@/components/icons";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { RoleBadge } from "@/components/shared/RoleBadge";
 import { SectionCard } from "@/components/shared/SectionCard";
@@ -39,7 +47,7 @@ export function DashboardPage() {
           value="128"
           hint="This is placeholder data for the future monitoring view."
           tone="warning"
-          icon={<AlertIcon />}
+          icon={<AlertTriangleIcon />}
         />
         <StatCard
           label="Critical alerts"
@@ -79,9 +87,18 @@ export function DashboardPage() {
           description="Small composable status block for future platform health indicators."
         >
           <div className="space-y-3">
-            <StatusRow label="Frontend shell" badge={<StatusBadge label="Ready" tone="success" />} />
-            <StatusRow label="Auth foundation" badge={<StatusBadge label="Ready" tone="success" />} />
-            <StatusRow label="Dashboard data" badge={<StatusBadge label="Mocked" tone="warning" />} />
+            <StatusRow
+              label="Frontend shell"
+              badge={<StatusBadge label="Ready" tone="success" />}
+            />
+            <StatusRow
+              label="Auth foundation"
+              badge={<StatusBadge label="Ready" tone="success" />}
+            />
+            <StatusRow
+              label="Dashboard data"
+              badge={<StatusBadge label="Mocked" tone="warning" />}
+            />
           </div>
         </SectionCard>
       </div>
@@ -92,7 +109,7 @@ export function DashboardPage() {
 type ActivityRowProps = {
   title: string;
   description: string;
-  badge: React.ReactNode;
+  badge: ReactNode;
 };
 
 function ActivityRow({ title, description, badge }: ActivityRowProps) {
@@ -109,7 +126,7 @@ function ActivityRow({ title, description, badge }: ActivityRowProps) {
 
 type StatusRowProps = {
   label: string;
-  badge: React.ReactNode;
+  badge: ReactNode;
 };
 
 function StatusRow({ label, badge }: StatusRowProps) {
@@ -118,79 +135,5 @@ function StatusRow({ label, badge }: StatusRowProps) {
       <span className="text-sm font-medium text-fg">{label}</span>
       {badge}
     </div>
-  );
-}
-
-function ServerIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="3" width="12" height="4" rx="1.5" />
-      <rect x="3" y="11" width="12" height="4" rx="1.5" />
-      <line x1="6" y1="5" x2="6.01" y2="5" />
-      <line x1="6" y1="13" x2="6.01" y2="13" />
-    </svg>
-  );
-}
-
-function ShieldIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9 2.5 3.5 5v4.2c0 3.1 2 5.8 5.5 6.8 3.5-1 5.5-3.7 5.5-6.8V5L9 2.5Z" />
-      <path d="m6.7 9.1 1.5 1.5 3-3.2" />
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9 3.2 15 14H3L9 3.2Z" />
-      <line x1="9" y1="7" x2="9" y2="10.5" />
-      <circle cx="9" cy="12.8" r="0.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-function PulseIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="2.5 9.5 5.5 9.5 7.2 5.5 10.3 12.5 12.1 8.2 15.5 8.2" />
-    </svg>
   );
 }

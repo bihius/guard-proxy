@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session, sessionmaker
 # Na potrzeby testów zawsze wymuszamy deterministyczną, testową wartość klucza,
 # niezależnie od tego, co jest ustawione w środowisku (hermetyczność testów).
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-onlyx"
+os.environ["DEBUG"] = "false"
 
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402

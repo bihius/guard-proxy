@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "composite": true,
+    "noEmit": true,
     "target": "ES2023",
     "lib": ["ES2023", "WebWorker"],
     "module": "ESNext",
