@@ -38,7 +38,7 @@ function applyTheme(theme: Theme) {
 
 export function NavBar() {
   const navigate = useNavigate();
-  const { role, signOut, user } = useAuth();
+  const { signOut, user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
 
@@ -113,19 +113,16 @@ export function NavBar() {
             {theme === "emerald" ? <LeafIcon /> : <SnowflakeIcon />}
           </button>
 
-          <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
+          <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-4 py-1.5 text-sm font-semibold text-accent">
             Dev Mode
           </span>
-          <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
-            Role: {role ?? "Guest"}
-          </span>
-          <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
+          <span className="rounded-[var(--radius-full)] bg-surface-hover px-4 py-1.5 text-sm font-semibold text-fg-muted">
             {user?.full_name || user?.email || "No user"}
           </span>
           <button
             type="button"
             onClick={handleLogout}
-            className="btn-ghost rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold"
+            className="btn-ghost rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold"
           >
             Logout
           </button>
@@ -208,13 +205,10 @@ export function NavBar() {
             <div className="my-3 h-px bg-border" />
 
             <div className="flex flex-wrap gap-2 px-1">
-              <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
+              <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-4 py-1.5 text-sm font-semibold text-accent">
                 Dev Mode
               </span>
-              <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
-                Role: {role ?? "Guest"}
-              </span>
-              <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
+              <span className="rounded-[var(--radius-full)] bg-surface-hover px-4 py-1.5 text-sm font-semibold text-fg-muted">
                 {user?.full_name || user?.email || "No user"}
               </span>
             </div>
@@ -222,7 +216,7 @@ export function NavBar() {
             <button
               type="button"
               onClick={handleLogout}
-              className="btn-ghost mt-auto rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold"
+              className="btn-ghost mt-auto rounded-[var(--radius-md)] px-5 py-2.5 text-base font-semibold"
             >
               Logout
             </button>
