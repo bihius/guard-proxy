@@ -1,31 +1,42 @@
 import { type FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+
+import { ApiError } from "@/lib/api-client";
+import { useAuth } from "@/hooks/use-auth";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { loginError, signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    // TODO: replace with real auth call
-    setTimeout(() => {
-      setLoading(false);
-      if (email && password.length >= 12) {
-        navigate("/dashboard");
+    try {
+      await signIn({
+        email,
+        password,
+      });
+
+      const from = location.state as { from?: { pathname?: string } } | null;
+      navigate(from?.from?.pathname ?? "/dashboard", {
+        replace: true,
+      });
+    } catch (submitError) {
+      if (submitError instanceof ApiError) {
+        setError(submitError.detail);
       } else {
-        setError(
-          password.length < 12
-            ? "Password must be at least 12 characters."
-            : "Please enter a valid email.",
-        );
+        setError("Could not sign in");
       }
-    }, 600);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -47,9 +58,9 @@ export function LoginPage() {
           onSubmit={handleSubmit}
           className="card-gradient shadow-card-lg rounded-[var(--radius-xl)] border border-border p-8 space-y-5"
         >
-          {error && (
+          {(error ?? loginError) && (
             <div className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error">
-              {error}
+              {error ?? loginError}
             </div>
           )}
 
@@ -65,7 +76,6 @@ export function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input-field"
-              placeholder="admin@example.com"
             />
           </div>
 
@@ -81,7 +91,6 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="input-field"
-              placeholder="Min. 12 characters"
             />
           </div>
 

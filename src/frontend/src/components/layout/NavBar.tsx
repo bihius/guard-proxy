@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { NavLink, Link } from "react-router-dom";
+import { NavLink, Link, useNavigate } from "react-router-dom";
+
+import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
   { to: "/dashboard", label: "Dashboard" },
@@ -35,6 +37,8 @@ function applyTheme(theme: Theme) {
 }
 
 export function NavBar() {
+  const navigate = useNavigate();
+  const { role, signOut, user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
 
@@ -54,6 +58,14 @@ export function NavBar() {
   const toggleTheme = useCallback(() => {
     setTheme((t) => (t === "emerald" ? "frost" : "emerald"));
   }, []);
+
+  const handleLogout = useCallback(() => {
+    signOut();
+    setMobileOpen(false);
+    navigate("/login", {
+      replace: true,
+    });
+  }, [navigate, signOut]);
 
   const navLinkClass = (isActive: boolean, pill = false) =>
     [
@@ -105,14 +117,18 @@ export function NavBar() {
             Dev Mode
           </span>
           <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
-            Role: Unknown
+            Role: {role ?? "Guest"}
           </span>
-          <Link
-            to="/login"
+          <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
+            {user?.full_name || user?.email || "No user"}
+          </span>
+          <button
+            type="button"
+            onClick={handleLogout}
             className="btn-ghost rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold"
           >
             Logout
-          </Link>
+          </button>
         </div>
 
         <button
@@ -196,17 +212,20 @@ export function NavBar() {
                 Dev Mode
               </span>
               <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
-                Role: Unknown
+                Role: {role ?? "Guest"}
+              </span>
+              <span className="rounded-[var(--radius-full)] bg-surface-hover px-3 py-1 text-xs font-semibold text-fg-muted">
+                {user?.full_name || user?.email || "No user"}
               </span>
             </div>
 
-            <Link
-              to="/login"
-              onClick={() => setMobileOpen(false)}
+            <button
+              type="button"
+              onClick={handleLogout}
               className="btn-ghost mt-auto rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold"
             >
               Logout
-            </Link>
+            </button>
           </nav>
         </div>
       )}
