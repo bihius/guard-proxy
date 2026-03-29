@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "Guard Proxy API"
     debug: bool = False
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     # Database
     database_url: str = "sqlite:///./guard_proxy.db"
@@ -34,6 +40,27 @@ class Settings(BaseSettings):
                 "Set it in .env or as an environment variable."
             )
         return v
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+        """Allow CORS origins to be configured as CSV or JSON-style arrays."""
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return []
+
+            if value.startswith("["):
+                import json
+
+                parsed = json.loads(value)
+                if not isinstance(parsed, list):
+                    raise ValueError("CORS_ORIGINS JSON value must be a list.")
+                return [str(origin).strip() for origin in parsed if str(origin).strip()]
+
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+        return value
 
 
 settings = Settings()
