@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import jwt
 from passlib.context import CryptContext
@@ -66,6 +67,7 @@ def create_access_token(user_id: int, role: str) -> str:
         "role": role,
         "type": "access",
         "exp": expire,
+        "jti": str(uuid4()),
     }
     return jwt.encode(
         payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
@@ -83,6 +85,7 @@ def create_refresh_token(user_id: int) -> str:
         "sub": str(user_id),
         "type": "refresh",
         "exp": expire,
+        "jti": str(uuid4()),
     }
     return jwt.encode(
         payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
