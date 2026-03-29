@@ -9,46 +9,51 @@ import {
 import { ApiError } from "@/lib/api-client";
 import type { CurrentUser, LoginRequest, UserRole } from "@/types/api";
 
-import { getCurrentUser, login } from "./api";
+import { getCurrentUser, login, logout, refreshSession } from "./api";
 import { AuthContext } from "./auth-context.shared";
 import type { AuthContextValue } from "./auth-context.types";
-import {
-  clearAuthTokens,
-  readAuthTokens,
-  writeAuthTokens,
-} from "./storage";
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedTokens = readAuthTokens();
+    let isMounted = true;
 
-    if (!storedTokens) {
-      setIsLoading(false);
-      return;
+    async function restoreSession() {
+      try {
+        const tokens = await refreshSession();
+        const currentUser = await getCurrentUser(tokens.access_token);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setAccessToken(tokens.access_token);
+        setUser(currentUser);
+        setLoginError(null);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setAccessToken(null);
+        setUser(null);
+        setLoginError(null);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     }
 
-    setAccessToken(storedTokens.accessToken);
-    setRefreshToken(storedTokens.refreshToken);
+    void restoreSession();
 
-    void getCurrentUser(storedTokens.accessToken)
-      .then((currentUser) => {
-        setUser(currentUser);
-      })
-      .catch(() => {
-        clearAuthTokens();
-        setAccessToken(null);
-        setRefreshToken(null);
-        setUser(null);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const signIn = useCallback(async (credentials: LoginRequest) => {
@@ -67,21 +72,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       throw error;
     }
 
-    writeAuthTokens({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-    });
-
     setAccessToken(tokens.access_token);
-    setRefreshToken(tokens.refresh_token);
 
     try {
       const currentUser = await getCurrentUser(tokens.access_token);
       setUser(currentUser);
+      setLoginError(null);
     } catch (error) {
-      clearAuthTokens();
       setAccessToken(null);
-      setRefreshToken(null);
       setUser(null);
 
       if (error instanceof ApiError) {
@@ -94,12 +92,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
-  const signOut = useCallback(() => {
-    clearAuthTokens();
-    setAccessToken(null);
-    setRefreshToken(null);
-    setUser(null);
-    setLoginError(null);
+  const signOut = useCallback(async () => {
+    try {
+      await logout();
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+      setLoginError(null);
+    }
   }, []);
 
   const hasRole = useCallback(
@@ -129,10 +129,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const currentUser = await getCurrentUser(accessToken);
       setUser(currentUser);
+      setLoginError(null);
     } catch (error) {
-      clearAuthTokens();
       setAccessToken(null);
-      setRefreshToken(null);
       setUser(null);
 
       if (error instanceof ApiError) {
@@ -150,7 +149,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
       user,
       role: user?.role ?? null,
       accessToken,
-      refreshToken,
       isAuthenticated: user !== null,
       isLoading,
       loginError,
@@ -165,7 +163,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isLoading,
       loginError,
       refreshCurrentUser,
-      refreshToken,
       signIn,
       signOut,
       user,

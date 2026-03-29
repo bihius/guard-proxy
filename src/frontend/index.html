@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1a2e1a" />
+    <meta name="guard-proxy-theme-storage-key" content="guard-proxy-theme" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -14,7 +15,9 @@
     <title>Guard Proxy</title>
     <script>
       (function() {
-        var t = 'guard-proxy-theme';
+        var t = document
+          .querySelector('meta[name="guard-proxy-theme-storage-key"]')
+          ?.getAttribute('content') || 'guard-proxy-theme';
         try {
           var s = localStorage.getItem(t);
           if (s === 'frost' || s === 'emerald') {

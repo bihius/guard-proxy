@@ -1,7 +1,8 @@
 import { type FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { ApiError } from "@/lib/api-client";
+import { appRoutes } from "@/app/routes";
+import { ShieldIcon } from "@/components/icons";
 import { useAuth } from "@/hooks/use-auth";
 
 export function LoginPage() {
@@ -11,11 +12,9 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
     setLoading(true);
 
     try {
@@ -25,15 +24,11 @@ export function LoginPage() {
       });
 
       const from = location.state as { from?: { pathname?: string } } | null;
-      navigate(from?.from?.pathname ?? "/dashboard", {
+      navigate(from?.from?.pathname ?? appRoutes.dashboard, {
         replace: true,
       });
-    } catch (submitError) {
-      if (submitError instanceof ApiError) {
-        setError(submitError.detail);
-      } else {
-        setError("Could not sign in");
-      }
+    } catch {
+      // AuthContext exposes the user-facing login error.
     } finally {
       setLoading(false);
     }
@@ -58,9 +53,13 @@ export function LoginPage() {
           onSubmit={handleSubmit}
           className="card-gradient shadow-card-lg rounded-[var(--radius-xl)] border border-border p-8 space-y-5"
         >
-          {(error ?? loginError) && (
-            <div className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error">
-              {error ?? loginError}
+          {loginError && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error"
+            >
+              {loginError}
             </div>
           )}
 
@@ -108,24 +107,5 @@ export function LoginPage() {
         </p>
       </div>
     </main>
-  );
-}
-
-function ShieldIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-accent-fg"
-    >
-      <path d="M10 2 L3 6 L3 11 C3 15 6 18 10 19 C14 18 17 15 17 11 L17 6 Z" />
-      <polyline points="7 10 9.5 12.5 13.5 7.5" />
-    </svg>
   );
 }

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -19,6 +21,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ]
 
     # Database
@@ -29,6 +33,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
+    auth_refresh_cookie_name: str = "guard_proxy_refresh_token"
+    auth_refresh_cookie_secure: bool = False
+    auth_refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
     @field_validator("jwt_secret_key")
     @classmethod
@@ -39,6 +46,13 @@ class Settings(BaseSettings):
                 "JWT_SECRET_KEY must not be empty. "
                 "Set it in .env or as an environment variable."
             )
+        return v
+
+    @field_validator("auth_refresh_cookie_name")
+    @classmethod
+    def auth_refresh_cookie_name_must_not_be_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("AUTH_REFRESH_COOKIE_NAME must not be empty.")
         return v
 
     @field_validator("cors_origins", mode="before")
