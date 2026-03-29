@@ -51,6 +51,7 @@ Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
 - [Architecture](README.architecture.md) - System architecture and data flow
 - [Development Commands](README.commands.md) - All development commands
 - [Testing Strategy](README.testing.md) - Testing approach and targets
+- [Course team handoff](docs/course-team-handoff.md) - Setup, task assignments, and PR checklist for course contributors
 
 ## License
 
