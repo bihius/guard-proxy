@@ -271,6 +271,40 @@ def test_patch_rule_override_missing_override_returns_404(
     assert resp.json()["detail"] == "Rule override not found"
 
 
+def test_patch_rule_override_null_rule_id_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Explicitly setting rule_id to null in PATCH returns 422."""
+    policy = _create_policy(client, admin_token, name="Patch null rule_id")
+    created = _create_rule_override(client, admin_token, policy["id"])
+
+    resp = client.patch(
+        f"/policies/{policy['id']}/rules/{created['id']}",
+        headers=admin_token,
+        json={"rule_id": None},
+    )
+
+    assert resp.status_code == 422
+    assert "rule_id" in resp.json()["detail"]
+
+
+def test_patch_rule_override_null_action_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Explicitly setting action to null in PATCH returns 422."""
+    policy = _create_policy(client, admin_token, name="Patch null action")
+    created = _create_rule_override(client, admin_token, policy["id"])
+
+    resp = client.patch(
+        f"/policies/{policy['id']}/rules/{created['id']}",
+        headers=admin_token,
+        json={"action": None},
+    )
+
+    assert resp.status_code == 422
+    assert "action" in resp.json()["detail"]
+
+
 def test_delete_rule_override_admin_returns_204(
     client: TestClient, admin_token: dict[str, str]
 ) -> None:

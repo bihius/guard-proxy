@@ -17,13 +17,17 @@ from app.schemas.rule_override import (
 
 router = APIRouter(prefix="/policies/{policy_id}/rules", tags=["rule-overrides"])
 
+NON_NULLABLE_PATCH_FIELDS = {"rule_id", "action"}
+
+_UNIQUE_CONSTRAINT = "uq_rule_overrides_policy_id_rule_id"
+
 
 def _is_rule_override_unique_violation(error: IntegrityError) -> bool:
     """Check whether an IntegrityError comes from a duplicate rule override."""
     error_text = str(error.orig).lower()
-    return (
+    # PostgreSQL includes the constraint name; SQLite reports column names instead
+    return _UNIQUE_CONSTRAINT in error_text or (
         "unique" in error_text
-        and "rule_overrides" in error_text
         and "rule_id" in error_text
         and "policy_id" in error_text
     )
@@ -137,6 +141,13 @@ def update_rule_override(
     _get_policy_or_404(db, policy_id)
     rule_override = _get_rule_override_or_404(db, policy_id, rule_override_id)
     patch_data = body.model_dump(exclude_unset=True)
+
+    for field in NON_NULLABLE_PATCH_FIELDS:
+        if field in patch_data and patch_data[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Field '{field}' cannot be null",
+            )
 
     for field, value in patch_data.items():
         setattr(rule_override, field, value)
