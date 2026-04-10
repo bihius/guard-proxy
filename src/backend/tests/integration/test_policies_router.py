@@ -1,7 +1,8 @@
 """Testy integracyjne routera policies (CRUD + autoryzacja)."""
 
-from fastapi.testclient import TestClient
 from typing import Any
+
+from fastapi.testclient import TestClient
 
 from app.models.user import User
 
