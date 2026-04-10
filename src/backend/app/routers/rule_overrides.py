@@ -25,9 +25,10 @@ _UNIQUE_CONSTRAINT = "uq_rule_overrides_policy_id_rule_id"
 def _is_rule_override_unique_violation(error: IntegrityError) -> bool:
     """Check whether an IntegrityError comes from a duplicate rule override."""
     error_text = str(error.orig).lower()
-    # PostgreSQL includes the constraint name; SQLite reports column names instead
+    # PostgreSQL includes the constraint name; SQLite includes column names instead
     return _UNIQUE_CONSTRAINT in error_text or (
         "unique" in error_text
+        and "rule_overrides" in error_text
         and "rule_id" in error_text
         and "policy_id" in error_text
     )
