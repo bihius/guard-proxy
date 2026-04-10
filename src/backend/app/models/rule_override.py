@@ -1,4 +1,4 @@
-"""RuleOverride model — nadpisania reguł OWASP CRS w ramach polityki WAF."""
+"""RuleOverride model for OWASP CRS rule overrides within a WAF policy."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 
 
 class RuleAction(enum.StrEnum):
-    """Akcja nadpisania reguły CRS.
+    """Action applied to a CRS rule override.
 
-    enable  — włącz regułę (jeśli była wyłączona na niższym paranoia level)
-    disable — wyłącz regułę (np. powoduje false positives w Twojej aplikacji)
+    enable  — turn the rule on
+    disable — turn the rule off
     """
 
     enable = "enable"
@@ -27,42 +27,48 @@ class RuleAction(enum.StrEnum):
 
 
 class RuleOverride(Base):
-    """Tabela rule_overrides — nadpisania konkretnych reguł CRS w polityce.
+    """rule_overrides table storing policy-specific CRS rule overrides.
 
-    Przykład użycia:
-    - Polityka "Default" ma paranoia_level=2
-    - Reguła 942100 (SQL injection) powoduje false positives w Twojej apce
-    - Dodajesz RuleOverride(rule_id=942100, action=disable) dla tej polityki
-    - Guard Proxy wygeneruje konfigurację HAProxy z wyłączoną tą regułą
+    Example:
+    - The "Default" policy has paranoia_level=2
+    - Rule 942100 (SQL injection) produces false positives
+    - You add RuleOverride(rule_id=942100, action=disable) for that policy
+    - Guard Proxy can then generate config with that rule disabled
     """
 
     __tablename__ = "rule_overrides"
+    __table_args__ = (
+        UniqueConstraint(
+            "policy_id",
+            "rule_id",
+            name="uq_rule_overrides_policy_id_rule_id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # Relacja do Policy — nadpisanie należy do konkretnej polityki
-    # ondelete="CASCADE" — jeśli polityka zostanie usunięta, usuń też jej nadpisania
-    #                      (w przeciwieństwie do vhosts gdzie SET NULL ma sens)
+    # Relationship to Policy: every override belongs to one policy.
+    # ondelete="CASCADE" means overrides are removed when the policy is deleted.
     policy_id: Mapped[int] = mapped_column(
         ForeignKey("policies.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,  # często będziemy pytać "jakie nadpisania ma polityka X?"
+        index=True,  # We often query "which overrides belong to policy X?"
     )
 
-    # Numer reguły OWASP CRS — np. 941100 (XSS), 942100 (SQLi)
+    # OWASP CRS rule number, for example 941100 (XSS) or 942100 (SQLi).
     rule_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Co zrobić z regułą
+    # Desired action for that rule.
     action: Mapped[RuleAction] = mapped_column(Enum(RuleAction), nullable=False)
 
-    # Opcjonalny komentarz — dlaczego wyłączasz/włączasz tę regułę
+    # Optional note explaining why the rule is enabled or disabled.
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )
 
-    # Relacja ORM do Policy (druga strona relacji z policy.rule_overrides)
+    # ORM relationship back to Policy (the other side is policy.rule_overrides).
     policy: Mapped[Policy] = relationship(  # noqa: F821
         "Policy",
         back_populates="rule_overrides",
