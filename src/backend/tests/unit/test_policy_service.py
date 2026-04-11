@@ -17,6 +17,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 from app.models.policy import Policy  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.policy_service import (  # noqa: E402
+    PolicyDisallowedFieldError,
     PolicyFieldCannotBeNullError,
     PolicyNameAlreadyExistsError,
     PolicyNotFoundError,
@@ -209,3 +210,23 @@ def test_delete_policy_missing_raises_not_found(db: Session) -> None:
 
     with pytest.raises(PolicyNotFoundError):
         service.delete_policy(99999)
+
+
+def test_update_policy_disallowed_field_raises_error(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Allowlist check",
+        description=None,
+        paranoia_level=2,
+        anomaly_threshold=5,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(
+        PolicyDisallowedFieldError,
+        match="Field 'created_by' cannot be patched",
+    ):
+        service.update_policy(created.id, {"created_by": 999})

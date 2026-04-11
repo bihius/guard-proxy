@@ -9,6 +9,8 @@ from app.models.policy import Policy
 from app.models.user import User
 from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, PolicyUpdate
 from app.services.policy_service import (
+    PolicyDatabaseConstraintError,
+    PolicyDisallowedFieldError,
     PolicyFieldCannotBeNullError,
     PolicyNameAlreadyExistsError,
     PolicyNotFoundError,
@@ -39,6 +41,11 @@ def create_policy(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Policy name already exists",
+        ) from error
+    except PolicyDatabaseConstraintError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Database integrity constraint violated",
         ) from error
 
 
@@ -89,6 +96,11 @@ def update_policy(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Policy not found",
         ) from error
+    except PolicyDisallowedFieldError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
     except PolicyFieldCannotBeNullError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -98,6 +110,11 @@ def update_policy(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Policy name already exists",
+        ) from error
+    except PolicyDatabaseConstraintError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Database integrity constraint violated",
         ) from error
 
 
