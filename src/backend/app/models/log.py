@@ -37,7 +37,6 @@ class Log(Base):
         String(128),
         nullable=True,
         unique=True,
-        index=True,
     )
     event_at: Mapped[datetime] = mapped_column(
         DateTime,

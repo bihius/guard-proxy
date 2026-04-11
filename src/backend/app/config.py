@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     auth_refresh_cookie_name: str = "guard_proxy_refresh_token"
     auth_refresh_cookie_secure: bool = False
     auth_refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    log_ingest_shared_secret: str
 
     @field_validator("jwt_secret_key")
     @classmethod
@@ -53,6 +54,13 @@ class Settings(BaseSettings):
     def auth_refresh_cookie_name_must_not_be_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("AUTH_REFRESH_COOKIE_NAME must not be empty.")
+        return v
+
+    @field_validator("log_ingest_shared_secret")
+    @classmethod
+    def log_ingest_shared_secret_must_not_be_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("LOG_INGEST_SHARED_SECRET must not be empty.")
         return v
 
     @field_validator("cors_origins", mode="before")

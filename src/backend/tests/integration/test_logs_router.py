@@ -365,9 +365,10 @@ def test_list_logs_rejects_invalid_date_range(
 def test_ingest_log_event_persists_valid_payload(
     client: TestClient,
     db: Session,
+    log_ingest_headers: dict[str, str],
 ) -> None:
     """A valid ingest request should store the event in the database."""
-    resp = client.post("/logs/ingest", json=_ingest_payload())
+    resp = client.post("/logs/ingest", json=_ingest_payload(), headers=log_ingest_headers)
     assert resp.status_code == 201
 
     body = resp.json()
@@ -381,17 +382,40 @@ def test_ingest_log_event_persists_valid_payload(
     assert persisted.raw_context == {"engine": "coraza", "phase": "request"}
 
 
-def test_ingest_log_event_rejects_invalid_payload(client: TestClient) -> None:
+def test_ingest_log_event_requires_secret(client: TestClient) -> None:
+    """Missing shared secret should return 401."""
+    resp = client.post("/logs/ingest", json=_ingest_payload())
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Missing ingest secret"
+
+
+def test_ingest_log_event_rejects_invalid_secret(client: TestClient) -> None:
+    """Wrong shared secret should return 403."""
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(),
+        headers={"X-Guard-Proxy-Ingest-Secret": "wrong-secret"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Invalid ingest secret"
+
+
+def test_ingest_log_event_rejects_invalid_payload(
+    client: TestClient,
+    log_ingest_headers: dict[str, str],
+) -> None:
     """Malformed ingest payloads should fail with 422 validation errors."""
     resp = client.post(
         "/logs/ingest",
         json=_ingest_payload(source_ip="not-an-ip", severity="fatal"),
+        headers=log_ingest_headers,
     )
     assert resp.status_code == 422
 
 
 def test_ingest_log_event_allows_optional_fields_to_be_omitted(
     client: TestClient,
+    log_ingest_headers: dict[str, str],
 ) -> None:
     """Optional investigation fields should not be required on ingest."""
     resp = client.post(
@@ -406,6 +430,7 @@ def test_ingest_log_event_allows_optional_fields_to_be_omitted(
             message=None,
             raw_context=None,
         ),
+        headers=log_ingest_headers,
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -417,12 +442,14 @@ def test_ingest_log_event_allows_optional_fields_to_be_omitted(
 def test_ingest_log_event_is_idempotent_when_producer_event_id_retries(
     client: TestClient,
     db: Session,
+    log_ingest_headers: dict[str, str],
 ) -> None:
     """Retrying the same producer event id should return the existing record."""
-    first = client.post("/logs/ingest", json=_ingest_payload())
+    first = client.post("/logs/ingest", json=_ingest_payload(), headers=log_ingest_headers)
     second = client.post(
         "/logs/ingest",
         json=_ingest_payload(message="Changed body should still dedupe"),
+        headers=log_ingest_headers,
     )
 
     assert first.status_code == 201
@@ -434,11 +461,13 @@ def test_ingest_log_event_is_idempotent_when_producer_event_id_retries(
 def test_ingest_then_list_logs_returns_persisted_event(
     client: TestClient,
     admin_token: dict[str, str],
+    log_ingest_headers: dict[str, str],
 ) -> None:
     """An ingested event should be visible through the read API immediately."""
     ingest = client.post(
         "/logs/ingest",
         json=_ingest_payload(producer_event_id="coraza-event-3"),
+        headers=log_ingest_headers,
     )
     assert ingest.status_code == 201
 
@@ -451,3 +480,4 @@ def test_ingest_then_list_logs_returns_persisted_event(
     body = resp.json()
     assert body["total"] == 1
     assert body["items"][0]["producer_event_id"] == "coraza-event-3"
+
