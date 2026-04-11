@@ -56,6 +56,13 @@ sequenceDiagram
 4. Backend generates HAProxy/Coraza config
 5. Backend reloads HAProxy (graceful, no dropped connections)
 
+### Runtime Event Ingestion
+1. Coraza or a proxy-side adapter produces a structured WAF event
+2. The producer sends the event to `POST /logs/ingest`
+3. FastAPI validates and normalizes the payload into the persisted log event model
+4. The backend stores the event as a historical snapshot in PostgreSQL
+5. `GET /logs` exposes the stored events to the future frontend log viewer
+
 ## Deployment
 
 ### Development (Docker Compose)
