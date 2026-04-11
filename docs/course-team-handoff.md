@@ -240,6 +240,60 @@ const { hasRole } = useAuth();
 
 ---
 
+### 4.2b Dawid L — Docker Compose dev (GitHub #53)
+
+**Cel:** Przygotować `docker-compose.yml`, który stawia cały stack developerski jedną komendą.
+
+> To zadanie realizujesz **po** zakończeniu VHosts (#29) lub równolegle, jeśli chcesz zacząć od niego.
+
+#### Co zrobić
+
+1. **`docker-compose.yml`** w katalogu głównym repozytorium z serwisami:
+   - `postgres` — obraz `postgres:16`, volume na dane, zmienne `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` z `.env`.
+   - `backend` — budowany z `src/backend/`, nasłuchuje na porcie `8000`, zależy od `postgres`, czyta `.env`.
+   - `frontend` — budowany z `src/frontend/`, nasłuchuje na porcie `5173`, `VITE_API_BASE_URL` wskazujący na backend.
+
+2. **`src/backend/Dockerfile`** — wieloetapowy (multi-stage) build:
+   - Bazowy obraz: `python:3.13-slim`.
+   - Instalacja zależności przez `uv` (skopiuj `pyproject.toml` + `uv.lock`).
+   - Uruchomienie: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+
+3. **`src/frontend/Dockerfile`** — dla dev servera:
+   - Bazowy obraz: `node:20-slim`.
+   - Instalacja przez `pnpm install`.
+   - Uruchomienie: `pnpm run dev --host` (flaga `--host` żeby Vite słuchał na `0.0.0.0`).
+
+4. **Aktualizacja `.env.example`** — dodaj zmienne potrzebne dla Docker Compose (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL`).
+
+#### Jak zweryfikować
+
+```bash
+docker compose up -d
+# Poczekaj ~15s na start
+curl http://localhost:8000/health    # powinien zwrócić {"status": "ok"}
+curl http://localhost:5173           # powinien zwrócić HTML frontendu
+docker compose down
+```
+
+#### Pliki do utworzenia / edycji
+
+- `docker-compose.yml` — **nowy plik** w katalogu głównym
+- `src/backend/Dockerfile` — **nowy plik**
+- `src/frontend/Dockerfile` — **nowy plik**
+- `src/backend/.env.example` — aktualizacja o zmienne Postgres
+
+#### Definition of done
+
+- [ ] `docker compose up -d` stawia 3 serwisy bez błędów
+- [ ] Backend odpowiada na `GET /health`
+- [ ] Frontend serwuje stronę na porcie 5173
+- [ ] Backend łączy się z PostgreSQL (logowanie działa)
+- [ ] `docker compose down` czyści wszystko
+- [ ] Nie commituje żadnych haseł — wszystko przez `.env`
+- [ ] `pnpm run type-check` i `pnpm run lint` przechodzą (frontend bez zmian logiki)
+
+---
+
 ### 4.3 Mateusz Ka — Policies (GitHub #30)
 
 **Cel:** Zbudować widok listy polityk WAF i widok szczegółu z rule overrides.
@@ -321,6 +375,64 @@ const { hasRole } = useAuth();
 
 ---
 
+### 4.3b Mateusz Ka — Rule Overrides frontend (część GitHub #66)
+
+**Cel:** Dodać możliwość zarządzania rule overrides z poziomu widoku szczegółu polityki.
+
+> To zadanie realizujesz **po** zakończeniu Policies (#30) — bazujesz na `PolicyDetailPage`, którą już zbudujesz.
+
+#### Kontekst
+
+Rule overrides pozwalają adminowi wyłączyć konkretną regułę OWASP CRS dla danej polityki (np. reguła 942100 generuje false positive na formularzu wyszukiwania — admin ją wyłącza). Endpointy backendowe będą gotowe — Twoja robota to frontend.
+
+#### Co zrobić
+
+1. **Formularz dodawania override'a** (tylko dla admina) w `PolicyDetailPage`:
+   - Pola: Rule ID (number, np. `942100`), Action (select: `enable` / `disable`), Comment (opcjonalny tekst).
+   - Submit wysyła `POST /policies/{policyId}/rule-overrides` z body `{ "rule_id": 942100, "action": "disable", "comment": "..." }`.
+   - Po sukcesie — odśwież listę overrides.
+
+2. **Przycisk usunięcia** przy każdym overridzie (tylko dla admina):
+   - Wysyła `DELETE /policies/{policyId}/rule-overrides/{overrideId}`.
+   - Po sukcesie — odśwież listę.
+
+3. **Viewer** — widzi overrides w trybie read-only (bez formularza i przycisków usunięcia).
+
+#### Co przyjmuje / zwraca API
+
+`POST /policies/{policyId}/rule-overrides`:
+```json
+// Request
+{ "rule_id": 942100, "action": "disable", "comment": "False positive on search" }
+
+// Response (201 Created)
+{
+  "id": 5,
+  "policy_id": 1,
+  "rule_id": 942100,
+  "action": "disable",
+  "comment": "False positive on search",
+  "created_at": "2026-04-10T12:00:00"
+}
+```
+
+`DELETE /policies/{policyId}/rule-overrides/{overrideId}` → `204 No Content`
+
+#### Pliki do edycji
+
+- `src/frontend/src/pages/policies/PolicyDetailPage.tsx` — rozszerzenie widoku szczegółu
+
+#### Definition of done
+
+- [ ] Admin widzi formularz dodawania override'a na stronie szczegółu polityki
+- [ ] Po dodaniu override'a lista odświeża się bez przeładowania strony
+- [ ] Admin może usunąć override przyciskiem, lista odświeża się
+- [ ] Viewer widzi overrides, ale nie widzi formularza ani przycisku usunięcia
+- [ ] Obsługa błędów: `ErrorState` / komunikat przy nieudanym requeście
+- [ ] `pnpm run type-check` i `pnpm run lint` przechodzą
+
+---
+
 ## 5. Jak testować ręcznie
 
 Zanim wystawisz PR, przetestuj te scenariusze:
@@ -342,7 +454,7 @@ Zanim wystawisz PR, przetestuj te scenariusze:
 - [ ] Przetestowane ręcznie: happy path, brak danych, błąd sieci, ładowanie
 - [ ] Nie commituje `.env`, sekretów ani `node_modules`
 - [ ] Opis PR zawiera: co zrobiłem, jak przetestowałem
-- [ ] PR jest wystawiony do brancha `feat/frontend-bootstrap`
+- [ ] PR jest wystawiony do brancha `main`
 
 ---
 
