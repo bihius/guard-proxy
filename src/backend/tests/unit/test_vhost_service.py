@@ -4,17 +4,13 @@ These tests use a real SQLAlchemy session with in-memory SQLite.
 That keeps the tests focused on service logic and ORM behavior.
 """
 
-import os
-
 import pytest
 from sqlalchemy.orm import Session
 
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
-
-from app.models.policy import Policy  # noqa: E402
-from app.models.user import User  # noqa: E402
-from app.models.vhost import VHost  # noqa: E402
-from app.services.vhost_service import (  # noqa: E402
+from app.models.policy import Policy
+from app.models.user import User
+from app.models.vhost import VHost
+from app.services.vhost_service import (
     VHostDomainAlreadyExistsError,
     VHostFieldCannotBeNullError,
     VHostNotFoundError,
