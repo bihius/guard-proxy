@@ -13,6 +13,7 @@ from pydantic import ValidationError
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
 from app.models.rule_override import RuleAction  # noqa: E402
+from app.schemas.log import LogIngestRequest  # noqa: E402
 from app.schemas.policy import PolicyCreate, PolicyUpdate  # noqa: E402
 from app.schemas.rule_override import (  # noqa: E402
     RuleOverrideCreate,
@@ -242,3 +243,53 @@ def test_vhost_create_backend_url_stripped() -> None:
     """Whitespace around the backend URL is stripped."""
     v = VHostCreate(domain="example.com", backend_url="  http://localhost:8080  ")
     assert v.backend_url == "http://localhost:8080"
+
+
+def test_log_ingest_request_normalizes_vhost_method_and_optional_text() -> None:
+    log = LogIngestRequest(
+        producer_event_id=" event-123 ",
+        event_at="2026-04-11T10:30:00",
+        vhost=" API.EXAMPLE.COM ",
+        action="deny",
+        source_ip=" 203.0.113.10 ",
+        method=" post ",
+        request_uri=" /login ",
+        severity="error",
+        message=" blocked ",
+        rule_message=" attack detected ",
+    )
+
+    assert log.producer_event_id == "event-123"
+    assert log.vhost == "api.example.com"
+    assert log.source_ip == "203.0.113.10"
+    assert log.method == "POST"
+    assert log.request_uri == "/login"
+    assert log.message == "blocked"
+    assert log.rule_message == "attack detected"
+
+
+def test_log_ingest_request_rejects_invalid_ip() -> None:
+    with pytest.raises(ValidationError):
+        LogIngestRequest(
+            event_at="2026-04-11T10:30:00",
+            vhost="api.example.com",
+            action="deny",
+            source_ip="definitely-not-an-ip",
+            method="POST",
+            request_uri="/login",
+            severity="error",
+        )
+
+
+def test_log_ingest_request_rejects_invalid_paranoia_level() -> None:
+    with pytest.raises(ValidationError, match="less than or equal to 4"):
+        LogIngestRequest(
+            event_at="2026-04-11T10:30:00",
+            vhost="api.example.com",
+            action="deny",
+            source_ip="203.0.113.10",
+            method="POST",
+            request_uri="/login",
+            paranoia_level=5,
+            severity="error",
+        )
