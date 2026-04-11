@@ -21,6 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    # MVP note: this intentionally rebuilds the table instead of preserving old rows.
+    # The previous logs schema was a short-lived placeholder and current project
+    # scope does not require retaining existing historical data yet.
     op.drop_index(op.f("ix_logs_vhost"), table_name="logs")
     op.drop_index(op.f("ix_logs_severity"), table_name="logs")
     op.drop_index(op.f("ix_logs_logged_at"), table_name="logs")
@@ -62,16 +65,10 @@ def upgrade() -> None:
         sa.Column("message", sa.Text(), nullable=True),
         sa.Column("raw_context", sa.JSON(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("producer_event_id"),
+        sa.UniqueConstraint("producer_event_id", name="uq_logs_producer_event_id"),
     )
     op.create_index(op.f("ix_logs_action"), "logs", ["action"], unique=False)
     op.create_index(op.f("ix_logs_event_at"), "logs", ["event_at"], unique=False)
-    op.create_index(
-        op.f("ix_logs_producer_event_id"),
-        "logs",
-        ["producer_event_id"],
-        unique=True,
-    )
     op.create_index(op.f("ix_logs_rule_id"), "logs", ["rule_id"], unique=False)
     op.create_index(op.f("ix_logs_severity"), "logs", ["severity"], unique=False)
     op.create_index(op.f("ix_logs_source_ip"), "logs", ["source_ip"], unique=False)
@@ -84,7 +81,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_logs_source_ip"), table_name="logs")
     op.drop_index(op.f("ix_logs_severity"), table_name="logs")
     op.drop_index(op.f("ix_logs_rule_id"), table_name="logs")
-    op.drop_index(op.f("ix_logs_producer_event_id"), table_name="logs")
     op.drop_index(op.f("ix_logs_event_at"), table_name="logs")
     op.drop_index(op.f("ix_logs_action"), table_name="logs")
     op.drop_table("logs")

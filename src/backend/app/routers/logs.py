@@ -1,11 +1,14 @@
 """Router for log event ingestion and read APIs."""
 
 from datetime import datetime
+from secrets import compare_digest
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import IPvAnyAddress
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.log import Log, LogAction, LogSeverity
@@ -14,11 +17,61 @@ from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
+def require_log_ingest_secret(
+    x_guard_proxy_ingest_secret: str | None = Header(
+        default=None,
+        alias="X-Guard-Proxy-Ingest-Secret",
+    ),
+) -> None:
+    """Protect the ingest endpoint with a shared secret for runtime producers."""
+    if x_guard_proxy_ingest_secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing ingest secret",
+        )
+    if not compare_digest(
+        x_guard_proxy_ingest_secret,
+        settings.log_ingest_shared_secret,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid ingest secret",
+        )
+
+
+def _persist_log_event(
+    *,
+    db: Session,
+    log: Log,
+    producer_event_id: str | None,
+) -> tuple[Log, bool]:
+    """Persist a log event and preserve idempotency under write races."""
+    db.add(log)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if producer_event_id is None:
+            raise
+
+        existing = (
+            db.query(Log)
+            .filter(Log.producer_event_id == producer_event_id)
+            .one_or_none()
+        )
+        if existing is None:
+            raise
+        return existing, False
+
+    db.refresh(log)
+    return log, True
+
 
 @router.post("/ingest", response_model=LogResponse, status_code=status.HTTP_201_CREATED)
 def ingest_log_event(
     body: LogIngestRequest,
     response: Response,
+    _: None = Depends(require_log_ingest_secret),
     db: Session = Depends(get_db),
 ) -> Log:
     """Persist a single WAF or proxy event for later investigation."""
@@ -34,10 +87,14 @@ def ingest_log_event(
             return existing
 
     log = Log(**body.model_dump())
-    db.add(log)
-    db.commit()
-    db.refresh(log)
-    return log
+    persisted, created = _persist_log_event(
+        db=db,
+        log=log,
+        producer_event_id=body.producer_event_id,
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return persisted
 
 
 @router.get("", response_model=LogListResponse)
