@@ -12,6 +12,7 @@ NON_NULLABLE_PATCH_FIELDS = {
     "is_active",
 }
 
+# description is intentionally excluded: it is nullable and may be set to None.
 PATCHABLE_FIELDS = {
     "name",
     "description",
@@ -50,7 +51,7 @@ class PolicyDisallowedFieldError(PolicyError):
 
 
 class PolicyDatabaseConstraintError(PolicyError):
-    """Raised when a database integrity constraint is violated unexpectedly."""
+    """Raised when an IntegrityError occurs for a reason other than a duplicate name."""
 
 
 class PolicyService:
