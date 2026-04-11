@@ -1,21 +1,40 @@
 """Router Policies API — CRUD polityk WAF."""
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.policy import Policy
 from app.models.user import User
 from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, PolicyUpdate
-from app.services.policy_service import (
-    PolicyFieldCannotBeNullError,
-    PolicyNameAlreadyExistsError,
-    PolicyNotFoundError,
-    PolicyService,
-)
 
 router = APIRouter(prefix="/policies", tags=["policies"])
+
+NON_NULLABLE_PATCH_FIELDS = {
+    "name",
+    "paranoia_level",
+    "anomaly_threshold",
+    "is_active",
+}
+
+
+def _is_policy_name_unique_violation(error: IntegrityError) -> bool:
+    """Sprawdza, czy IntegrityError dotyczy unikalnej nazwy policy."""
+    error_text = str(error.orig).lower()
+    return "unique" in error_text and "name" in error_text
+
+
+def _get_policy_or_404(db: Session, policy_id: int) -> Policy:
+    """Zwraca politykę po ID albo 404 gdy nie istnieje."""
+    policy = db.get(Policy, policy_id)
+    if policy is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Policy not found",
+        )
+    return policy
 
 
 @router.post("", response_model=PolicyResponse, status_code=status.HTTP_201_CREATED)
@@ -25,21 +44,25 @@ def create_policy(
     current_user: User = Depends(require_admin),
 ) -> Policy:
     """Tworzy nową politykę WAF (tylko admin)."""
-    service = PolicyService(db)
-
+    policy = Policy(
+        name=body.name,
+        description=body.description,
+        paranoia_level=body.paranoia_level,
+        anomaly_threshold=body.anomaly_threshold,
+        is_active=True,
+        created_by=current_user.id,
+    )
+    db.add(policy)
     try:
-        return service.create_policy(
-            name=body.name,
-            description=body.description,
-            paranoia_level=body.paranoia_level,
-            anomaly_threshold=body.anomaly_threshold,
-            created_by=current_user.id,
-        )
-    except PolicyNameAlreadyExistsError as error:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Policy name already exists",
-        ) from error
+        )
+    db.refresh(policy)
+    return policy
 
 
 @router.get("", response_model=list[PolicyResponse])
@@ -48,8 +71,7 @@ def list_policies(
     _: User = Depends(get_current_user),
 ) -> list[Policy]:
     """Zwraca listę polityk WAF (admin i viewer)."""
-    service = PolicyService(db)
-    return service.list_policies()
+    return db.query(Policy).order_by(Policy.id.asc()).all()
 
 
 @router.get("/{policy_id}", response_model=PolicyDetail)
@@ -59,14 +81,18 @@ def get_policy(
     _: User = Depends(get_current_user),
 ) -> Policy:
     """Zwraca szczegóły polityki razem z rule_overrides (admin i viewer)."""
-    service = PolicyService(db)
-    try:
-        return service.get_policy(policy_id)
-    except PolicyNotFoundError as error:
+    policy = (
+        db.query(Policy)
+        .options(selectinload(Policy.rule_overrides))
+        .filter(Policy.id == policy_id)
+        .first()
+    )
+    if policy is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Policy not found",
-        ) from error
+        )
+    return policy
 
 
 @router.patch("/{policy_id}", response_model=PolicyResponse)
@@ -77,28 +103,31 @@ def update_policy(
     _: User = Depends(require_admin),
 ) -> Policy:
     """Aktualizuje wskazane pola polityki (tylko admin)."""
-    service = PolicyService(db)
+    policy = _get_policy_or_404(db, policy_id)
+    patch_data = body.model_dump(exclude_unset=True)
+
+    for field in NON_NULLABLE_PATCH_FIELDS:
+        if field in patch_data and patch_data[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Field '{field}' cannot be null",
+            )
+
+    for field, value in patch_data.items():
+        setattr(policy, field, value)
 
     try:
-        return service.update_policy(
-            policy_id,
-            body.model_dump(exclude_unset=True),
-        )
-    except PolicyNotFoundError as error:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Policy not found",
-        ) from error
-    except PolicyFieldCannotBeNullError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(error),
-        ) from error
-    except PolicyNameAlreadyExistsError as error:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Policy name already exists",
-        ) from error
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        if _is_policy_name_unique_violation(error):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Policy name already exists",
+            )
+        raise
+    db.refresh(policy)
+    return policy
 
 
 @router.delete("/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -108,13 +137,7 @@ def delete_policy(
     _: User = Depends(require_admin),
 ) -> Response:
     """Usuwa politykę po ID (tylko admin)."""
-    service = PolicyService(db)
-    try:
-        service.delete_policy(policy_id)
-    except PolicyNotFoundError as error:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Policy not found",
-        ) from error
-
+    policy = _get_policy_or_404(db, policy_id)
+    db.delete(policy)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
