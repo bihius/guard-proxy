@@ -270,7 +270,7 @@ const { hasRole } = useAuth();
 ```bash
 docker compose up -d
 # Poczekaj ~15s na start
-curl http://localhost:8000/health    # powinien zwrócić {"status": "ok"}
+curl http://localhost:8000/health    # powinien zwrócić {"status": "healthy", "version": "0.1.0"}
 curl http://localhost:5173           # powinien zwrócić HTML frontendu
 docker compose down
 ```
@@ -389,18 +389,18 @@ Rule overrides pozwalają adminowi wyłączyć konkretną regułę OWASP CRS dla
 
 1. **Formularz dodawania override'a** (tylko dla admina) w `PolicyDetailPage`:
    - Pola: Rule ID (number, np. `942100`), Action (select: `enable` / `disable`), Comment (opcjonalny tekst).
-   - Submit wysyła `POST /policies/{policyId}/rule-overrides` z body `{ "rule_id": 942100, "action": "disable", "comment": "..." }`.
+   - Submit wysyła `POST /policies/{policyId}/rules` z body `{ "rule_id": 942100, "action": "disable", "comment": "..." }`.
    - Po sukcesie — odśwież listę overrides.
 
 2. **Przycisk usunięcia** przy każdym overridzie (tylko dla admina):
-   - Wysyła `DELETE /policies/{policyId}/rule-overrides/{overrideId}`.
+   - Wysyła `DELETE /policies/{policyId}/rules/{overrideId}`.
    - Po sukcesie — odśwież listę.
 
 3. **Viewer** — widzi overrides w trybie read-only (bez formularza i przycisków usunięcia).
 
 #### Co przyjmuje / zwraca API
 
-`POST /policies/{policyId}/rule-overrides`:
+`POST /policies/{policyId}/rules`:
 ```json
 // Request
 { "rule_id": 942100, "action": "disable", "comment": "False positive on search" }
@@ -416,7 +416,7 @@ Rule overrides pozwalają adminowi wyłączyć konkretną regułę OWASP CRS dla
 }
 ```
 
-`DELETE /policies/{policyId}/rule-overrides/{overrideId}` → `204 No Content`
+`DELETE /policies/{policyId}/rules/{overrideId}` → `204 No Content`
 
 #### Pliki do edycji
 
