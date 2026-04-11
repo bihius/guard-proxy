@@ -12,6 +12,15 @@ NON_NULLABLE_PATCH_FIELDS = {
     "is_active",
 }
 
+# description is intentionally excluded: it is nullable and may be set to None.
+PATCHABLE_FIELDS = {
+    "name",
+    "description",
+    "paranoia_level",
+    "anomaly_threshold",
+    "is_active",
+}
+
 
 class PolicyError(Exception):
     """Base class for policy domain errors."""
@@ -31,6 +40,18 @@ class PolicyFieldCannotBeNullError(PolicyError):
     def __init__(self, field_name: str) -> None:
         self.field_name = field_name
         super().__init__(f"Field '{field_name}' cannot be null")
+
+
+class PolicyDisallowedFieldError(PolicyError):
+    """Raised when PATCH contains a field that is not in the patchable allowlist."""
+
+    def __init__(self, field_name: str) -> None:
+        self.field_name = field_name
+        super().__init__(f"Field '{field_name}' cannot be patched")
+
+
+class PolicyDatabaseConstraintError(PolicyError):
+    """Raised when an IntegrityError occurs for a reason other than a duplicate name."""
 
 
 class PolicyService:
@@ -70,7 +91,7 @@ class PolicyService:
             self.db.rollback()
             if self._is_policy_name_unique_violation(error):
                 raise PolicyNameAlreadyExistsError from error
-            raise
+            raise PolicyDatabaseConstraintError from error
 
         self.db.refresh(policy)
         return policy
@@ -105,7 +126,7 @@ class PolicyService:
             self.db.rollback()
             if self._is_policy_name_unique_violation(error):
                 raise PolicyNameAlreadyExistsError from error
-            raise
+            raise PolicyDatabaseConstraintError from error
 
         self.db.refresh(policy)
         return policy
@@ -124,7 +145,10 @@ class PolicyService:
         return policy
 
     def _validate_patch_data(self, patch_data: dict[str, object]) -> None:
-        """Reject nulls for fields that must always keep a real value."""
+        """Reject disallowed keys and nulls for non-nullable fields."""
+        for field in patch_data:
+            if field not in PATCHABLE_FIELDS:
+                raise PolicyDisallowedFieldError(field)
         for field in NON_NULLABLE_PATCH_FIELDS:
             if field in patch_data and patch_data[field] is None:
                 raise PolicyFieldCannotBeNullError(field)
