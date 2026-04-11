@@ -77,8 +77,7 @@ class LogIngestRequest(BaseModel):
     @classmethod
     def validate_source_ip(cls, value: str) -> str:
         normalized = value.strip()
-        ip_address(normalized)
-        return normalized
+        return str(ip_address(normalized))
 
     @field_validator("method")
     @classmethod
