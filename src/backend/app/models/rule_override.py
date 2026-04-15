@@ -69,7 +69,7 @@ class RuleOverride(Base):
     )
 
     # ORM relationship back to Policy (the other side is policy.rule_overrides).
-    policy: Mapped[Policy] = relationship(  # noqa: F821
+    policy: Mapped[Policy] = relationship(
         "Policy",
         back_populates="rule_overrides",
     )

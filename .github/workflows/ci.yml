@@ -24,6 +24,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.6.14"
 
       - name: Cache uv packages
         uses: actions/cache@v4
@@ -77,3 +79,6 @@ jobs:
 
       - name: Run frontend lint
         run: pnpm run lint
+
+      - name: Run frontend tests
+        run: pnpm run test

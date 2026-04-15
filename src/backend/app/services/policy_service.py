@@ -12,7 +12,7 @@ NON_NULLABLE_PATCH_FIELDS = {
     "is_active",
 }
 
-# description is intentionally excluded: it is nullable and may be set to None.
+# description is intentionally included: it is nullable and may be set to None.
 PATCHABLE_FIELDS = {
     "name",
     "description",

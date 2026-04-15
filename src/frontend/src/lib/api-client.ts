@@ -45,19 +45,39 @@ function isJsonContentType(contentType: string | null) {
   );
 }
 
+function isBodyInit(body: unknown): body is BodyInit {
+  if (typeof body === "string") {
+    return true;
+  }
+
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    return true;
+  }
+
+  if (
+    typeof URLSearchParams !== "undefined" &&
+    body instanceof URLSearchParams
+  ) {
+    return true;
+  }
+
+  if (typeof Blob !== "undefined" && body instanceof Blob) {
+    return true;
+  }
+
+  if (typeof ReadableStream !== "undefined" && body instanceof ReadableStream) {
+    return true;
+  }
+
+  return ArrayBuffer.isView(body) || body instanceof ArrayBuffer;
+}
+
 function buildBody(body: ApiClientOptions["body"]) {
   if (body == null) {
     return undefined;
   }
 
-  if (
-    body instanceof FormData ||
-    body instanceof URLSearchParams ||
-    body instanceof Blob ||
-    ArrayBuffer.isView(body) ||
-    body instanceof ArrayBuffer ||
-    typeof body === "string"
-  ) {
+  if (isBodyInit(body)) {
     return body;
   }
 
@@ -70,15 +90,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(options.headers);
 
-  if (
-    options.body != null &&
-    !(options.body instanceof FormData) &&
-    !(options.body instanceof URLSearchParams) &&
-    !(options.body instanceof Blob) &&
-    !(ArrayBuffer.isView(options.body)) &&
-    !(options.body instanceof ArrayBuffer) &&
-    typeof options.body !== "string"
-  ) {
+  if (options.body != null && !isBodyInit(options.body)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -86,8 +98,12 @@ export async function apiRequest<T>(
     headers.set("Authorization", `Bearer ${options.token}`);
   }
 
-  if (options.responseType !== "empty" && !headers.has("Accept")) {
-    headers.set("Accept", "application/json");
+  if (!headers.has("Accept")) {
+    if (options.responseType === "text") {
+      headers.set("Accept", "text/plain");
+    } else if (options.responseType !== "empty") {
+      headers.set("Accept", "application/json");
+    }
   }
 
   const response = await fetch(new URL(path, getApiBaseUrl()).toString(), {
