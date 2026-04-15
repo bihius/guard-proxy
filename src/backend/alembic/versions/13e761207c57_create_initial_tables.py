@@ -138,6 +138,7 @@ def downgrade() -> None:
 
     # PostgreSQL creates enum types as separate DB objects — drop them explicitly.
     # SQLite has no native enum type, so this block must be skipped there.
-    if op.get_bind().dialect.name == "postgresql":
+    context = op.get_context()
+    if context.dialect.name == "postgresql":
         op.execute("DROP TYPE IF EXISTS userrole")
         op.execute("DROP TYPE IF EXISTS ruleaction")

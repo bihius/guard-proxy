@@ -15,10 +15,10 @@ from app.services import auth_service
 router = APIRouter(prefix="/auth", tags=["auth"])
 _REFRESH_COOKIE_PATH = "/auth"
 
-# Stały dummy hash — bcrypt musi wykonać się zawsze, nawet gdy user nie istnieje.
-# Bez tego atakujący mógłby odróżnić "zły email" od "złe hasło" po czasie odpowiedzi
-# (timing attack): brak usera → brak bcrypt → odpowiedź szybciej.
-_DUMMY_HASH: str = auth_service.hash_password("dummy-guard-proxy")
+# Precomputed bcrypt hash used for timing-attack mitigation when user is missing.
+# Keep this as a constant to avoid bcrypt work during module import/startup.
+# Value is for plain text: "dummy-guard-proxy".
+_DUMMY_HASH: str = "$2b$12$l.ip0p2T3WgWHyi7eDv2XOHxntTAt0e9J4Eycj14Qq5Du6QlVq/Du"
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
