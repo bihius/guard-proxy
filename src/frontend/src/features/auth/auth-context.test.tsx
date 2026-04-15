@@ -394,4 +394,26 @@ describe("AuthProvider", () => {
 
     expect(mockedGetCurrentUser).not.toHaveBeenCalled();
   });
+
+  it("treats non-Error abort-shaped rejections as aborts", async () => {
+    mockedRefreshSession.mockRejectedValueOnce(new Error("No session"));
+    mockedLogin.mockRejectedValueOnce({ name: "AbortError" });
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitForReady();
+
+    fireEvent.click(screen.getByRole("button", { name: "sign in" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("loading")).toHaveTextContent("ready");
+    });
+
+    expect(screen.getByTestId("error")).toHaveTextContent("no-error");
+    expect(screen.getByTestId("auth")).toHaveTextContent("anonymous");
+  });
 });
