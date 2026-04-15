@@ -99,13 +99,13 @@ def test_policy_create_valid() -> None:
 
 def test_policy_create_paranoia_level_zero() -> None:
     """Paranoia level 0 is outside the allowed 1-4 range."""
-    with pytest.raises(ValidationError, match="between 1 and 4"):
+    with pytest.raises(ValidationError):
         PolicyCreate(name="x", paranoia_level=0)
 
 
 def test_policy_create_paranoia_level_five() -> None:
     """Paranoia level 5 is outside the allowed 1-4 range."""
-    with pytest.raises(ValidationError, match="between 1 and 4"):
+    with pytest.raises(ValidationError):
         PolicyCreate(name="x", paranoia_level=5)
 
 
@@ -144,13 +144,30 @@ def test_policy_update_paranoia_none_valid() -> None:
 
 
 def test_policy_update_paranoia_invalid() -> None:
-    with pytest.raises(ValidationError, match="between 1 and 4"):
+    with pytest.raises(ValidationError):
         PolicyUpdate(paranoia_level=99)
 
 
 def test_policy_update_anomaly_zero_invalid() -> None:
     with pytest.raises(ValidationError, match="at least 1"):
         PolicyUpdate(anomaly_threshold=0)
+
+
+def test_policy_create_schema_exposes_paranoia_level_bounds() -> None:
+    schema = PolicyCreate.model_json_schema()
+    paranoia_schema = schema["properties"]["paranoia_level"]
+
+    assert paranoia_schema["minimum"] == 1
+    assert paranoia_schema["maximum"] == 4
+
+
+def test_policy_update_schema_exposes_paranoia_level_bounds() -> None:
+    schema = PolicyUpdate.model_json_schema()
+    paranoia_schema = schema["properties"]["paranoia_level"]
+    int_schema = next(item for item in paranoia_schema["anyOf"] if item.get("type") == "integer")
+
+    assert int_schema["minimum"] == 1
+    assert int_schema["maximum"] == 4
 
 
 def test_policy_update_name_null_is_allowed_by_schema() -> None:

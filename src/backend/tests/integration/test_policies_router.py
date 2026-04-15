@@ -98,6 +98,22 @@ def test_create_policy_duplicate_name_returns_409(
     assert resp.json()["detail"] == "Policy name already exists"
 
 
+def test_create_policy_invalid_paranoia_level_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Out-of-range paranoia_level should be rejected at router validation."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Invalid paranoia",
+            "paranoia_level": 5,
+            "anomaly_threshold": 5,
+        },
+    )
+    assert resp.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # GET /policies
 # ---------------------------------------------------------------------------
@@ -277,6 +293,21 @@ def test_patch_policy_paranoia_level_null_returns_422(
     )
     assert resp.status_code == 422
     assert resp.json()["detail"] == "Field 'paranoia_level' cannot be null"
+
+
+def test_patch_policy_invalid_paranoia_level_returns_422(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Out-of-range paranoia_level should be rejected before service update."""
+    created = _create_policy(client, admin_token, name="Invalid Patch Paranoia")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json={"paranoia_level": 0},
+    )
+    assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
