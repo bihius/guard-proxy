@@ -5,9 +5,11 @@
 
 ## Testing
 
+- [ ] `cd src/backend && uv sync --frozen --extra dev`
 - [ ] `cd src/backend && uv run pytest --cov=app`
 - [ ] `cd src/backend && uv run mypy app/`
 - [ ] `cd src/backend && uv run ruff check app/`
+- [ ] `cd src/frontend && pnpm install --frozen-lockfile`
 - [ ] `cd src/frontend && pnpm run type-check`
 - [ ] `cd src/frontend && pnpm run lint`
 
