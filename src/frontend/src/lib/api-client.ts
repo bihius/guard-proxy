@@ -45,31 +45,21 @@ function isJsonContentType(contentType: string | null) {
   );
 }
 
-function isBodyInit(body: unknown): body is BodyInit {
-  if (typeof body === "string") {
-    return true;
-  }
+function isReadableStreamBody(value: unknown): value is ReadableStream<unknown> {
+  return typeof ReadableStream !== "undefined" && value instanceof ReadableStream;
+}
 
-  if (typeof FormData !== "undefined" && body instanceof FormData) {
-    return true;
-  }
-
-  if (
-    typeof URLSearchParams !== "undefined" &&
-    body instanceof URLSearchParams
-  ) {
-    return true;
-  }
-
-  if (typeof Blob !== "undefined" && body instanceof Blob) {
-    return true;
-  }
-
-  if (typeof ReadableStream !== "undefined" && body instanceof ReadableStream) {
-    return true;
-  }
-
-  return ArrayBuffer.isView(body) || body instanceof ArrayBuffer;
+function isBodyInit(value: unknown): value is BodyInit {
+  return (
+    (typeof FormData !== "undefined" && value instanceof FormData) ||
+    (typeof URLSearchParams !== "undefined" &&
+      value instanceof URLSearchParams) ||
+    (typeof Blob !== "undefined" && value instanceof Blob) ||
+    ArrayBuffer.isView(value) ||
+    value instanceof ArrayBuffer ||
+    typeof value === "string" ||
+    isReadableStreamBody(value)
+  );
 }
 
 function buildBody(body: ApiClientOptions["body"]) {
