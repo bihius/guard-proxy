@@ -119,7 +119,7 @@ const { hasRole } = useAuth();
 
 ## 4. Zadania
 
-### 4.1 Mateusz Kw — Dashboard (GitHub #28)
+### 4.1 Mateusz Kw — Dashboard ([GitHub #28](https://github.com/bihius/guard-proxy/issues/28))
 
 **Cel:** Zamienić placeholderowe dane na dashboardzie na prawdziwe dane z API.
 
@@ -178,9 +178,11 @@ const { hasRole } = useAuth();
 
 ---
 
-### 4.2 Dawid L— Virtual Hosts (GitHub #29)
+### 4.2 Dawid L— Virtual Hosts ([GitHub #29](https://github.com/bihius/guard-proxy/issues/29))
 
 **Cel:** Zbudować widok listy vhostów z filtrowaniem po domenie i widok szczegółu.
+
+> Uwaga na nowszy kontekst: `#127` ([M5-02](https://github.com/bihius/guard-proxy/issues/127)) planuje zmianę API z płaskiej tablicy na paginację `{ items, total, page, per_page }`. Ten task zakłada obecne API (tablica) i filtrowanie client-side.
 
 #### Co zrobić
 
@@ -240,11 +242,13 @@ const { hasRole } = useAuth();
 
 ---
 
-### 4.2b Dawid L — Docker Compose dev (GitHub #53)
+### 4.2b Dawid L — Docker Compose dev ([GitHub #53](https://github.com/bihius/guard-proxy/issues/53), kontekst M1: [#107](https://github.com/bihius/guard-proxy/issues/107), healthchecks: [#129](https://github.com/bihius/guard-proxy/issues/129))
 
 **Cel:** Przygotować `docker-compose.yml`, który stawia cały stack developerski jedną komendą.
 
-> To zadanie realizujesz **po** zakończeniu VHosts (#29) lub równolegle, jeśli chcesz zacząć od niego.
+> To zadanie realizujesz **po** zakończeniu VHosts ([#29](https://github.com/bihius/guard-proxy/issues/29)) lub równolegle, jeśli chcesz zacząć od niego.
+>
+> Uwaga: `#53` dotyczy panelowego compose (backend + frontend + postgres). Dla pełnego stacka (HAProxy + Coraza) patrz też `#107`. Dla zdrowia serwisów i `depends_on: service_healthy` patrz `#129`.
 
 #### Co zrobić
 
@@ -294,9 +298,11 @@ docker compose down
 
 ---
 
-### 4.3 Mateusz Ka — Policies (GitHub #30)
+### 4.3 Mateusz Ka — Policies ([GitHub #30](https://github.com/bihius/guard-proxy/issues/30))
 
 **Cel:** Zbudować widok listy polityk WAF i widok szczegółu z rule overrides.
+
+> Uwaga na nowszy kontekst: `#127` ([M5-02](https://github.com/bihius/guard-proxy/issues/127)) planuje paginację i wyszukiwanie server-side dla `/policies`. Ten task opisuje aktualny kontrakt API (tablica + client-side).
 
 #### Co zrobić
 
@@ -375,11 +381,13 @@ docker compose down
 
 ---
 
-### 4.3b Mateusz Ka — Rule Overrides frontend (część GitHub #66)
+### 4.3b Mateusz Ka — Rule Overrides frontend (frontend scope: [GitHub #125](https://github.com/bihius/guard-proxy/issues/125), backend API: [#66](https://github.com/bihius/guard-proxy/issues/66))
 
 **Cel:** Dodać możliwość zarządzania rule overrides z poziomu widoku szczegółu polityki.
 
-> To zadanie realizujesz **po** zakończeniu Policies (#30) — bazujesz na `PolicyDetailPage`, którą już zbudujesz.
+> To zadanie realizujesz **po** zakończeniu Policies ([#30](https://github.com/bihius/guard-proxy/issues/30)) — bazujesz na `PolicyDetailPage`, którą już zbudujesz.
+>
+> Uwaga: nowszy ticket frontendowy to `#125` (docelowo trzy sekcje: Overrides, Exclusions, Custom rules). Ten podpunkt jest MVP-owym wycinkiem tego zakresu; backendowa zależność pozostaje w `#66`.
 
 #### Kontekst
 
