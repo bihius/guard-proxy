@@ -35,6 +35,8 @@ develop-eggs/
 eggs/
 .eggs/
 lib/
+!src/frontend/src/lib/
+!src/frontend/src/lib/**
 lib64/
 parts/
 sdist/
