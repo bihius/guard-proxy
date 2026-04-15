@@ -1,10 +1,13 @@
-"""Schematy Pydantic — walidacja requestów i serializacja odpowiedzi API."""
+"""Pydantic schemas used for request validation and API serialization."""
 
-from app.schemas.auth import AccessTokenResponse, LoginRequest, TokenData, LoginRequest
-from app.schemas.log import LogListResponse, LogResponse
-
+from app.schemas.auth import AccessTokenResponse, LoginRequest, TokenData
+from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
 from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, PolicyUpdate
-from app.schemas.rule_override import RuleOverrideCreate, RuleOverrideResponse
+from app.schemas.rule_override import (
+    RuleOverrideCreate,
+    RuleOverrideResponse,
+    RuleOverrideUpdate,
+)
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.schemas.vhost import VHostCreate, VHostDetail, VHostResponse, VHostUpdate
 
@@ -14,6 +17,7 @@ __all__ = [
     "AccessTokenResponse",
     "TokenData",
     # Logs
+    "LogIngestRequest",
     "LogResponse",
     "LogListResponse",
     # Users
@@ -30,7 +34,8 @@ __all__ = [
     "VHostUpdate",
     "VHostResponse",
     "VHostDetail",
-    # Rule Overrides
+    # Rule overrides
     "RuleOverrideCreate",
     "RuleOverrideResponse",
+    "RuleOverrideUpdate",
 ]

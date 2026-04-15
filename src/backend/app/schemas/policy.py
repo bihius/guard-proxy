@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.rule_override import RuleOverrideResponse
 
@@ -12,16 +12,8 @@ class PolicyCreate(BaseModel):
 
     name: str
     description: str | None = None
-    paranoia_level: int = 1
+    paranoia_level: int = Field(default=1, ge=1, le=4)
     anomaly_threshold: int = 5
-
-    @field_validator("paranoia_level")
-    @classmethod
-    def paranoia_level_range(cls, v: int) -> int:
-        """Paranoia level musi być między 1 a 4 (standard OWASP CRS)."""
-        if v < 1 or v > 4:
-            raise ValueError("Paranoia level must be between 1 and 4")
-        return v
 
     @field_validator("anomaly_threshold")
     @classmethod
@@ -40,16 +32,9 @@ class PolicyUpdate(BaseModel):
 
     name: str | None = None
     description: str | None = None
-    paranoia_level: int | None = None
+    paranoia_level: int | None = Field(default=None, ge=1, le=4)
     anomaly_threshold: int | None = None
     is_active: bool | None = None
-
-    @field_validator("paranoia_level")
-    @classmethod
-    def paranoia_level_range(cls, v: int | None) -> int | None:
-        if v is not None and (v < 1 or v > 4):
-            raise ValueError("Paranoia level must be between 1 and 4")
-        return v
 
     @field_validator("anomaly_threshold")
     @classmethod
