@@ -11,6 +11,10 @@ The script is idempotent: if any admin user already exists in the database
 (regardless of email), it exits without making any changes.
 
 The password must be at least 12 characters long.
+
+Required environment variables (directly or through `.env`):
+- JWT_SECRET_KEY
+- LOG_INGEST_SHARED_SECRET
 """
 
 import argparse
@@ -23,6 +27,17 @@ from dotenv import load_dotenv
 # w przeciwnym razie os.getenv() nie widzi zmiennych z pliku .env,
 # a import app.config crashuje jeśli JWT_SECRET_KEY nie jest w środowisku.
 load_dotenv()
+
+_REQUIRED_ENV_VARS = ("JWT_SECRET_KEY", "LOG_INGEST_SHARED_SECRET")
+_missing_env_vars = [name for name in _REQUIRED_ENV_VARS if not os.getenv(name)]
+if _missing_env_vars:
+    print(
+        "Error: missing required environment variable(s): "
+        f"{', '.join(_missing_env_vars)}. "
+        "Set them in environment or .env before running seed_admin.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 # Dodajemy katalog nadrzędny (src/backend/) do PYTHONPATH,
 # żeby importy "app.*" działały gdy uruchamiamy skrypt bezpośrednio.

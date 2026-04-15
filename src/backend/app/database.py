@@ -1,5 +1,5 @@
 import sqlite3
-from collections.abc import Generator
+from collections.abc import Iterator
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -38,7 +38,7 @@ class Base(DeclarativeBase):
     pass
 
 
-def get_db() -> Generator[Session]:
+def get_db() -> Iterator[Session]:
     """Dependency that provides a database session."""
     db = SessionLocal()
     try:

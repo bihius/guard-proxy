@@ -29,8 +29,8 @@ def upgrade() -> None:
     op.drop_index(op.f("ix_logs_logged_at"), table_name="logs")
     op.drop_table("logs")
 
-    bind = op.get_bind()
-    if bind.dialect.name == "postgresql":
+    context = op.get_context()
+    if context.dialect.name == "postgresql":
         op.execute("DROP TYPE IF EXISTS logseverity")
 
     op.create_table(
@@ -85,8 +85,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_logs_action"), table_name="logs")
     op.drop_table("logs")
 
-    bind = op.get_bind()
-    if bind.dialect.name == "postgresql":
+    context = op.get_context()
+    if context.dialect.name == "postgresql":
         op.execute("DROP TYPE IF EXISTS logaction")
         op.execute("DROP TYPE IF EXISTS logseverity")
 

@@ -70,7 +70,7 @@ class Policy(Base):
     # "RuleOverride" — nazwa klasy (string żeby uniknąć circular imports)
     # back_populates — po drugiej stronie relacji jest pole 'policy'
     # cascade="all, delete-orphan" — usuń rule_overrides gdy usuwasz policy
-    rule_overrides: Mapped[list[RuleOverride]] = relationship(  # noqa: F821
+    rule_overrides: Mapped[list[RuleOverride]] = relationship(
         "RuleOverride",
         back_populates="policy",
         cascade="all, delete-orphan",
@@ -78,7 +78,7 @@ class Policy(Base):
 
     # Jeden policy może być przypisany do wielu vhostów
     # back_populates="policy" odpowiada polu 'policy' w modelu VHost
-    vhosts: Mapped[list[VHost]] = relationship(  # noqa: F821
+    vhosts: Mapped[list[VHost]] = relationship(
         "VHost",
         back_populates="policy",
     )

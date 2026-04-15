@@ -178,7 +178,7 @@ const { hasRole } = useAuth();
 
 ---
 
-### 4.2 Dawid L— Virtual Hosts ([GitHub #29](https://github.com/bihius/guard-proxy/issues/29))
+### 4.2 Dawid L — Virtual Hosts ([GitHub #29](https://github.com/bihius/guard-proxy/issues/29))
 
 **Cel:** Zbudować widok listy vhostów z filtrowaniem po domenie i widok szczegółu.
 

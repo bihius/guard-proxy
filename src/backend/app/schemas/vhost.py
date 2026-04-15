@@ -107,7 +107,7 @@ class VHostDetail(VHostResponse):
     """Response body dla GET /vhosts/{id} — Z zagnieżdżoną polityką.
 
     Dziedziczy po VHostResponse i dodaje pełny obiekt polityki.
-    Zamiast samego policy_id (int), zwracamy cały PolicyResponse.
+    Oprócz policy_id (int) zwracamy też cały PolicyResponse.
     """
 
     policy: PolicyResponse | None = None
