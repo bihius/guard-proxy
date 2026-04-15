@@ -1,14 +1,15 @@
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 
-export type ApiResponseType = "json" | "empty";
+export type ApiResponseType = "json" | "text" | "empty";
 
 export type ApiClientOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
-  body?: unknown;
+  body?: BodyInit | Record<string, unknown> | null;
   token?: string | null;
   headers?: HeadersInit;
   credentials?: RequestCredentials;
   responseType?: ApiResponseType;
+  signal?: AbortSignal;
 };
 
 export class ApiError extends Error {
@@ -44,13 +45,40 @@ function isJsonContentType(contentType: string | null) {
   );
 }
 
+function buildBody(body: ApiClientOptions["body"]) {
+  if (body == null) {
+    return undefined;
+  }
+
+  if (
+    body instanceof FormData ||
+    body instanceof URLSearchParams ||
+    body instanceof Blob ||
+    ArrayBuffer.isView(body) ||
+    body instanceof ArrayBuffer ||
+    typeof body === "string"
+  ) {
+    return body;
+  }
+
+  return JSON.stringify(body);
+}
+
 export async function apiRequest<T>(
   path: string,
   options: ApiClientOptions = {}
 ): Promise<T> {
   const headers = new Headers(options.headers);
 
-  if (options.body !== undefined) {
+  if (
+    options.body != null &&
+    !(options.body instanceof FormData) &&
+    !(options.body instanceof URLSearchParams) &&
+    !(options.body instanceof Blob) &&
+    !(ArrayBuffer.isView(options.body)) &&
+    !(options.body instanceof ArrayBuffer) &&
+    typeof options.body !== "string"
+  ) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -58,11 +86,16 @@ export async function apiRequest<T>(
     headers.set("Authorization", `Bearer ${options.token}`);
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  if (options.responseType !== "empty" && !headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+
+  const response = await fetch(new URL(path, getApiBaseUrl()).toString(), {
     method: options.method ?? "GET",
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: buildBody(options.body),
     credentials: options.credentials,
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -85,6 +118,10 @@ export async function apiRequest<T>(
 
   if (options.responseType === "empty" || response.status === 204) {
     return undefined as T;
+  }
+
+  if (options.responseType === "text") {
+    return (await response.text()) as T;
   }
 
   const contentType = response.headers.get("content-type");
