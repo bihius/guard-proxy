@@ -15,7 +15,12 @@ import { AuthContext } from "./auth-context.shared";
 import type { AuthContextValue } from "./auth-context.types";
 
 function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
