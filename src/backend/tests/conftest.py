@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session, sessionmaker
 # Na potrzeby testów zawsze wymuszamy deterministyczną, testową wartość klucza,
 # niezależnie od tego, co jest ustawione w środowisku (hermetyczność testów).
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-onlyx"
+os.environ["LOG_INGEST_SHARED_SECRET"] = "test-log-ingest-secret"
 os.environ["DEBUG"] = "false"
 
 from app.database import Base, get_db  # noqa: E402
@@ -198,3 +199,9 @@ def viewer_token(viewer_user: User) -> dict[str, str]:
 ADMIN_PASSWORD = _ADMIN_PASSWORD
 VIEWER_PASSWORD = _VIEWER_PASSWORD
 INACTIVE_PASSWORD = _INACTIVE_PASSWORD
+
+
+@pytest.fixture()
+def log_ingest_headers() -> dict[str, str]:
+    """Header used by the log producer ingest endpoint."""
+    return {"X-Guard-Proxy-Ingest-Secret": os.environ["LOG_INGEST_SHARED_SECRET"]}

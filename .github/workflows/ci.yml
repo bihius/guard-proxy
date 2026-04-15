@@ -65,6 +65,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
+
           cache: pnpm
           cache-dependency-path: src/frontend/pnpm-lock.yaml
 
