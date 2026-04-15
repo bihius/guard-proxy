@@ -51,9 +51,10 @@ function isReadableStreamBody(value: unknown): value is ReadableStream<unknown> 
 
 function isBodyInit(value: unknown): value is BodyInit {
   return (
-    value instanceof FormData ||
-    value instanceof URLSearchParams ||
-    value instanceof Blob ||
+    (typeof FormData !== "undefined" && value instanceof FormData) ||
+    (typeof URLSearchParams !== "undefined" &&
+      value instanceof URLSearchParams) ||
+    (typeof Blob !== "undefined" && value instanceof Blob) ||
     ArrayBuffer.isView(value) ||
     value instanceof ArrayBuffer ||
     typeof value === "string" ||
