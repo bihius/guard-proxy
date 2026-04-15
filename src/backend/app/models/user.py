@@ -54,8 +54,9 @@ class User(Base):
         default=True,  # nowy user jest aktywny od razu
     )
 
-    # Timestamps — automatycznie ustawiane przez bazę danych (nie przez Python)
-    # server_default=func.now() → SQLite: CURRENT_TIMESTAMP, PostgreSQL: now()
+    # Timestamps:
+    # - created_at is set by database default (server_default=func.now())
+    # - updated_at uses SQLAlchemy onupdate expression on each UPDATE statement
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

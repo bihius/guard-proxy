@@ -1,1 +1,18 @@
-Generic single-database configuration.
+Alembic migration guide for Guard Proxy backend.
+
+Common commands (run from `src/backend/`):
+- `uv run alembic upgrade head` — apply all pending migrations
+- `uv run alembic downgrade -1` — roll back one migration
+- `uv run alembic revision --autogenerate -m "message"` — generate a new migration
+- `uv run alembic current` — show current revision
+- `uv run alembic history --verbose` — show full migration history
+
+Environment requirements:
+- `DATABASE_URL` controls the migration target database.
+- `JWT_SECRET_KEY` and `LOG_INGEST_SHARED_SECRET` must be set because application
+  settings are imported by Alembic env during migration startup.
+
+Offline SQL mode:
+- `uv run alembic upgrade head --sql` emits SQL without opening a DB connection.
+- Migrations must use dialect checks via `op.get_context().dialect.name` so they
+  work in both online and offline mode.

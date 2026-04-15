@@ -78,3 +78,6 @@ jobs:
 
       - name: Run frontend lint
         run: pnpm run lint
+
+      - name: Run frontend tests
+        run: pnpm run test

@@ -11,6 +11,7 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "pyjwt>=2.10.0",
     "passlib[bcrypt]>=1.7.4",
+    # Keep bcrypt <4 for stable passlib 1.7 backend compatibility.
     "bcrypt>=3.2.0,<4.0.0",
     "python-multipart>=0.0.12",
     "pydantic[email]>=2.12.5",
@@ -25,6 +26,13 @@ dev = [
     "ruff>=0.8.0",
     "types-passlib>=1.7.7.20260211",
 ]
+
+[build-system]
+requires = ["hatchling>=1.26.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 
 [tool.ruff]
 target-version = "py313"
