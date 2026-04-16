@@ -1,4 +1,4 @@
-"""Schematy Pydantic dla użytkowników."""
+"""Pydantic schemas for users."""
 
 from datetime import datetime
 
@@ -8,37 +8,37 @@ from app.models.user import UserRole
 
 
 class UserCreate(BaseModel):
-    """Request body dla POST /users.
+    """Request body for POST /users.
 
-    Przyjmuje plaintext password — serwis zahashuje go przez bcrypt.
+    Accepts plaintext password — service hashes it with bcrypt.
     """
 
     email: EmailStr
     password: str
     full_name: str
-    role: UserRole = UserRole.viewer  # domyślnie viewer, nie admin
+    role: UserRole = UserRole.viewer  # default is viewer, not admin
 
     @field_validator("password")
     @classmethod
     def password_min_length(cls, v: str) -> str:
-        """Hasło musi mieć co najmniej 12 znaków."""
+        """Password must be at least 12 characters."""
         if len(v) < 12:
             raise ValueError("Password must be at least 12 characters")
         return v
 
 
 class UserUpdate(BaseModel):
-    """Request body dla PATCH /users/{id}.
+    """Request body for PATCH /users/{id}.
 
-    Wszystkie pola opcjonalne — PATCH aktualizuje tylko to co podasz.
-    Np. możesz wysłać tylko {"full_name": "Jan Kowalski"} żeby zmienić tylko imię.
+    All fields are optional — PATCH updates only provided fields.
+    For example, send only {"full_name": "Jan Kowalski"} to change just the name.
     """
 
     email: EmailStr | None = None
     full_name: str | None = None
     role: UserRole | None = None
     is_active: bool | None = None
-    password: str | None = None  # opcjonalna zmiana hasła
+    password: str | None = None  # optional password change
 
     @field_validator("password")
     @classmethod
@@ -49,16 +49,16 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """Response body dla GET /users i GET /users/{id}.
+    """Response body for GET /users and GET /users/{id}.
 
-    CELOWO nie ma tu 'password' ani 'hashed_password'.
-    Nigdy nie zwracamy hasła przez API.
+    Deliberately does not include 'password' or 'hashed_password'.
+    Password must never be returned by API.
     """
 
     model_config = ConfigDict(from_attributes=True)
-    # from_attributes=True → Pydantic umie czytać atrybuty z obiektu SQLAlchemy
-    # Bez tego: UserResponse(**user.__dict__) → działa
-    # Z tym:    UserResponse.model_validate(user) → działa (czystsze)
+    # from_attributes=True -> Pydantic can read attributes from SQLAlchemy object
+    # Without this: UserResponse(**user.__dict__) -> works
+    # With this:    UserResponse.model_validate(user) -> works (cleaner)
 
     id: int
     email: str

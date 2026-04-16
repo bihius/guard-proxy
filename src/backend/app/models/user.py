@@ -1,4 +1,4 @@
-"""User model — konta użytkowników panelu admina."""
+"""User model for admin panel user accounts."""
 
 import enum
 from datetime import datetime
@@ -10,10 +10,10 @@ from app.database import Base
 
 
 class UserRole(enum.StrEnum):
-    """Role użytkownika.
+    """User roles.
 
-    Dziedziczy po str żeby JSON serializacja działała automatycznie:
-    user.role → "admin" (nie UserRole.admin)
+    Inherits from ``str`` so JSON serialization works automatically:
+    user.role -> "admin" (not UserRole.admin)
     """
 
     admin = "admin"
@@ -21,27 +21,27 @@ class UserRole(enum.StrEnum):
 
 
 class User(Base):
-    """Tabela users — konta użytkowników panelu admina.
+    """users table storing admin panel user accounts.
 
-    admin  — pełny dostęp (CRUD na wszystkich zasobach)
-    viewer — tylko odczyt (GET endpoints)
+    admin  — full access (CRUD on all resources)
+    viewer — read-only access (GET endpoints)
     """
 
     __tablename__ = "users"
 
-    # Klucz główny — auto-increment integer
+    # Primary key — auto-increment integer
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # Dane logowania
+    # Login credentials
     email: Mapped[str] = mapped_column(
         String(255),
-        unique=True,  # nie może być dwóch userów z tym samym emailem
-        index=True,  # index = szybkie wyszukiwanie po emailu (używamy przy logowaniu)
+        unique=True,  # two users cannot share the same email
+        index=True,  # index = fast email lookup (used during login)
         nullable=False,
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    # Dane użytkownika
+    # Profile data
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole),
@@ -51,7 +51,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
-        default=True,  # nowy user jest aktywny od razu
+        default=True,  # new users are active by default
     )
 
     # Timestamps:
@@ -64,7 +64,7 @@ class User(Base):
         DateTime,
         nullable=False,
         server_default=func.now(),
-        onupdate=func.now(),  # automatyczna aktualizacja przy każdym UPDATE
+        onupdate=func.now(),  # automatically updated on every UPDATE
     )
 
     def __repr__(self) -> str:
