@@ -36,7 +36,7 @@ class VHost(Base):
     )
 
     # Backend URL — where HAProxy forwards traffic
-    # np. "http://localhost:3000" lub "http://192.168.1.10:8080"
+    # e.g. "http://localhost:3000" or "http://192.168.1.10:8080"
     backend_url: Mapped[str] = mapped_column(String(512), nullable=False)
 
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
