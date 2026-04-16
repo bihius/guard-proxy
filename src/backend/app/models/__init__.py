@@ -1,8 +1,8 @@
-"""Modele SQLAlchemy — importowane tutaj żeby Alembic autogenerate je widział.
+"""SQLAlchemy models imported here so Alembic autogenerate can detect them.
 
-Alembic w env.py robi: from app.models import *
-Żeby autogenerate działało, KAŻDY model musi być tutaj zaimportowany.
-Bez tego Alembic wygeneruje pustą migrację (nie zobaczy tabel).
+Alembic's env.py does: ``from app.models import *``.
+For autogenerate to work, EVERY model must be imported here.
+Without this, Alembic generates an empty migration (it does not see tables).
 """
 
 from app.models.log import Log, LogAction, LogSeverity

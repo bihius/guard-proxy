@@ -1,4 +1,4 @@
-"""Schematy Pydantic dla polityk WAF."""
+"""Pydantic schemas for WAF policies."""
 
 from datetime import datetime
 
@@ -8,7 +8,7 @@ from app.schemas.rule_override import RuleOverrideResponse
 
 
 class PolicyCreate(BaseModel):
-    """Request body dla POST /policies."""
+    """Request body for POST /policies."""
 
     name: str
     description: str | None = None
@@ -18,16 +18,16 @@ class PolicyCreate(BaseModel):
     @field_validator("anomaly_threshold")
     @classmethod
     def anomaly_threshold_positive(cls, v: int) -> int:
-        """Próg anomaly score musi być dodatni."""
+        """Anomaly score threshold must be positive."""
         if v < 1:
             raise ValueError("Anomaly threshold must be at least 1")
         return v
 
 
 class PolicyUpdate(BaseModel):
-    """Request body dla PATCH /policies/{id}.
+    """Request body for PATCH /policies/{id}.
 
-    Wszystkie pola opcjonalne — PATCH aktualizuje tylko to co podasz.
+    All fields are optional — PATCH updates only provided fields.
     """
 
     name: str | None = None
@@ -45,7 +45,7 @@ class PolicyUpdate(BaseModel):
 
 
 class PolicyResponse(BaseModel):
-    """Response body dla GET /policies (lista) — BEZ rule_overrides."""
+    """Response body for GET /policies (list) — WITHOUT rule_overrides."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -61,10 +61,10 @@ class PolicyResponse(BaseModel):
 
 
 class PolicyDetail(PolicyResponse):
-    """Response body dla GET /policies/{id} — Z zagnieżdżonymi rule_overrides.
+    """Response body for GET /policies/{id} — WITH nested rule_overrides.
 
-    Dziedziczy po PolicyResponse i dodaje listę nadpisań reguł.
-    Używane tylko w GET /{id} bo ładowanie relacji dla listy byłoby wolne.
+    Inherits from PolicyResponse and adds a list of rule overrides.
+    Used only in GET /{id}, because loading relations for list would be slow.
     """
 
     rule_overrides: list[RuleOverrideResponse] = []

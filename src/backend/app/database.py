@@ -8,7 +8,7 @@ from app.config import get_database_settings
 
 database_settings = get_database_settings()
 
-# Dla SQLite potrzebujemy connect_args, dla PostgreSQL nie
+# SQLite needs connect_args; PostgreSQL does not.
 connect_args = {}
 if database_settings.database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
@@ -19,9 +19,9 @@ engine = create_engine(
     echo=database_settings.debug,
 )
 
-# SQLite domyślnie ignoruje klucze obce — PRAGMA włącza ich sprawdzanie.
-# Musi być wysłane przy każdym nowym połączeniu (nie jest trwałe).
-# PostgreSQL tego nie potrzebuje — enforcuje FK natywnie.
+# SQLite ignores foreign keys by default — PRAGMA enables enforcement.
+# It must be sent on every new connection (it is not persistent).
+# PostgreSQL does not need this — it enforces FKs natively.
 if database_settings.database_url.startswith("sqlite"):
 
     @event.listens_for(engine, "connect")
