@@ -12,7 +12,7 @@ Tests are a first-class part of this repo. Review them with the same rigor as pr
 - **Descriptive names.** `test_create_vhost_returns_409_on_duplicate_hostname` beats `test_vhost_duplicate`.
 - **Arrange / Act / Assert.** Structure should be obvious from a glance. Blank lines between the three phases are fine.
 - **No shared mutable state between tests.** Use fixtures; never rely on test execution order.
-- **Deterministic.** No real network, no real time (`freezegun` / `vi.useFakeTimers`), no randomness without a seed.
+- **Deterministic.** No real network, no real time (freeze/mock time; use fake timers such as `vi.useFakeTimers` where appropriate), no randomness without a seed.
 - **Real assertions.** `assert result` on a truthy object is weak. Assert on specific fields, status codes, shapes.
 
 ## Backend tests (`src/backend/tests/`)
