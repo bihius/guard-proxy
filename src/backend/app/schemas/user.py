@@ -31,7 +31,7 @@ class UserUpdate(BaseModel):
     """Request body for PATCH /users/{id}.
 
     All fields are optional — PATCH updates only provided fields.
-    For example, send only {"full_name": "Jan Kowalski"} to change just the name.
+    For example, send only {"full_name": "John Smith"} to change just the name.
     """
 
     email: EmailStr | None = None
