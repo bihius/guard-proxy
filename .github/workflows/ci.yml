@@ -57,6 +57,7 @@ jobs:
         run: uv run ruff check app/
 
       - name: Enforce English comments/docstrings in backend app
+        working-directory: src/backend
         run: |
           if grep -RInP --include='*.py' "[ąćęłńóśźż]" app; then
             echo "Found Polish diacritics in app/ Python files (working dir: src/backend)."
