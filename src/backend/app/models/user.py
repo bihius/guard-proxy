@@ -12,7 +12,7 @@ from app.database import Base
 class UserRole(enum.StrEnum):
     """User roles.
 
-    Inherits from ``str`` so JSON serialization works automatically:
+    Inherits from str so JSON serialization works automatically:
     user.role -> "admin" (not UserRole.admin)
     """
 

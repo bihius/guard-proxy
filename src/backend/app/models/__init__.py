@@ -1,6 +1,6 @@
 """SQLAlchemy models imported here so Alembic autogenerate can detect them.
 
-Alembic's env.py does: ``from app.models import *``.
+Alembic's env.py does: from app.models import *.
 For autogenerate to work, EVERY model must be imported here.
 Without this, Alembic generates an empty migration (it does not see tables).
 """
