@@ -59,7 +59,7 @@ jobs:
       - name: Enforce English comments/docstrings in backend app
         working-directory: src/backend
         run: |
-          if grep -RInP --include='*.py' "[ąćęłńóśźż]" app; then
+          if grep -RInP --include='*.py' "[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]" app; then
             echo "Found Polish diacritics in app/ Python files (working dir: src/backend)."
             exit 1
           fi
