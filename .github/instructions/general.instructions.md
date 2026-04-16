@@ -6,7 +6,7 @@ applyTo: "**"
 
 You are reviewing code and proposing small changes in the **Guard Proxy** repository: a self-hosted Web Application Firewall built on HAProxy + Coraza (OWASP CRS), with a FastAPI backend and a React/TypeScript frontend. This is a master's thesis MVP, so favor simplicity and correctness over speculative features.
 
-Always read `README.md`, `README.architecture.md`, `README.commands.md`, and `README.testing.md` for context before suggesting non-trivial changes. Treat `CLAUDE.md` as the canonical AI-agent policy file (`AGENTS.md` mirrors it).
+Always read `README.md`, `README.architecture.md`, `README.commands.md`, and `README.testing.md` for context before suggesting non-trivial changes. Treat these README files as the canonical high-level project guidance unless a more specific instruction file in this directory says otherwise.
 
 ## How to review
 
@@ -37,7 +37,7 @@ When reviewing a pull request:
 
 ## Project conventions
 
-- **Language:** All code, comments, commit messages, and docstrings in English.
+- **Language:** New or modified code, comments, commit messages, and docstrings should be in English.
 - **Commits:** Conventional Commits, e.g. `feat(backend): add vhost policy endpoint`, `fix(frontend): correct login redirect`, `test(backend): cover cascade delete`.
 - **Comments:** Explain *why*, not *what*. Do not add narration comments like `// increment counter`. Flag such comments if they appear in a diff.
 - **PR descriptions:** Should link the related issue (`Closes #N` / `Fixes #N` / `Related to #N`) when one exists.

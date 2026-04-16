@@ -15,11 +15,11 @@ Each `*.instructions.md` file starts with a frontmatter `applyTo` glob. Copilot 
 ## How to update
 
 1. Keep instructions short, concrete, and actionable — Copilot has a limited context budget.
-2. Do not duplicate what lives in `CLAUDE.md` / `AGENTS.md`; point to them instead when appropriate.
+2. Do not duplicate guidance already captured in the `*.instructions.md` files in this folder; update the relevant file and point readers there instead when appropriate.
 3. When the project conventions change (e.g. we adopt a new linter, migration tool, or framework version), update the matching file here in the same PR.
 4. Prefer adding a new narrowly-scoped file over bloating `general.instructions.md`.
 
 ## Related
 
-- `CLAUDE.md` / `AGENTS.md` — canonical AI-agent policy for human-triggered agents (Claude Code, Codex, Cursor).
+- `.github/instructions/*.instructions.md` — canonical Copilot instruction files for review and chat behavior in this repo.
 - `.github/pull_request_template.md` — PR checklist aligned with the quality gates above.
