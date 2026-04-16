@@ -9,9 +9,9 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.services import auth_service
 
-# HTTPBearer czyta nagłówek "Authorization: Bearer <token>" z każdego requestu.
-# auto_error=False — nie rzucamy błędu tutaj, obsługujemy to sami niżej
-# żeby zwrócić czytelniejszy komunikat.
+# HTTPBearer reads "Authorization: Bearer <token>" from each request.
+# auto_error=False — do not raise here; we handle errors ourselves below
+# to return a clearer message.
 _bearer = HTTPBearer(auto_error=False)
 
 
@@ -19,15 +19,15 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    """Dependency: dekoduje JWT i zwraca aktualnie zalogowanego usera.
+    """Dependency: decodes JWT and returns currently authenticated user.
 
-    Używaj jako parametr endpointu:
+    Use it as an endpoint parameter:
         def my_endpoint(user: User = Depends(get_current_user)): ...
 
     Raises:
-        401 — brak tokena, token niepoprawny lub wygasły
-        401 — user nie istnieje w bazie
-        403 — konto użytkownika jest nieaktywne
+        401 — missing token, invalid token, or expired token
+        401 — user does not exist in database
+        403 — user account is inactive
     """
     if credentials is None:
         raise HTTPException(
@@ -63,13 +63,13 @@ def get_current_user(
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Dependency: wymaga roli admin.
+    """Dependency requiring admin role.
 
-    Używaj zamiast get_current_user gdy endpoint jest tylko dla adminów:
+    Use instead of get_current_user when endpoint is admin-only:
         def my_endpoint(user: User = Depends(require_admin)): ...
 
     Raises:
-        403 — zalogowany user nie jest adminem
+        403 — authenticated user is not an admin
     """
     if user.role != UserRole.admin:
         raise HTTPException(
