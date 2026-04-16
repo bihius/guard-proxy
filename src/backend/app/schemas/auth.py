@@ -1,23 +1,23 @@
-"""Schematy Pydantic dla autentykacji — logowanie i tokeny JWT."""
+"""Pydantic schemas for authentication — login and JWT tokens."""
 
 from pydantic import BaseModel, EmailStr
 
 
 class LoginRequest(BaseModel):
-    """Request body dla POST /auth/login."""
+    """Request body for POST /auth/login."""
 
-    email: EmailStr  # Pydantic automatycznie waliduje format emaila
+    email: EmailStr  # Pydantic validates email format automatically
     password: str
 
 
 class AccessTokenResponse(BaseModel):
-    """Response body dla POST /auth/login i POST /auth/refresh.
+    """Response body for POST /auth/login and POST /auth/refresh.
 
-    access_token — krótkotrwały token (30 min), wysyłany w każdym requestcie
-    token_type   — zawsze "bearer" (standard OAuth2)
+    access_token — short-lived token (30 min), sent with each request
+    token_type   — always "bearer" (OAuth2 standard)
 
-    Refresh token nie wraca już w JSON — jest ustawiany jako HttpOnly cookie
-    przez backend, więc JavaScript po stronie frontendu nie może go odczytać.
+    Refresh token is not returned in JSON — backend sets it as an HttpOnly
+    cookie, so frontend JavaScript cannot read it.
     """
 
     access_token: str
@@ -25,14 +25,14 @@ class AccessTokenResponse(BaseModel):
 
 
 class TokenData(BaseModel):
-    """Payload zakodowany wewnątrz JWT tokena.
+    """Payload encoded inside JWT token.
 
-    To NIE jest wysyłane przez API — to wewnętrzna struktura
-    którą dekodujemy z tokena w dependencies.py (get_current_user).
+    This is NOT sent by API — it is an internal structure decoded
+    from token in dependencies.py (get_current_user).
 
-    sub  — "subject" = user ID (standard JWT)
-    role — rola użytkownika (żeby nie pytać DB przy każdym requeście)
+    sub  — "subject" = user ID (JWT standard)
+    role — user role (to avoid DB query on every request)
     """
 
     sub: int  # user ID
-    role: str  # "admin" lub "viewer"
+    role: str  # "admin" or "viewer"

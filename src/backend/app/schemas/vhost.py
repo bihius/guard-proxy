@@ -1,4 +1,4 @@
-"""Schematy Pydantic dla wirtualnych hostów (vhosts)."""
+"""Pydantic schemas for virtual hosts (vhosts)."""
 
 from datetime import datetime
 
@@ -8,7 +8,7 @@ from app.schemas.policy import PolicyResponse
 
 
 class VHostCreate(BaseModel):
-    """Request body dla POST /vhosts."""
+    """Request body for POST /vhosts."""
 
     domain: str
     backend_url: str
@@ -20,13 +20,13 @@ class VHostCreate(BaseModel):
     @field_validator("domain")
     @classmethod
     def domain_no_protocol(cls, v: str) -> str:
-        """Domena nie powinna zawierać protokołu (http:// itp.).
+        """Domain should not contain protocol prefix (http:// etc.).
 
-        strip() przed sprawdzeniem — spacja na początku/końcu (np. z copy-paste)
-        nie ominie walidacji.
+        strip() before check ensures leading/trailing spaces (e.g. copy-paste)
+        do not bypass validation.
 
-        Poprawne:   "example.com", "sub.example.com"
-        Niepoprawne: "http://example.com"
+        Valid:   "example.com", "sub.example.com"
+        Invalid: "http://example.com"
         """
         v = v.strip().lower()
         if v.startswith(("http://", "https://")):
@@ -36,13 +36,13 @@ class VHostCreate(BaseModel):
     @field_validator("backend_url")
     @classmethod
     def backend_url_has_protocol(cls, v: str) -> str:
-        """Backend URL musi zawierać protokół.
+        """Backend URL must include protocol.
 
-        strip() przed sprawdzeniem — spacja na początku/końcu (np. z copy-paste)
-        nie ominie walidacji.
+        strip() before check ensures leading/trailing spaces (e.g. copy-paste)
+        do not bypass validation.
 
-        Poprawne:   "http://localhost:3000", "http://192.168.1.10:8080"
-        Niepoprawne: "localhost:3000"
+        Valid:   "http://localhost:3000", "http://192.168.1.10:8080"
+        Invalid: "localhost:3000"
         """
         v = v.strip()
         if not v.startswith(("http://", "https://")):
@@ -51,9 +51,9 @@ class VHostCreate(BaseModel):
 
 
 class VHostUpdate(BaseModel):
-    """Request body dla PATCH /vhosts/{id}.
+    """Request body for PATCH /vhosts/{id}.
 
-    Wszystkie pola opcjonalne.
+    All fields are optional.
     """
 
     domain: str | None = None
@@ -66,7 +66,7 @@ class VHostUpdate(BaseModel):
     @field_validator("domain")
     @classmethod
     def domain_no_protocol(cls, v: str | None) -> str | None:
-        """Jeśli domain jest podane w PATCH, walidujemy je tak samo jak w POST."""
+        """If domain is provided in PATCH, validate it exactly like in POST."""
         if v is None:
             return None
         v = v.strip().lower()
@@ -77,7 +77,7 @@ class VHostUpdate(BaseModel):
     @field_validator("backend_url")
     @classmethod
     def backend_url_has_protocol(cls, v: str | None) -> str | None:
-        """Jeśli backend_url jest podane w PATCH, musi nadal mieć protokół."""
+        """If backend_url is provided in PATCH, it must still include protocol."""
         if v is None:
             return None
         v = v.strip()
@@ -87,7 +87,7 @@ class VHostUpdate(BaseModel):
 
 
 class VHostResponse(BaseModel):
-    """Response body dla GET /vhosts (lista) — BEZ zagnieżdżonej polityki."""
+    """Response body for GET /vhosts (list) — WITHOUT nested policy."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,10 +104,10 @@ class VHostResponse(BaseModel):
 
 
 class VHostDetail(VHostResponse):
-    """Response body dla GET /vhosts/{id} — Z zagnieżdżoną polityką.
+    """Response body for GET /vhosts/{id} — WITH nested policy.
 
-    Dziedziczy po VHostResponse i dodaje pełny obiekt polityki.
-    Oprócz policy_id (int) zwracamy też cały PolicyResponse.
+    Inherits from VHostResponse and adds full policy object.
+    Besides policy_id (int), returns full PolicyResponse too.
     """
 
     policy: PolicyResponse | None = None

@@ -20,13 +20,13 @@ __all__ = [
 
 
 def create_access_token(user_id: int, role: str) -> str:
-    """Tworzy krótkotrwały access token JWT (domyślnie 30 minut).
+    """Creates short-lived access JWT token (default: 30 minutes).
 
-    Payload zawiera:
-    - sub  — subject = user ID (standard JWT)
-    - role — rola usera
-    - type — "access" (odróżnia od refresh tokena)
-    - exp  — czas wygaśnięcia (standard JWT)
+    Payload contains:
+    - sub  — subject = user ID (JWT standard)
+    - role — user role
+    - type — "access" (distinguishes it from refresh token)
+    - exp  — expiration timestamp (JWT standard)
     """
     expire = datetime.now(UTC) + timedelta(
         minutes=settings.jwt_access_token_expire_minutes
@@ -44,10 +44,10 @@ def create_access_token(user_id: int, role: str) -> str:
 
 
 def create_refresh_token(user_id: int) -> str:
-    """Tworzy długotrwały refresh token JWT (domyślnie 7 dni).
+    """Creates long-lived refresh JWT token (default: 7 days).
 
-    Refresh token zawiera tylko user ID — nie zawiera roli.
-    Przy odświeżaniu i tak weryfikujemy usera w bazie (może być nieaktywny).
+    Refresh token contains only user ID — it does not include role.
+    During refresh we still verify user in DB (account may be inactive).
     """
     expire = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days)
     payload = {
@@ -62,10 +62,10 @@ def create_refresh_token(user_id: int) -> str:
 
 
 def decode_access_token(token: str) -> TokenData:
-    """Dekoduje i weryfikuje access token JWT.
+    """Decodes and validates access JWT token.
 
     Raises:
-        jwt.InvalidTokenError — token niepoprawny, wygasły lub zły typ.
+        jwt.InvalidTokenError — invalid token, expired token, or wrong type.
     """
     payload = jwt.decode(
         token,
@@ -81,10 +81,10 @@ def decode_access_token(token: str) -> TokenData:
 
 
 def decode_refresh_token(token: str) -> int:
-    """Dekoduje i weryfikuje refresh token JWT. Zwraca user ID.
+    """Decodes and validates refresh JWT token. Returns user ID.
 
     Raises:
-        jwt.InvalidTokenError — token niepoprawny, wygasły lub zły typ.
+        jwt.InvalidTokenError — invalid token, expired token, or wrong type.
     """
     payload = jwt.decode(
         token,
