@@ -37,7 +37,8 @@ graph TB
 - **WAF**: Coraza 3.x + OWASP CRS 4.x
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy, PostgreSQL
 - **Frontend**: React, TypeScript, Vite, Tailwind CSS, pnpm
-- **Infrastructure**: Docker Compose, Prometheus, Grafana
+- **Infrastructure (MVP)**: Docker Compose
+- **Observability (Post-MVP / optional)**: Prometheus, Grafana, Loki
 
 ## Project Status
 
