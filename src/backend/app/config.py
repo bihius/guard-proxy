@@ -24,6 +24,13 @@ def _validate_secret(value: str, field_name: str) -> str:
     return normalized
 
 
+def _validate_database_url(value: str) -> str:
+    """Reject empty database URL values."""
+    if not value.strip():
+        raise ValueError("DATABASE_URL must not be empty.")
+    return value
+
+
 class EnvFileSettings(BaseSettings):
     """Base settings loaded from the real runtime environment."""
 
@@ -44,9 +51,7 @@ class DatabaseSettings(EnvFileSettings):
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_empty(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("DATABASE_URL must not be empty.")
-        return value
+        return _validate_database_url(value)
 
 
 class Settings(EnvFileSettings):
@@ -66,6 +71,11 @@ class Settings(EnvFileSettings):
     # Database
     database_url: str = "sqlite:///./guard_proxy.db"
     debug: bool = False
+
+    @field_validator("database_url")
+    @classmethod
+    def database_url_must_not_be_empty(cls, value: str) -> str:
+        return _validate_database_url(value)
 
     # JWT
     jwt_secret_key: str

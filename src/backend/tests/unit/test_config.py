@@ -172,6 +172,15 @@ def test_database_settings_accept_database_url_without_runtime_secrets() -> None
     assert settings.database_url == "sqlite:///./test.db"
 
 
+def test_settings_reject_empty_database_url() -> None:
+    with pytest.raises(ValidationError, match="DATABASE_URL must not be empty"):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            DATABASE_URL="   ",
+        )
+
+
 def test_settings_ignore_dot_env_example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.config import Settings
 
