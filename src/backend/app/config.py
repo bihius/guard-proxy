@@ -27,7 +27,7 @@ def _validate_secret(value: str, field_name: str) -> str:
 def _validate_database_url(value: str) -> str:
     """Reject empty database URL values."""
     if not value.strip():
-        raise ValueError("DATABASE_URL must not be empty.")
+        raise ValueError("DATABASE_URL must not be empty")
     return value
 
 
