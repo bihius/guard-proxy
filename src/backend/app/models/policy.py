@@ -5,7 +5,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,6 +34,16 @@ class Policy(Base):
     """
 
     __tablename__ = "policies"
+    __table_args__ = (
+        CheckConstraint(
+            "paranoia_level BETWEEN 1 AND 4",
+            name="ck_policies_paranoia_level",
+        ),
+        CheckConstraint(
+            "anomaly_threshold >= 0",
+            name="ck_policies_anomaly_threshold",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

@@ -5,7 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -21,9 +29,15 @@ class VHost(Base):
     - is served by HAProxy (frontend -> backend)
     - can have an assigned WAF policy (optional)
     - can have SSL enabled or disabled
+    Database invariant: the stored domain must be lowercase. API schemas
+    normalize domains to lowercase and this check protects against raw SQL
+    inserts/migrations that bypass schema validation.
     """
 
     __tablename__ = "vhosts"
+    __table_args__ = (
+        CheckConstraint("domain = lower(domain)", name="ck_vhosts_domain_lowercase"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

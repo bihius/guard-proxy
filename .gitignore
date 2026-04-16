@@ -122,7 +122,12 @@ secrets/
 *.password
 
 # ===== Database =====
-*.db
+# SQLite dev files under backend (default DATABASE_URL). Scoped to this
+# directory so binary DB fixtures under tests/ can still be tracked if needed.
+src/backend/guard_proxy.db
+src/backend/*.db
+# Stray SQLite at repository root (misconfigured tools / local experiments)
+/*.db
 *.sqlite
 *.sqlite3
 *.dump
