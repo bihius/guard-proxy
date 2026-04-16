@@ -1,4 +1,4 @@
-"""Router Policies API — CRUD polityk WAF."""
+"""Policies API router — WAF policy CRUD."""
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
@@ -26,7 +26,7 @@ def create_policy(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Policy:
-    """Tworzy nową politykę WAF (tylko admin)."""
+    """Creates a new WAF policy (admin only)."""
     service = PolicyService(db)
 
     try:
@@ -54,7 +54,7 @@ def list_policies(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[Policy]:
-    """Zwraca listę polityk WAF (admin i viewer)."""
+    """Returns list of WAF policies (admin and viewer)."""
     service = PolicyService(db)
     return service.list_policies()
 
@@ -65,7 +65,7 @@ def get_policy(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> Policy:
-    """Zwraca szczegóły polityki razem z rule_overrides (admin i viewer)."""
+    """Returns policy details with rule_overrides (admin and viewer)."""
     service = PolicyService(db)
     try:
         return service.get_policy(policy_id)
@@ -83,7 +83,7 @@ def update_policy(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> Policy:
-    """Aktualizuje wskazane pola polityki (tylko admin)."""
+    """Updates selected policy fields (admin only)."""
     service = PolicyService(db)
 
     try:
@@ -124,7 +124,7 @@ def delete_policy(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> Response:
-    """Usuwa politykę po ID (tylko admin)."""
+    """Deletes policy by ID (admin only)."""
     service = PolicyService(db)
     try:
         service.delete_policy(policy_id)
