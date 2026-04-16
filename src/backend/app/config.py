@@ -1,21 +1,59 @@
+from functools import lru_cache
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_PLACEHOLDER_SECRET_VALUES = {
+    "replace-this-with-a-random-secret",
+    "replace-this-with-a-second-random-secret",
+    "change-me",
+    "changeme",
+}
 
-class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+
+def _validate_secret(value: str, field_name: str) -> str:
+    """Reject empty or template placeholder secrets."""
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must not be empty.")
+    if normalized.lower() in _PLACEHOLDER_SECRET_VALUES:
+        raise ValueError(
+            f"{field_name} must be replaced with a real secret before startup."
+        )
+    return value
+
+
+class EnvFileSettings(BaseSettings):
+    """Base settings loaded from the real runtime environment."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
+
+
+class DatabaseSettings(EnvFileSettings):
+    """Database settings shared by the application and tooling."""
+
+    database_url: str = "sqlite:///./guard_proxy.db"
+    debug: bool = False
+
+    @field_validator("database_url")
+    @classmethod
+    def database_url_must_not_be_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("DATABASE_URL must not be empty.")
+        return value
+
+
+class Settings(EnvFileSettings):
+    """Application runtime settings."""
 
     # Application
     app_name: str = "Guard Proxy API"
-    debug: bool = False
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -27,6 +65,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "sqlite:///./guard_proxy.db"
+    debug: bool = False
 
     # JWT
     jwt_secret_key: str
@@ -41,13 +80,7 @@ class Settings(BaseSettings):
     @field_validator("jwt_secret_key")
     @classmethod
     def jwt_secret_key_must_not_be_empty(cls, v: str) -> str:
-        """Ensure JWT secret key is set — an empty key would be a security hole."""
-        if not v.strip():
-            raise ValueError(
-                "JWT_SECRET_KEY must not be empty. "
-                "Set it in .env or as an environment variable."
-            )
-        return v
+        return _validate_secret(v, "JWT_SECRET_KEY")
 
     @field_validator("auth_refresh_cookie_name")
     @classmethod
@@ -59,9 +92,7 @@ class Settings(BaseSettings):
     @field_validator("log_ingest_shared_secret")
     @classmethod
     def log_ingest_shared_secret_must_not_be_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("LOG_INGEST_SHARED_SECRET must not be empty.")
-        return v
+        return _validate_secret(v, "LOG_INGEST_SHARED_SECRET")
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -84,5 +115,34 @@ class Settings(BaseSettings):
 
         return value
 
+    @model_validator(mode="after")
+    def validate_cookie_settings(self) -> "Settings":
+        if (
+            self.auth_refresh_cookie_samesite == "none"
+            and not self.auth_refresh_cookie_secure
+        ):
+            raise ValueError(
+                "AUTH_REFRESH_COOKIE_SECURE must be true when "
+                "AUTH_REFRESH_COOKIE_SAMESITE is 'none'."
+            )
+        return self
 
-settings = Settings()
+
+def validate_runtime_settings(settings_obj: Settings) -> Settings:
+    """Run explicit runtime validation during application startup."""
+    return settings_obj
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Return cached runtime settings."""
+    return Settings()
+
+
+@lru_cache
+def get_database_settings() -> DatabaseSettings:
+    """Return cached database settings for tooling and runtime DB setup."""
+    return DatabaseSettings()
+
+
+settings = get_settings()

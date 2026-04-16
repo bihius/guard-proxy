@@ -4,23 +4,25 @@ from collections.abc import Iterator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.config import settings
+from app.config import get_database_settings
+
+database_settings = get_database_settings()
 
 # Dla SQLite potrzebujemy connect_args, dla PostgreSQL nie
 connect_args = {}
-if settings.database_url.startswith("sqlite"):
+if database_settings.database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
 engine = create_engine(
-    settings.database_url,
+    database_settings.database_url,
     connect_args=connect_args,
-    echo=settings.debug,
+    echo=database_settings.debug,
 )
 
 # SQLite domyślnie ignoruje klucze obce — PRAGMA włącza ich sprawdzanie.
 # Musi być wysłane przy każdym nowym połączeniu (nie jest trwałe).
 # PostgreSQL tego nie potrzebuje — enforcuje FK natywnie.
-if settings.database_url.startswith("sqlite"):
+if database_settings.database_url.startswith("sqlite"):
 
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection: sqlite3.Connection, _: object) -> None:
