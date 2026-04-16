@@ -12,14 +12,14 @@ The Guard Proxy system requires a backend API for the policy management panel. T
 - Trigger HAProxy graceful reloads via the Runtime API
 - Handle concurrent requests from the React frontend
 
-The backend needs to be async-capable (HAProxy Runtime API calls, config file I/O), type-safe (complex policy schemas), and provide auto-generated API documentation (thesis deliverable).
+The backend needs to be type-safe (complex policy schemas), provide auto-generated API documentation (thesis deliverable), and keep async-capable options available for future runtime and I/O-heavy paths.
 
 ## Decision
 Use **FastAPI** (Python 3.11+) as the backend web framework.
 
 ## Rationale
 
-1. **Native async/await** -- FastAPI is built on Starlette with first-class async support. This matters for non-blocking HAProxy Runtime API calls and concurrent config generation
+1. **Native async/await option** -- FastAPI is built on Starlette with first-class async support, which keeps an async path open for future HAProxy Runtime API and concurrent I/O workloads. The MVP currently uses synchronous SQLAlchemy (see ADR-006)
 2. **Pydantic v2 integration** -- Request/response validation is built-in. Policy schemas (paranoia levels 1-4, IP whitelists, anomaly thresholds) get validated automatically with clear error messages
 3. **OpenAPI auto-generation** -- Swagger UI and ReDoc are generated automatically. This is directly useful for the thesis (API documentation chapter) and frontend development
 4. **Performance** -- Comparable to Node.js/Go for I/O-bound workloads. Won't be a bottleneck given the HAProxy proxy layer handles the high-RPS traffic
@@ -47,7 +47,7 @@ Use **FastAPI** (Python 3.11+) as the backend web framework.
 ### Positive
 - Clean, type-safe codebase with minimal boilerplate
 - Auto-generated API docs reduce thesis documentation effort
-- Async support future-proofs the architecture
+- Async support future-proofs the architecture (not yet adopted in the current SQLAlchemy session model, see ADR-006)
 - Large community means most problems are already solved on StackOverflow/GitHub
 
 ### Negative
@@ -57,7 +57,7 @@ Use **FastAPI** (Python 3.11+) as the backend web framework.
 
 ### Neutral
 - Choosing FastAPI locks us into the ASGI ecosystem (uvicorn/hypercorn)
-- SQLAlchemy 2.0 async support works well with FastAPI but requires careful session management
+- SQLAlchemy 2.0 supports both sync and async session models; the current project uses synchronous sessions for MVP scope (see ADR-006)
 
 ## Validation
 This decision is correct if:
@@ -68,3 +68,4 @@ This decision is correct if:
 ## References
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [FastAPI vs Flask vs Django comparison](https://testdriven.io/blog/moving-from-flask-to-fastapi/)
+- [ADR-006: Synchronous SQLAlchemy for MVP](ADR-006-sync-sqlalchemy-for-mvp.md)

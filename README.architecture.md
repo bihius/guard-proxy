@@ -83,3 +83,4 @@ See `notes/decisions/` for Architecture Decision Records:
 - [ADR-002](notes/decisions/ADR-002-postgresql-with-sqlite-dev.md) - PostgreSQL + SQLite dev
 - [ADR-003](notes/decisions/ADR-003-react-typescript-frontend.md) - React + TypeScript
 - [ADR-004](notes/decisions/ADR-004-docker-compose-deployment.md) - Docker Compose deployment
+- [ADR-006](notes/decisions/ADR-006-sync-sqlalchemy-for-mvp.md) - Synchronous SQLAlchemy for MVP
