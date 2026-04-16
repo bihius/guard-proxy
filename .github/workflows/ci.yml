@@ -25,7 +25,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
         with:
-          uv-version: "0.11.6"
+          version: "0.11.6"
 
       - name: Cache uv packages
         uses: actions/cache@v4
