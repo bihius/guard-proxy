@@ -19,6 +19,14 @@ ruff check app/
 ruff format app/
 ```
 
+## Database (Alembic)
+
+```bash
+uv run alembic -c src/backend/alembic.ini upgrade heads                          # Apply all migrations (CI smoke test on fresh SQLite)
+uv run alembic -c src/backend/alembic.ini check                                  # Fail when models drift from the latest migration
+uv run alembic -c src/backend/alembic.ini revision --autogenerate -m "message"  # Generate a migration for model changes
+```
+
 ## TypeScript (Frontend)
 
 ```bash
