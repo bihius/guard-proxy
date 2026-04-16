@@ -130,7 +130,7 @@ class Settings(EnvFileSettings):
 
 def validate_runtime_settings(settings_obj: Settings) -> Settings:
     """Run explicit runtime validation during application startup."""
-    return settings_obj
+    return Settings()
 
 
 @lru_cache
