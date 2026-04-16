@@ -1,4 +1,4 @@
-"""Router VHosts API — CRUD wirtualnych hostów."""
+"""VHosts API router — virtual host CRUD."""
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
@@ -25,7 +25,7 @@ def create_vhost(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> VHost:
-    """Tworzy nowy vhost (tylko admin)."""
+    """Creates a new vhost (admin only)."""
     service = VHostService(db)
 
     try:
@@ -55,7 +55,7 @@ def list_vhosts(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[VHost]:
-    """Zwraca listę vhostów (admin i viewer)."""
+    """Returns list of vhosts (admin and viewer)."""
     service = VHostService(db)
     return service.list_vhosts()
 
@@ -66,7 +66,7 @@ def get_vhost(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> VHost:
-    """Zwraca szczegóły vhosta razem z pełną polityką."""
+    """Returns vhost details with full policy."""
     service = VHostService(db)
     try:
         return service.get_vhost(vhost_id)
@@ -84,7 +84,7 @@ def update_vhost(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> VHost:
-    """Aktualizuje wskazane pola vhosta (tylko admin)."""
+    """Updates selected vhost fields (admin only)."""
     service = VHostService(db)
 
     try:
@@ -117,7 +117,7 @@ def delete_vhost(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> Response:
-    """Usuwa vhost po ID (tylko admin)."""
+    """Deletes vhost by ID (admin only)."""
     service = VHostService(db)
     try:
         service.delete_vhost(vhost_id)

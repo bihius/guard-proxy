@@ -22,10 +22,10 @@ _DUMMY_HASH: str = "$2b$12$l.ip0p2T3WgWHyi7eDv2XOHxntTAt0e9J4Eycj14Qq5Du6QlVq/Du
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
-    """Ustawia refresh token jako HttpOnly cookie.
+    """Sets the refresh token as an HttpOnly cookie.
 
-    Cookie jest celowo niedostępne dla JavaScriptu (`httponly=True`), dzięki czemu
-    frontend nie trzyma długotrwałego tokena w localStorage ani w pamięci UI.
+    The cookie is intentionally unavailable to JavaScript (`httponly=True`), so
+    the frontend does not keep a long-lived token in localStorage or UI memory.
     """
     response.set_cookie(
         key=settings.auth_refresh_cookie_name,
@@ -54,24 +54,23 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> AccessTokenResponse:
-    """Logowanie — zwraca access token, a refresh token ustawia w cookie.
+    """Login endpoint returning an access token and setting refresh token cookie.
 
-    Zwraca 401 jeśli email nie istnieje, hasło jest złe lub konto nieaktywne.
-    Celowo nie rozróżniamy żadnego z tych przypadków — to dobra praktyka
-    bezpieczeństwa: atakujący nie może odróżnić złego emaila, złego hasła
-    ani nieaktywnego konta po treści odpowiedzi.
+    Returns 401 when email does not exist, password is invalid, or account
+    is inactive. We intentionally do not distinguish these cases so an attacker
+    cannot infer whether email, password, or account state was the reason.
     """
     user = db.query(User).filter(User.email == body.email).first()
 
-    # Zawsze wywołujemy bcrypt — niezależnie czy user istnieje.
-    # hash_to_check = prawdziwy hash jeśli user istnieje, dummy jeśli nie.
-    # Dzięki temu czas odpowiedzi jest stały i timing attack jest niemożliwy.
+    # Always call bcrypt, regardless of whether user exists.
+    # hash_to_check = real hash when user exists, dummy hash otherwise.
+    # This keeps response timing consistent and mitigates timing attacks.
     hash_to_check = user.hashed_password if user is not None else _DUMMY_HASH
     password_ok = auth_service.verify_password(body.password, hash_to_check)
 
-    # is_active sprawdzamy razem z password_ok — nie zwracamy osobnego błędu
-    # dla nieaktywnych kont, bo to potwierdziłoby atakującemu że email+hasło
-    # są poprawne (credential confirmation / account enumeration).
+    # Check is_active together with password_ok; do not return a separate error
+    # for inactive accounts, because that would confirm valid email+password
+    # to an attacker (credential confirmation / account enumeration).
     if not password_ok or user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -93,10 +92,10 @@ def refresh(
     response: Response,
     db: Session = Depends(get_db),
 ) -> AccessTokenResponse:
-    """Odświeżanie tokenów — odczytuje refresh token z cookie.
+    """Refresh endpoint reading refresh token from cookie.
 
-    Frontend wysyła request z credentials/include, a backend sam odczytuje cookie.
-    Dzięki temu refresh token nie przechodzi już przez JavaScript ani przez body JSON.
+    Frontend sends request with credentials/include and backend reads cookie.
+    This keeps refresh token out of JavaScript and out of request JSON body.
     """
     refresh_token = request.cookies.get(settings.auth_refresh_cookie_name)
 
@@ -134,7 +133,7 @@ def refresh(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(response: Response) -> Response:
-    """Wylogowanie — czyści refresh cookie po stronie backendu."""
+    """Logout endpoint clearing refresh cookie on backend side."""
     _clear_refresh_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
@@ -142,8 +141,8 @@ def logout(response: Response) -> Response:
 
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)) -> User:
-    """Zwraca dane aktualnie zalogowanego użytkownika.
+    """Returns the currently authenticated user's profile.
 
-    Nie wymaga dodatkowego zapytania do bazy — get_current_user już to robi.
+    No extra DB query is needed — get_current_user already loads the user.
     """
     return current_user
