@@ -21,7 +21,7 @@ def _validate_secret(value: str, field_name: str) -> str:
         raise ValueError(
             f"{field_name} must be replaced with a real secret before startup."
         )
-    return value
+    return normalized
 
 
 class EnvFileSettings(BaseSettings):
