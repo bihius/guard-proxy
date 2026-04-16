@@ -5,49 +5,27 @@ Usage:
     uv run python scripts/seed_admin.py --email admin@example.com --password supersecretpw
 
 If --email / --password are not provided, the script reads
-ADMIN_EMAIL and ADMIN_PASSWORD from the environment (or .env file).
+ADMIN_EMAIL and ADMIN_PASSWORD from the environment (or `.env` file).
 
 The script is idempotent: if any admin user already exists in the database
 (regardless of email), it exits without making any changes.
 
 The password must be at least 12 characters long.
-
-Required environment variables (directly or through `.env`):
-- JWT_SECRET_KEY
-- LOG_INGEST_SHARED_SECRET
 """
 
 import argparse
 import os
 import sys
 
-from dotenv import load_dotenv
-
-# Ładujemy .env zanim cokolwiek zaimportujemy z app.* —
-# w przeciwnym razie os.getenv() nie widzi zmiennych z pliku .env,
-# a import app.config crashuje jeśli JWT_SECRET_KEY nie jest w środowisku.
-load_dotenv()
-
-_REQUIRED_ENV_VARS = ("JWT_SECRET_KEY", "LOG_INGEST_SHARED_SECRET")
-_missing_env_vars = [name for name in _REQUIRED_ENV_VARS if not os.getenv(name)]
-if _missing_env_vars:
-    print(
-        "Error: missing required environment variable(s): "
-        f"{', '.join(_missing_env_vars)}. "
-        "Set them in environment or .env before running seed_admin.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-# Dodajemy katalog nadrzędny (src/backend/) do PYTHONPATH,
-# żeby importy "app.*" działały gdy uruchamiamy skrypt bezpośrednio.
+# Add the backend root (src/backend/) to PYTHONPATH so `app.*` imports work when
+# running this script directly.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.exc import IntegrityError  # noqa: E402
 
 from app.database import SessionLocal  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
-from app.services.auth_service import hash_password  # noqa: E402
+from app.passwords import hash_password  # noqa: E402
 
 
 def seed_admin(email: str, password: str, full_name: str = "Administrator") -> None:
