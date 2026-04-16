@@ -187,6 +187,17 @@ def test_settings_ignore_dot_env_example(tmp_path: Path, monkeypatch: pytest.Mon
         ),
         encoding="utf-8",
     )
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "JWT_SECRET_KEY=real-secret-from-dot-env",
+                "LOG_INGEST_SHARED_SECRET=real-log-secret-from-dot-env",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
-    with pytest.raises(ValidationError):
-        Settings()
+    settings = Settings()
+
+    assert getattr(settings, "jwt_secret_key") == "real-secret-from-dot-env"
+    assert getattr(settings, "log_ingest_shared_secret") == "real-log-secret-from-dot-env"
