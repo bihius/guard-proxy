@@ -9,6 +9,7 @@ instancję Settings bezpośrednio, nadpisując env tylko w scope testu.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -127,3 +128,85 @@ def test_log_ingest_shared_secret_empty_raises() -> None:
             JWT_SECRET_KEY="sekret",
             LOG_INGEST_SHARED_SECRET="",
         )
+
+
+def test_jwt_secret_key_placeholder_raises() -> None:
+    with pytest.raises(ValidationError, match="must be replaced"):
+        _make_settings(
+            JWT_SECRET_KEY="replace-this-with-a-random-secret",
+            LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+        )
+
+
+def test_log_ingest_shared_secret_placeholder_raises() -> None:
+    with pytest.raises(ValidationError, match="must be replaced"):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="replace-this-with-a-second-random-secret",
+        )
+
+
+def test_auth_refresh_cookie_samesite_none_requires_secure() -> None:
+    with pytest.raises(ValidationError, match="AUTH_REFRESH_COOKIE_SECURE must be true"):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            AUTH_REFRESH_COOKIE_SAMESITE="none",
+            AUTH_REFRESH_COOKIE_SECURE="false",
+        )
+
+
+def test_database_settings_accept_database_url_without_runtime_secrets() -> None:
+    from app.config import DatabaseSettings
+
+    original = dict(os.environ)
+    os.environ.pop("JWT_SECRET_KEY", None)
+    os.environ.pop("LOG_INGEST_SHARED_SECRET", None)
+    os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+    try:
+        settings = DatabaseSettings(_env_file=None)  # type: ignore[call-arg]
+    finally:
+        os.environ.clear()
+        os.environ.update(original)
+
+    assert settings.database_url == "sqlite:///./test.db"
+
+
+def test_settings_reject_empty_database_url() -> None:
+    with pytest.raises(ValidationError, match="DATABASE_URL must not be empty\\."):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            DATABASE_URL="   ",
+        )
+
+
+def test_settings_ignore_dot_env_example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import Settings
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    monkeypatch.delenv("LOG_INGEST_SHARED_SECRET", raising=False)
+    (tmp_path / ".env.example").write_text(
+        "\n".join(
+            [
+                "JWT_SECRET_KEY=replace-this-with-a-random-secret",
+                "LOG_INGEST_SHARED_SECRET=replace-this-with-a-second-random-secret",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "JWT_SECRET_KEY=real-secret-from-dot-env",
+                "LOG_INGEST_SHARED_SECRET=real-log-secret-from-dot-env",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings()
+
+    assert getattr(settings, "jwt_secret_key") == "real-secret-from-dot-env"
+    assert getattr(settings, "log_ingest_shared_secret") == "real-log-secret-from-dot-env"

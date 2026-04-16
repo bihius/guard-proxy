@@ -1,53 +1,22 @@
 """Auth service — password hashing and JWT token management."""
 
-import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import jwt
-from passlib.context import CryptContext
 
 from app.config import settings
+from app.passwords import hash_password, verify_password
 from app.schemas.auth import TokenData
 
-logger = logging.getLogger(__name__)
-
-# CryptContext konfiguruje bcrypt jako algorytm hashowania haseł.
-# deprecated="auto" oznacza że stare hashe będą automatycznie oznaczane
-# do re-hashowania gdy user się zaloguje (przydatne przy migracji algorytmu).
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def hash_password(password: str) -> str:
-    """Zwraca bcrypt hash hasła.
-
-    Nigdy nie przechowujemy hasła w plaintext — tylko hash.
-    bcrypt automatycznie dodaje sól (salt) więc dwa razy zahashowane
-    to samo hasło da różne wyniki.
-    """
-    return _pwd_context.hash(password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Weryfikuje czy podane hasło zgadza się z hashem z bazy.
-
-    Zwraca True jeśli hasło poprawne, False jeśli nie.
-
-    ValueError (UnknownHashError) oznacza uszkodzony lub nieznany hash w bazie —
-    to błąd danych, logujemy jako WARNING i zwracamy False (fail closed).
-
-    RuntimeError (MissingBackendError, InternalBackendError) oznacza brak
-    backendu bcrypt lub błąd infrastruktury — propagujemy dalej, żeby FastAPI
-    zwrócił 500 zamiast maskować awarię jako 401.
-    """
-    try:
-        return bool(_pwd_context.verify(plain_password, hashed_password))
-    except ValueError:
-        # Hash nierozpoznany lub uszkodzony — dane w bazie są nieprawidłowe.
-        logger.warning("Password verification failed: unrecognized or malformed hash")
-        return False
-    # RuntimeError (MissingBackendError, InternalBackendError) celowo nie jest
-    # łapany — propaguje do warstwy API jako 500 Internal Server Error.
+__all__ = [
+    "hash_password",
+    "verify_password",
+    "create_access_token",
+    "create_refresh_token",
+    "decode_access_token",
+    "decode_refresh_token",
+]
 
 
 def create_access_token(user_id: int, role: str) -> str:
