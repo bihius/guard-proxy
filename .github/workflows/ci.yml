@@ -38,6 +38,15 @@ jobs:
       - name: Install backend dependencies
         run: uv sync --frozen --extra dev
 
+      - name: Verify Alembic migrations and model drift
+        env:
+          JWT_SECRET_KEY: ci-jwt-secret-key-not-used-at-runtime
+          LOG_INGEST_SHARED_SECRET: ci-log-ingest-secret-not-used-at-runtime
+          DATABASE_URL: sqlite:///./ci_alembic_check.db
+        run: |
+          uv run alembic upgrade heads
+          uv run alembic check
+
       - name: Run backend tests with coverage
         run: uv run pytest --cov=app
 
