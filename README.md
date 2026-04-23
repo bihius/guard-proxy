@@ -54,6 +54,20 @@ Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
 - [Testing Strategy](README.testing.md) - Testing approach and targets
 - [Course team handoff](docs/course-team-handoff.md) - Setup, task assignments, and PR checklist for course contributors
 
+## Run Full Stack (Docker Compose)
+
+1. Prepare environment file:
+   - `cp deploy/docker/.env.example deploy/docker/.env`
+   - Update secrets in `deploy/docker/.env`
+2. Start the stack:
+   - `make dev`
+3. Access services:
+   - Frontend: `http://localhost:3000`
+   - API via HAProxy: `http://localhost:8080`
+   - Backend docs: `http://localhost:8080/docs`
+
+Use `make down` to stop containers and remove volumes.
+
 ## License
 
 MIT License - see [LICENSE](LICENSE)
