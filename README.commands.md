@@ -50,10 +50,13 @@ tcpdump -i lo -A -s 0 port 9000            # Debug SPOE traffic
 ## Docker
 
 ```bash
-docker compose config                      # Validate compose file
-docker compose up -d                       # Start all services
-docker compose logs -f haproxy             # Follow service logs
-docker compose down                        # Stop all services
+cp deploy/docker/.env.example deploy/docker/.env                     # Create env file for compose
+docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env config
+make dev                                                             # Start all services (attached, with build)
+make ps                                                              # Show service status
+make logs                                                            # Follow all service logs
+make down                                                            # Stop stack and remove volumes
+make seed                                                            # Seed admin user in backend container
 ```
 
 ## Security Testing
