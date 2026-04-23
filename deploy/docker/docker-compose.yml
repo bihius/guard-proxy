@@ -88,7 +88,6 @@ services:
         condition: service_started
     ports:
       - "8080:80"
-      - "8404:8404"
     volumes:
       - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - haproxy_logs:/var/log/haproxy
