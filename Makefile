@@ -16,4 +16,4 @@ ps:
 	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) ps
 
 seed:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend uv run python scripts/seed_admin.py
+	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/seed_admin.py
