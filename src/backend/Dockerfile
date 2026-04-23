@@ -18,14 +18,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:${PATH}"
 
-WORKDIR /app
+RUN groupadd --system app && useradd --system --gid app --home-dir /app --no-create-home --shell /usr/sbin/nologin app
 
-COPY --from=builder /app/.venv /app/.venv
-COPY alembic alembic
-COPY app app
-COPY scripts scripts
-COPY alembic.ini alembic.ini
+WORKDIR /app
+RUN chown app:app /app
+
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --chown=app:app alembic alembic
+COPY --chown=app:app app app
+COPY --chown=app:app scripts scripts
+COPY --chown=app:app alembic.ini alembic.ini
 
 EXPOSE 8000
 
+USER app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
