@@ -147,7 +147,10 @@ def test_log_ingest_shared_secret_placeholder_raises() -> None:
 
 
 def test_auth_refresh_cookie_samesite_none_requires_secure() -> None:
-    with pytest.raises(ValidationError, match="AUTH_REFRESH_COOKIE_SECURE must be true"):
+    with pytest.raises(
+        ValidationError,
+        match="AUTH_REFRESH_COOKIE_SECURE must be true",
+    ):
         _make_settings(
             JWT_SECRET_KEY="real-secret-value",
             LOG_INGEST_SHARED_SECRET="real-log-secret",
@@ -181,7 +184,9 @@ def test_settings_reject_empty_database_url() -> None:
         )
 
 
-def test_settings_ignore_dot_env_example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_ignore_dot_env_example(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from app.config import Settings
 
     monkeypatch.chdir(tmp_path)
@@ -209,4 +214,6 @@ def test_settings_ignore_dot_env_example(tmp_path: Path, monkeypatch: pytest.Mon
     settings = Settings()
 
     assert getattr(settings, "jwt_secret_key") == "real-secret-from-dot-env"
-    assert getattr(settings, "log_ingest_shared_secret") == "real-log-secret-from-dot-env"
+    assert (
+        getattr(settings, "log_ingest_shared_secret") == "real-log-secret-from-dot-env"
+    )

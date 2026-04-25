@@ -183,9 +183,7 @@ def test_refresh_nonexistent_user_returns_401(client: TestClient) -> None:
     assert resp.status_code == 401
 
 
-def test_logout_clears_refresh_cookie(
-    client: TestClient, admin_user: User
-) -> None:
+def test_logout_clears_refresh_cookie(client: TestClient, admin_user: User) -> None:
     client.post(
         "/auth/login",
         json={"email": admin_user.email, "password": ADMIN_PASSWORD},
@@ -195,9 +193,10 @@ def test_logout_clears_refresh_cookie(
 
     assert resp.status_code == 204
     assert settings.auth_refresh_cookie_name not in client.cookies
-    assert "Max-Age=0" in resp.headers["set-cookie"] or "expires=" in resp.headers[
-        "set-cookie"
-    ].lower()
+    assert (
+        "Max-Age=0" in resp.headers["set-cookie"]
+        or "expires=" in resp.headers["set-cookie"].lower()
+    )
 
 
 def test_me_returns_user_data(

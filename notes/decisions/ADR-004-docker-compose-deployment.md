@@ -83,7 +83,7 @@ For production, deploy on **Proxmox VE** using LXC containers running Docker.
 - [ ] Create `deploy/docker/docker-compose.prod.yml` with production settings
 - [ ] Create `src/coraza/Dockerfile` for custom Coraza SPOA image
 - [ ] Create `.env.example` with all required environment variables
-- [ ] Add `Makefile` targets: `make dev`, `make prod`, `make down`
+- [ ] Add `Makefile` targets: `make dev`, `make prod`, `make down`, `make clean`
 
 ## Planned Service Configuration
 
