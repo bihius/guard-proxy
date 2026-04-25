@@ -1,0 +1,3 @@
+[submodule "configs/coraza/crs"]
+	path = configs/coraza/crs
+	url = https://github.com/coreruleset/coreruleset.git

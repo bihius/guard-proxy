@@ -53,6 +53,7 @@ tcpdump -i lo -A -s 0 port 9000            # Debug SPOE traffic
 cp deploy/docker/.env.example deploy/docker/.env                     # Create env file for compose
 docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env config
 make dev                                                             # Start all services (attached, with build)
+make coraza-build                                                    # Build the pinned Coraza SPOA + CRS image
 make ps                                                              # Show service status
 make logs                                                            # Follow all service logs
 make down                                                            # Stop stack and remove volumes

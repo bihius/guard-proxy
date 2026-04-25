@@ -47,7 +47,7 @@ All variables set by the SPOA are namespaced via
 | Variable             | Meaning                                                |
 |----------------------|--------------------------------------------------------|
 | `txn.coraza.action`  | Decision string (`deny` blocks; anything else allows)  |
-| `txn.coraza.score`   | Anomaly score from the rule set, propagated as header |
+| `txn.coraza.anomaly_score` | Inbound anomaly score from the rule set, propagated as header |
 | `txn.coraza.id`      | Transaction id correlated with HAProxy's `unique-id`  |
 
 The exact set of variables produced depends on the Coraza SPOA
@@ -56,8 +56,8 @@ reference relies on.
 
 ## SPOE message arguments
 
-`coraza-req` is emitted on `on-frontend-http-request` and carries the
-data Coraza needs to run request-phase rules:
+`coraza-req` is sent by the `coraza-req` SPOE group and carries the data
+Coraza needs to run request-phase rules:
 
 | Argument   | HAProxy fetch    | Notes                                  |
 |------------|------------------|----------------------------------------|
@@ -73,6 +73,7 @@ data Coraza needs to run request-phase rules:
 | `version`  | `req.ver`        | HTTP version                           |
 | `headers`  | `req.hdrs`       | All request headers, framed for SPOE   |
 | `body`     | `req.body`       | Request body (subject to SPOA limits)  |
+| `exportRuleIDs` | `bool(false)` | Keep rule-id export disabled by default |
 
 Response-phase inspection is deliberately out of scope for M1
 (see ADR-007).
@@ -108,11 +109,20 @@ The configuration is exercised in two ways:
    The check must report `Configuration file is valid` with no
    warnings.
 
-2. End-to-end smoke test against a running HAProxy + Coraza SPOA
-   pair. This is the responsibility of #107 (compose wiring) and
-   #108 (smoke test): a benign request to `app.local` reaches the
-   backend, while a known SQL-injection payload is answered with
-   `403 Forbidden`.
+2. End-to-end smoke test against the full Docker Compose stack:
+
+   ```sh
+   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env up -d --build
+   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env ps
+   curl -i -H 'Host: app.local' http://localhost:8080/health
+   curl -i -H 'Host: app.local' "http://localhost:8080/?id=1%27%20OR%20%271%27=%271"
+   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env down -v
+   ```
+
+   All five services should become healthy. The benign `/health` request
+   should return `200 OK`; the SQL-injection payload should return
+   `403 Forbidden`. The backend currently does not define a root route, so
+   `/` returns `404 Not Found` even though it is routed through HAProxy.
 
 ## Relationship to other issues
 
