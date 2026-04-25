@@ -54,10 +54,18 @@ cp deploy/docker/.env.example deploy/docker/.env                     # Create en
 docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env config
 make dev                                                             # Start all services (runs backend migrations, attached, with build)
 make coraza-build                                                    # Build the pinned Coraza SPOA + CRS image
+docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza  # Reload mounted Coraza config/rules
+docker volume ls | grep guard-proxy                                  # Inspect pgdata, log, and generated_config volumes
 make ps                                                              # Show service status
 make logs                                                            # Follow all service logs
 make down                                                            # Stop stack and remove volumes
 make seed                                                            # Seed admin user in backend container
+```
+
+## Smoke Testing
+
+```bash
+bash benchmarks/smoke/e2e.sh  # Compose stack: benign request returns 200, SQLi returns 403
 ```
 
 ## Security Testing

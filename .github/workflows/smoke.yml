@@ -1,0 +1,22 @@
+name: E2E Smoke
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: e2e-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Prepare Docker Compose environment
+        run: cp deploy/docker/.env.example deploy/docker/.env
+
+      - name: Run E2E smoke test
+        run: bash benchmarks/smoke/e2e.sh
