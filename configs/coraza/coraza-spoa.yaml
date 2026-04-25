@@ -1,0 +1,18 @@
+# Coraza SPOA service configuration for the Docker Compose stack.
+
+bind: 0.0.0.0:9000
+log_level: info
+log_file: /dev/stdout
+log_format: console
+
+default_application: default
+
+applications:
+  - name: default
+    directives: |
+      Include /etc/coraza/coraza.conf
+    response_check: false
+    transaction_ttl_ms: 60000
+    log_level: info
+    log_file: /dev/stdout
+    log_format: console
