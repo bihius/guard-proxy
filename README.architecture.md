@@ -84,3 +84,4 @@ See `notes/decisions/` for Architecture Decision Records:
 - [ADR-003](notes/decisions/ADR-003-react-typescript-frontend.md) - React + TypeScript
 - [ADR-004](notes/decisions/ADR-004-docker-compose-deployment.md) - Docker Compose deployment
 - [ADR-006](notes/decisions/ADR-006-sync-sqlalchemy-for-mvp.md) - Synchronous SQLAlchemy for MVP
+- [ADR-007](notes/decisions/ADR-007-coraza-spoa-integration.md) - Coraza SPOA integration approach
