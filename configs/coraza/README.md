@@ -36,6 +36,19 @@ git submodule update --init --recursive
 - Inbound and outbound anomaly thresholds are `5`.
 - Relevant audit events are written as JSON to `/var/log/coraza/audit.json`.
 
+## Docker Compose mounts
+
+When the stack runs through `deploy/docker/docker-compose.yml`, these files are
+mounted into the Coraza container read-only. After editing files in this
+directory, restart the service so `coraza-spoa` reloads them:
+
+```sh
+docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza
+```
+
+The Coraza image still ships the same defaults, so it can run outside the
+compose stack without host-mounted configuration.
+
 ## Updating CRS
 
 ```sh
