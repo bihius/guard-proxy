@@ -6,17 +6,18 @@ Create Date: 2026-04-11 11:00:00.000000
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = "c7a2e5b8f1d0"
-down_revision: Union[str, Sequence[str], None] = "7e0f9c2c9e62"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "7e0f9c2c9e62"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -31,7 +32,41 @@ def upgrade() -> None:
 
     context = op.get_context()
     if context.dialect.name == "postgresql":
+        op.execute("DROP TYPE IF EXISTS logaction")
         op.execute("DROP TYPE IF EXISTS logseverity")
+        bind = op.get_bind()
+        sa.Enum("allow", "deny", "monitor", name="logaction").create(
+            bind,
+            checkfirst=True,
+        )
+        sa.Enum("info", "warning", "error", "critical", name="logseverity").create(
+            bind,
+            checkfirst=True,
+        )
+        action_enum = postgresql.ENUM(
+            "allow",
+            "deny",
+            "monitor",
+            name="logaction",
+            create_type=False,
+        )
+        severity_enum = postgresql.ENUM(
+            "info",
+            "warning",
+            "error",
+            "critical",
+            name="logseverity",
+            create_type=False,
+        )
+    else:
+        action_enum = sa.Enum("allow", "deny", "monitor", name="logaction")
+        severity_enum = sa.Enum(
+            "info",
+            "warning",
+            "error",
+            "critical",
+            name="logseverity",
+        )
 
     op.create_table(
         "logs",
@@ -46,7 +81,7 @@ def upgrade() -> None:
         sa.Column("vhost", sa.String(length=255), nullable=False),
         sa.Column(
             "action",
-            sa.Enum("allow", "deny", "monitor", name="logaction"),
+            action_enum,
             nullable=False,
         ),
         sa.Column("source_ip", sa.String(length=45), nullable=False),
@@ -59,7 +94,7 @@ def upgrade() -> None:
         sa.Column("paranoia_level", sa.Integer(), nullable=True),
         sa.Column(
             "severity",
-            sa.Enum("info", "warning", "error", "critical", name="logseverity"),
+            severity_enum,
             nullable=False,
         ),
         sa.Column("message", sa.Text(), nullable=True),

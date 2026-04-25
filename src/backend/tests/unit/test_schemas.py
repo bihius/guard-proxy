@@ -164,7 +164,9 @@ def test_policy_create_schema_exposes_paranoia_level_bounds() -> None:
 def test_policy_update_schema_exposes_paranoia_level_bounds() -> None:
     schema = PolicyUpdate.model_json_schema()
     paranoia_schema = schema["properties"]["paranoia_level"]
-    int_schema = next(item for item in paranoia_schema["anyOf"] if item.get("type") == "integer")
+    int_schema = next(
+        item for item in paranoia_schema["anyOf"] if item.get("type") == "integer"
+    )
 
     assert int_schema["minimum"] == 1
     assert int_schema["maximum"] == 4

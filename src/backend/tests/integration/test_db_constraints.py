@@ -19,7 +19,10 @@ def test_policy_paranoia_level_above_max_raises_integrity_error(db: Session) -> 
         )
     )
 
-    with pytest.raises(IntegrityError, match="ck_policies_paranoia_level|CHECK constraint failed"):
+    with pytest.raises(
+        IntegrityError,
+        match="ck_policies_paranoia_level|CHECK constraint failed",
+    ):
         db.commit()
     db.rollback()
 

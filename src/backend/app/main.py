@@ -12,7 +12,12 @@ from app.routers import auth, logs, policies, rule_overrides, vhosts
 class _HealthcheckAccessFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         args = record.args
-        if isinstance(args, tuple) and len(args) >= 3 and args[1] == "GET" and args[2] == "/health":
+        if (
+            isinstance(args, tuple)
+            and len(args) >= 3
+            and args[1] == "GET"
+            and args[2] == "/health"
+        ):
             return False
         return True
 

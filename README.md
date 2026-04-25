@@ -63,12 +63,14 @@ Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
    - `make dev`
 3. Access services:
    - Frontend: `http://localhost:3000`
-   - API via HAProxy: `http://localhost:8080` with `Host: app.local`
-   - Backend health via HAProxy: `curl -H 'Host: app.local' http://localhost:8080/health`
+   - API via HAProxy: `http://localhost:8080`
+   - Backend health via HAProxy: `curl http://localhost:8080/health`
 4. Optional WAF smoke test:
    - `curl -i -H 'Host: app.local' "http://localhost:8080/?id=1%27%20OR%20%271%27=%271"` should return `403 Forbidden`
 
-Use `make down` to stop containers and remove volumes.
+Use `make down` to stop containers (keeps named volumes such as Postgres data).
+
+Use `make clean` to stop containers and remove volumes (full local reset).
 
 ## License
 
