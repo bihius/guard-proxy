@@ -17,6 +17,27 @@
 - Path Traversal: >95% detection rate
 - False positive rate: <10%
 
+### End-to-End Smoke
+
+The M1 smoke test starts the Docker Compose stack, waits for healthy services,
+checks that a benign request is allowed, checks that a SQL injection request is
+blocked by Coraza, and then tears the stack down.
+
+Prerequisites:
+
+- Docker with Docker Compose
+- `deploy/docker/.env` created from `deploy/docker/.env.example`
+- The CRS submodule initialised with `git submodule update --init --recursive`
+
+Run locally:
+
+```sh
+bash benchmarks/smoke/e2e.sh
+```
+
+The smoke test sends `Host: app.local` because the reference HAProxy
+configuration rejects unknown hosts before WAF inspection. The same smoke test
+also runs nightly and on demand through `.github/workflows/smoke.yml`.
 
 ## Test Data
 

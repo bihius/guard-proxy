@@ -68,6 +68,10 @@ services:
     restart: unless-stopped
     volumes:
       - coraza_logs:/var/log/coraza
+      - ../../configs/coraza/coraza-spoa.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro
+      - ../../configs/coraza/coraza.conf:/etc/coraza/coraza.conf:ro
+      - ../../configs/coraza/crs-setup.conf:/etc/coraza/crs-setup.conf:ro
+      - ../../configs/coraza/crs:/etc/coraza/crs:ro
     healthcheck:
       test: ["CMD", "/bin/busybox", "nc", "-z", "127.0.0.1", "9000"]
       interval: 10s
