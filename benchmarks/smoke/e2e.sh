@@ -105,7 +105,7 @@ assert_status() {
 
 cd "${REPO_ROOT}"
 
-"${COMPOSE[@]}" up -d --build
+"${COMPOSE[@]}" up -d --build postgres backend coraza haproxy
 
 wait_for_healthy backend
 wait_for_healthy coraza
