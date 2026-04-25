@@ -1,0 +1,125 @@
+# HAProxy reference configuration
+
+This directory contains the hand-written reference configuration that
+HAProxy uses to consult the Coraza SPOA WAF. It is intentionally small
+and readable: M2 (#110) will replace it with Jinja2 templates rendered
+from the policy database, so this file is the seed those templates
+must reproduce.
+
+## Files
+
+| File         | Purpose                                                  |
+|--------------|----------------------------------------------------------|
+| `haproxy.cfg`| Frontend, vhost ACL, SPOE filter, backends               |
+| `coraza.cfg` | SPOE engine + message definition for the Coraza SPOA    |
+| `README.md`  | This document                                            |
+
+## Request flow
+
+```
+Client ──► HAProxy :80 ──► (SPOE) ──► Coraza SPOA :9000
+                ▲                          │
+                │                          ▼
+                └──── allow / deny ◄── decision
+                │
+                ▼ (if allowed)
+            Backend  app.local ──► be_app (backend:8000)
+```
+
+1. The client sends an HTTP request to HAProxy on port 80.
+2. The `fe_http` frontend stamps it with `X-Request-ID` and matches
+   the `Host` header against the `host_app` ACL. Anything that is not
+   `app.local` is rejected with `421 Misdirected Request`.
+3. The `spoe` filter sends a `coraza-req` message to the
+   `coraza-spoa` backend (TCP, `coraza:9000`).
+4. The SPOA evaluates the request against Coraza/CRS rules and
+   returns variables under `txn.coraza.*`.
+5. If `txn.coraza.action == "deny"`, HAProxy responds with
+   `403 Forbidden` and never contacts the backend.
+6. Otherwise the request is routed to `be_app`, which forwards to
+   `backend:8000` (the FastAPI service in Docker Compose).
+
+## SPOE variables
+
+All variables set by the SPOA are namespaced via
+`option var-prefix coraza`, so HAProxy sees them as `txn.coraza.<name>`.
+
+| Variable             | Meaning                                                |
+|----------------------|--------------------------------------------------------|
+| `txn.coraza.action`  | Decision string (`deny` blocks; anything else allows)  |
+| `txn.coraza.score`   | Anomaly score from the rule set, propagated as header |
+| `txn.coraza.id`      | Transaction id correlated with HAProxy's `unique-id`  |
+
+The exact set of variables produced depends on the Coraza SPOA
+version and rule configuration; the three above are the minimum this
+reference relies on.
+
+## SPOE message arguments
+
+`coraza-req` is emitted on `on-frontend-http-request` and carries the
+data Coraza needs to run request-phase rules:
+
+| Argument   | HAProxy fetch    | Notes                                  |
+|------------|------------------|----------------------------------------|
+| `app`      | `str(default)`   | Which Coraza application bundle to use |
+| `id`       | `unique-id`      | Same value as the `X-Request-ID` header|
+| `src-ip`   | `src`            | Client IP                              |
+| `src-port` | `src_port`       | Client TCP port                        |
+| `dst-ip`   | `dst`            | HAProxy bind IP                        |
+| `dst-port` | `dst_port`       | HAProxy bind port                      |
+| `method`   | `method`         | HTTP method                            |
+| `path`     | `path`           | Request path without query             |
+| `query`    | `query`          | Raw query string                       |
+| `version`  | `req.ver`        | HTTP version                           |
+| `headers`  | `req.hdrs`       | All request headers, framed for SPOE   |
+| `body`     | `req.body`       | Request body (subject to SPOA limits)  |
+
+Response-phase inspection is deliberately out of scope for M1
+(see ADR-007).
+
+## Failure behaviour
+
+`spoe-agent` is configured with `option set-on-error error`. If the
+SPOA is unreachable or returns an error, `txn.coraza.action` will not
+equal `"deny"` and the request is forwarded — i.e. the proxy
+fail-opens. Hardening this into an explicit degraded mode is tracked
+in #80; M1 only needs the happy path.
+
+## Validating the config
+
+The configuration is exercised in two ways:
+
+1. Syntax / semantic check (no runtime needed):
+
+   ```sh
+   haproxy -c -f configs/haproxy/haproxy.cfg
+   ```
+
+   If `haproxy` is not installed locally, run the same check inside
+   the pinned image:
+
+   ```sh
+   docker run --rm \
+     -v "$PWD/configs/haproxy:/usr/local/etc/haproxy:ro" \
+     haproxy:3.0-alpine \
+     haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
+   ```
+
+   The check must report `Configuration file is valid` with no
+   warnings.
+
+2. End-to-end smoke test against a running HAProxy + Coraza SPOA
+   pair. This is the responsibility of #107 (compose wiring) and
+   #108 (smoke test): a benign request to `app.local` reaches the
+   backend, while a known SQL-injection payload is answered with
+   `403 Forbidden`.
+
+## Relationship to other issues
+
+- ADR-007 — picks upstream `coraza-spoa` as the SPOA implementation.
+- #106 — provides the Coraza SPOA + OWASP CRS bundle this config
+  talks to.
+- #107 — wires this `configs/haproxy/` directory into Docker Compose.
+- #108 — runs the end-to-end smoke test that this reference unblocks.
+- #110 — replaces these files with Jinja2 templates seeded from this
+  reference.
