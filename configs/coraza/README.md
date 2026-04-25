@@ -4,6 +4,15 @@ This directory contains the hand-written M1 Coraza SPOA and OWASP CRS bundle.
 M2 will replace these seed files with generated configuration derived from the
 policy database.
 
+## First-time setup
+
+The `crs/` directory is a git submodule. If you cloned the repository without
+`--recurse-submodules` (or your CI checkout did not initialise submodules), run:
+
+```sh
+git submodule update --init --recursive
+```
+
 ## Pinned versions
 
 - Coraza SPOA image: `ghcr.io/corazawaf/coraza-spoa:0.6.1`
