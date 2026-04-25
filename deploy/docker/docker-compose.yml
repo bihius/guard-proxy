@@ -62,14 +62,14 @@ services:
       - gp_edge
 
   coraza:
-    image: ghcr.io/corazawaf/coraza-spoa:0.6.1
+    build:
+      context: ../..
+      dockerfile: deploy/docker/coraza.Dockerfile
     restart: unless-stopped
     volumes:
-      - ./coraza/coraza.conf:/etc/coraza/coraza.conf:ro
-      - ./coraza/rules:/etc/coraza/rules:ro
       - coraza_logs:/var/log/coraza
     healthcheck:
-      test: ["CMD", "/coraza-spoa", "--help"]
+      test: ["CMD", "/bin/busybox", "nc", "-z", "127.0.0.1", "9000"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -83,11 +83,12 @@ services:
       backend:
         condition: service_healthy
       coraza:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "8080:80"
     volumes:
-      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ../../configs/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
       - haproxy_logs:/var/log/haproxy
       - generated_config:/etc/haproxy/generated:ro
     healthcheck:
