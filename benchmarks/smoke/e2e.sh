@@ -6,6 +6,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
 ENV_FILE="${REPO_ROOT}/deploy/docker/.env"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-120}"
+SMOKE_PROJECT="${SMOKE_PROJECT:-guard-proxy-smoke}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing ${ENV_FILE}. Copy deploy/docker/.env.example to deploy/docker/.env first." >&2
@@ -13,9 +14,9 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 fi
 
 if docker compose version >/dev/null 2>&1; then
-  COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
+  COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --project-name "${SMOKE_PROJECT}")
 elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE=(docker-compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
+  COMPOSE=(docker-compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" --project-name "${SMOKE_PROJECT}")
 else
   echo "Docker Compose is required." >&2
   exit 1
@@ -30,7 +31,7 @@ cleanup() {
     "${COMPOSE[@]}" logs --tail=50 haproxy coraza || true
   fi
 
-  "${COMPOSE[@]}" down -v
+  "${COMPOSE[@]}" down -v || true
   exit "${status}"
 }
 trap cleanup EXIT
