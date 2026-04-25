@@ -1,0 +1,10 @@
+**
+
+!configs/
+!configs/coraza/
+!configs/coraza/**
+!deploy/
+!deploy/docker/
+!deploy/docker/coraza.Dockerfile
+
+configs/coraza/crs/.git
