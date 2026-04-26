@@ -88,15 +88,18 @@ in #80; M1 only needs the happy path.
 
 ## Troubleshooting SPOE frames
 
-The M1 reference stack keeps HAProxy and Coraza in verbose mode so a
-single request can be followed across both services. HAProxy runs with
-the `-d` debug flag and logs to stdout at `debug` level. Coraza SPOA
-logs to stdout at `debug` level.
+The M1 reference stack supports an opt-in debug mode (`make dev`) that runs
+HAProxy with the `-d` flag and switches Coraza SPOA logging to `debug` level,
+so a single request can be followed across both services. The default `make run`
+mode uses `info` logging.
 
-1. Start the stack and follow only the WAF path logs:
+> **Warning:** debug mode logs full request metadata. Use only for local
+> troubleshooting against non-production traffic.
+
+1. Start the stack in debug mode and follow only the WAF path logs:
 
    ```sh
-   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env up -d --build
+   make dev
    docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env logs -f haproxy coraza
    ```
 
