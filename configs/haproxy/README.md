@@ -78,13 +78,24 @@ Coraza needs to run request-phase rules:
 Response-phase inspection is deliberately out of scope for M1
 (see ADR-007).
 
-## Failure behaviour
+## Degraded-mode behaviour
 
 `spoe-agent` is configured with `option set-on-error error`. If the
-SPOA is unreachable or returns an error, `txn.coraza.action` will not
-equal `"deny"` and the request is forwarded — i.e. the proxy
-fail-opens. Hardening this into an explicit degraded mode is tracked
-in #80; M1 only needs the happy path.
+SPOA is unreachable, times out, returns a malformed response, or
+returns an internal processing error, HAProxy sets
+`txn.coraza.error` to the SPOE/SPOP error code.
+
+The M1 reference configuration fails closed for protected traffic:
+when `txn.coraza.error` is present, HAProxy returns
+`503 Service Unavailable` before contacting `be_app`. The response
+includes `X-WAF-Degraded: true` and `X-WAF-Error: <code>` so operators
+can distinguish WAF degraded mode from an application outage. HAProxy
+also raises the request log level to `err` for these requests.
+
+This covers startup or unhealthy Coraza containers, connection
+failures, SPOE processing timeouts, malformed WAF responses, and
+transient runtime failures. Backend/dashboard status reporting is
+tracked separately in #69.
 
 ## Troubleshooting SPOE frames
 
@@ -128,9 +139,10 @@ mode uses `info` logging.
 5. If HAProxy returns `421`, the request failed the reference host ACL
    before routing. Retry with `Host: app.local`.
 
-6. If HAProxy returns an application response while Coraza is down,
-   this is the expected M1 fail-open behavior from `option
-   set-on-error error`; degraded-mode handling is tracked in #80.
+6. If HAProxy returns `503` with `X-WAF-Degraded: true`, Coraza/SPOA
+   inspection failed and the proxy failed closed before contacting the
+   backend. Use the `X-WAF-Error` value and HAProxy `err` log line to
+   identify the SPOE/SPOP failure class.
 
 For raw frame inspection in the Docker Compose setup, capture the SPOA
 traffic from inside the `haproxy` container while reproducing the
