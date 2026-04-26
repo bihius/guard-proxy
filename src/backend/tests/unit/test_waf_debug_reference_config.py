@@ -3,15 +3,17 @@ from pathlib import Path
 
 def _find_repo_root(start: Path) -> Path:
     for candidate in (start, *start.parents):
-        if (candidate / "pyproject.toml").exists() or (candidate / ".git").exists():
+        if (candidate / ".git").exists():
             return candidate
 
     raise FileNotFoundError(
-        f"Could not locate repository root from {start}; expected pyproject.toml or .git"
+        f"Could not locate repository root from {start}; expected .git directory"
     )
 
 
 REPO_ROOT = _find_repo_root(Path(__file__).resolve().parent)
+
+
 def test_reference_haproxy_config_enables_debug_logging() -> None:
     config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
 
@@ -39,6 +41,6 @@ def test_haproxy_readme_documents_spoe_troubleshooting() -> None:
     readme = (REPO_ROOT / "configs/haproxy/README.md").read_text()
 
     assert "## Troubleshooting SPOE frames" in readme
-    assert "docker compose -f deploy/docker/docker-compose.yml" in readme
+    assert "docker-compose -f deploy/docker/docker-compose.yml" in readme
     assert "X-Request-ID: spoe-debug-1" in readme
-    assert "tcpdump -i lo -A -s 0 port 9000" in readme
+    assert "tcpdump -i any -A -s 0 port 9000" in readme

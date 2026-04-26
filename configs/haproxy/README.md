@@ -96,8 +96,8 @@ logs to stdout at `debug` level.
 1. Start the stack and follow only the WAF path logs:
 
    ```sh
-   docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env up -d --build
-   docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env logs -f haproxy coraza
+   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env up -d --build
+   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env logs -f haproxy coraza
    ```
 
 2. Send a request with an explicit correlation id:
@@ -135,7 +135,7 @@ request. Container-to-container traffic does not normally traverse the
 host `lo` interface:
 
 ```sh
-docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
+docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
   exec haproxy tcpdump -i any -A -s 0 port 9000
 ```
 
