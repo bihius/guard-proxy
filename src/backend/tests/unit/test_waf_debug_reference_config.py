@@ -44,7 +44,10 @@ def test_debug_coraza_spoa_config_enables_debug_logging() -> None:
 def test_debug_compose_override_enables_haproxy_debug_flag() -> None:
     compose = (REPO_ROOT / "deploy/docker/docker-compose.debug.yml").read_text()
 
-    assert 'command: ["haproxy", "-d", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]' in compose
+    assert (
+        'command: ["haproxy", "-d", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]'
+        in compose
+    )
 
 
 def test_debug_compose_override_mounts_debug_coraza_config() -> None:
@@ -68,3 +71,47 @@ def test_haproxy_readme_documents_spoe_troubleshooting() -> None:
     assert "make dev" in readme
     assert "X-Request-ID: spoe-debug-1" in readme
     assert "tcpdump -i any -A -s 0 port 9000" in readme
+
+
+def test_reference_haproxy_config_fails_closed_on_spoe_errors() -> None:
+    config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
+
+    assert (
+        "http-request set-log-level err if { var(txn.coraza.error) -m found }"
+        in config
+    )
+
+    # Fail closed with 503 on SPOE errors.  Locate the exact return rule line
+    # and verify that both headers and the condition appear on it together.
+    # Tolerate quoting differences and optional extra tokens (e.g.
+    # content-type/string).
+    return_line = next(
+        (
+            line.strip()
+            for line in config.splitlines()
+            if line.strip().startswith("http-request return status 503")
+        ),
+        None,
+    )
+    assert return_line is not None, "No 'http-request return status 503' rule found"
+    assert (
+        "hdr X-WAF-Degraded true" in return_line
+        or 'hdr "X-WAF-Degraded" "true"' in return_line
+    ), f"X-WAF-Degraded header missing from return rule: {return_line}"
+    assert (
+        "hdr X-WAF-Error %[var(txn.coraza.error)]" in return_line
+        or 'hdr "X-WAF-Error" "%[var(txn.coraza.error)]"' in return_line
+    ), f"X-WAF-Error header missing from return rule: {return_line}"
+    assert "if { var(txn.coraza.error) -m found }" in return_line, (
+        f"Condition missing from return rule: {return_line}"
+    )
+
+
+def test_haproxy_readme_documents_fail_closed_degraded_mode() -> None:
+    readme = (REPO_ROOT / "configs/haproxy/README.md").read_text()
+
+    assert "## Degraded-mode behaviour" in readme
+    assert "fails closed" in readme
+    assert "503 Service Unavailable" in readme
+    assert "X-WAF-Degraded: true" in readme
+    assert "tracked separately in #69" in readme
