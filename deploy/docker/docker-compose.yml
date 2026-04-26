@@ -84,6 +84,7 @@ services:
 
   haproxy:
     image: haproxy:3.0-alpine
+    command: ["haproxy", "-d", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
     restart: unless-stopped
     depends_on:
       backend:
