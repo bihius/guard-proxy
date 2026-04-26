@@ -20,18 +20,30 @@ These services need to:
 - Support independent scaling and updates in production
 
 ## Decision
-Use **Docker Compose** as the primary orchestration tool with three compose files:
-- `docker-compose.yml` -- Base service definitions
-- `docker-compose.dev.yml` -- Development overrides (hot reload, debug ports, volume mounts)
-- `docker-compose.prod.yml` -- Production overrides (optimized builds, restart policies, resource limits)
+Use **Docker Compose** as the primary orchestration tool for the local and
+MVP deployment stack.
 
 For production, deploy on **Proxmox VE** using LXC containers running Docker.
+
+## Current M1 Implementation
+
+M1 implements the full local stack with:
+- `deploy/docker/docker-compose.yml` as the base five-service stack.
+- `deploy/docker/docker-compose.debug.yml` as the debug overlay used by `make dev`.
+- `deploy/docker/coraza.Dockerfile` building from `ghcr.io/corazawaf/coraza-spoa:0.6.1`.
+- `haproxy:3.0-alpine` exposed as host port `8080` and configured from `configs/haproxy/`.
+- `postgres:16-alpine`, backend, frontend, Coraza, and HAProxy health checks.
+- Named volumes for PostgreSQL data, HAProxy logs, Coraza logs, backend logs, and generated config.
+- Make targets for `run`, `dev`, `down`, `clean`, `logs`, `ps`, `seed`, and `coraza-build`.
+
+Production-specific compose overlays remain future work; the implemented M1
+deployment target is reproducible local Docker Compose.
 
 ## Rationale
 
 1. **Single command startup** -- `docker-compose up` starts all 5 services with correct networking, volumes, and environment. Critical for reproducibility in a thesis project
 2. **Network isolation** -- Docker networks handle service discovery (HAProxy reaches Coraza at `coraza:9000`). No port conflicts with host services
-3. **Multi-file composition** -- Base + override pattern keeps configs DRY. Development gets hot-reload and debug ports; production gets resource limits and restart policies
+3. **Multi-file composition** -- Base + override patterns can keep configs DRY. The current M1 stack uses a base file plus a debug overlay; production overlays remain future work.
 4. **Proxmox compatibility** -- Docker Compose runs inside LXC containers on Proxmox. This matches the planned production deployment (3 LXC containers: proxy, panel, monitoring)
 5. **Thesis reproducibility** -- Anyone reviewing the thesis can clone the repo and run `docker-compose up` to see the system working. This is a strong demonstration for the defense
 
@@ -77,23 +89,24 @@ For production, deploy on **Proxmox VE** using LXC containers running Docker.
 - PostgreSQL official Docker image handles initialization scripts
 - Volume mounts for development enable hot-reload but can have file-watching issues on macOS
 
-## Implementation
-- [ ] Create `deploy/docker/docker-compose.yml` with all 5 services
-- [ ] Create `deploy/docker/docker-compose.dev.yml` with dev overrides
-- [ ] Create `deploy/docker/docker-compose.prod.yml` with production settings
-- [ ] Create `src/coraza/Dockerfile` for custom Coraza SPOA image
-- [ ] Create `.env.example` with all required environment variables
-- [ ] Add `Makefile` targets: `make dev`, `make prod`, `make down`, `make clean`
+## Implementation Status
 
-## Planned Service Configuration
+- [x] Create `deploy/docker/docker-compose.yml` with all 5 services
+- [x] Create `deploy/docker/docker-compose.debug.yml` with debug overrides
+- [x] Create `deploy/docker/coraza.Dockerfile` for the pinned Coraza SPOA image
+- [x] Create `deploy/docker/.env.example` with required environment variables
+- [x] Add Makefile targets for local stack operation and troubleshooting
+- [ ] Add production-specific compose overlays when production deployment is in scope
+
+## M1 Service Configuration
 
 | Service | Image | Ports | Notes |
 |---------|-------|-------|-------|
-| haproxy | haproxy:2.8 | 80, 443 | SPOE filter, custom config mount |
-| coraza | custom build | 9000 (SPOE) | Go binary with CRS rules |
-| backend | custom build | 8000 | FastAPI + uvicorn |
-| frontend | node:20 (dev) / nginx (prod) | 3000 (dev) | Vite dev server or static build |
-| postgres | postgres:15 | 5432 | Init script for schema |
+| haproxy | `haproxy:3.0-alpine` | `8080:80` | SPOE filter, WAF enforcement, config mounts |
+| coraza | `ghcr.io/corazawaf/coraza-spoa:0.6.1` via `deploy/docker/coraza.Dockerfile` | `9000` internal | Coraza SPOA with mounted CRS rules |
+| backend | custom build from `src/backend/Dockerfile` | `8000` internal | FastAPI + uvicorn |
+| frontend | custom build from `src/frontend/Dockerfile` | `3000:5173` | Vite dev server |
+| postgres | `postgres:16-alpine` | `5432` internal | Policy and log storage |
 
 ## Validation
 This decision is correct if:

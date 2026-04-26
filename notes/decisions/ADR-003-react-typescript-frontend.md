@@ -15,16 +15,22 @@ The Guard Proxy system needs an admin panel for managing WAF policies. The panel
 The frontend is an internal admin tool, not a public-facing website. It needs to be functional, maintainable, and reasonably polished -- but not a design showcase.
 
 ## Decision
-Use **React 18** with **TypeScript 5** (strict mode), **Vite 5** as build tool, **TanStack Query** for server state, **React Hook Form** for forms, **shadcn/ui** (Radix UI + Tailwind CSS 3) for components, and **pnpm** as the only frontend package manager.
+Use **React 18** with **TypeScript 5** in strict mode, **Vite**, **Tailwind
+CSS**, and **pnpm** as the only frontend package manager.
+
+## Current M1 Implementation
+
+The implemented frontend is a React 18 and TypeScript SPA built with Vite 6,
+Tailwind CSS v4, React Router v6, pnpm, and a custom CSS-token design system.
+Additional server-state, form, or component libraries remain optional future
+choices if the policy editor and data-fetching flows need them.
 
 ## Rationale
 
 1. **React** -- Largest ecosystem, most libraries, best TypeScript support among UI frameworks. Finding solutions to problems is easier due to community size
 2. **TypeScript strict mode** -- The API returns complex nested objects (policies with rules, vhosts with configs). Type safety prevents runtime errors when the API schema changes
 3. **Vite** -- Instant HMR, fast builds. Development experience is significantly better than webpack-based setups
-4. **TanStack Query** -- Eliminates manual loading/error/cache state management for API calls. Built-in refetching, optimistic updates, and pagination support match our use cases exactly
-5. **shadcn/ui** -- Copy-paste components (not an npm dependency), so we own the code. Built on Radix UI (accessible) + Tailwind (utility-first). Good-looking defaults with zero design effort
-6. **React Hook Form** -- The policy editor has complex forms (dynamic IP lists, rule selection, nested config). RHF handles this with minimal re-renders
+4. **Library flexibility** -- The current frontend keeps data fetching, form handling, and shared components lightweight. More specialized libraries can be added when the policy editor or log viewer needs them.
 
 ## Alternatives Considered
 
@@ -53,13 +59,10 @@ Use **React 18** with **TypeScript 5** (strict mode), **Vite 5** as build tool, 
 ### Positive
 - Type-safe frontend that catches errors at compile time
 - Rich ecosystem of React libraries for any need
-- shadcn/ui provides professional-looking UI with minimal effort
-- TanStack Query eliminates most hand-written data fetching logic
 - Fast development with Vite HMR
 
 ### Negative
 - React's mental model (hooks, effects, closures) has a learning curve
-- shadcn/ui components need manual installation (copy-paste per component)
 - Tailwind's utility classes make HTML verbose
 
 ### Neutral
@@ -74,5 +77,5 @@ This decision is correct if:
 
 ## References
 - [React Documentation](https://react.dev/)
-- [shadcn/ui](https://ui.shadcn.com/)
-- [TanStack Query](https://tanstack.com/query/)
+- [Vite Documentation](https://vite.dev/)
+- [Tailwind CSS Documentation](https://tailwindcss.com/)

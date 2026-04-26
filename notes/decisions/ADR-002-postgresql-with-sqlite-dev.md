@@ -21,6 +21,12 @@ The database must support:
 ## Decision
 Use **PostgreSQL 15+** for production/Docker environments and **SQLite 3** for local development and testing. Use **SQLAlchemy 2.0** as the ORM to abstract database differences.
 
+## Current M1 Implementation
+
+The Docker Compose stack currently uses `postgres:16-alpine`, which satisfies
+the PostgreSQL 15+ decision. Local backend development and tests continue to
+use SQLite through the configured `DATABASE_URL` default and test fixtures.
+
 ## Rationale
 
 1. **PostgreSQL for production** -- JSONB support for flexible policy schemas, proper concurrency (MVCC), full-text search for log filtering, and battle-tested reliability

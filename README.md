@@ -8,14 +8,22 @@ Guard Proxy is a Web Application Firewall (WAF) solution designed for self-hoste
 
 This project is being developed as a master's thesis at Wroclaw University DSW. 
 
-## Planned Features
+## Implemented M1 Capabilities
 
-- **HAProxy 2.8+** as reverse proxy with SPOE integration
-- **Coraza WAF 3.x** with OWASP CRS for threat detection
-- **Per-vhost policies** with configurable paranoia levels (PL1-PL4)
-- **Anomaly scoring** for intelligent threat detection
-- **Admin panel** (FastAPI + React) for managing policies and monitoring
-- **Docker-based deployment** for easy setup
+- **HAProxy 3.0** reference reverse proxy with SPOE integration
+- **Coraza SPOA** with OWASP CRS 4.x for request inspection
+- **Fail-closed WAF degraded mode** when Coraza inspection is unavailable
+- **FastAPI backend** for auth, vhosts, policies, rule overrides, logs, and health
+- **React admin panel** served by the Docker Compose stack
+- **Docker Compose full-stack deployment** for local development and smoke testing
+
+## Planned/Post-M1 Capabilities
+
+- Generated HAProxy and Coraza configuration from stored policies
+- Policy-driven graceful reload, validation, and rollback
+- Richer per-vhost runtime policy wiring
+- Complete frontend workflows for policy editing, monitoring, and WAF log review
+- Observability with Prometheus, Grafana, and Loki
 
 ## Architecture
 
@@ -33,8 +41,8 @@ graph TB
 
 ## Tech Stack
 
-- **Proxy**: HAProxy 2.8+ with SPOE
-- **WAF**: Coraza 3.x + OWASP CRS 4.x
+- **Proxy**: HAProxy 3.0 with SPOE
+- **WAF**: Coraza SPOA 0.6.1 + OWASP CRS 4.x
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy, PostgreSQL
 - **Frontend**: React, TypeScript, Vite, Tailwind CSS, pnpm
 - **Infrastructure (MVP)**: Docker Compose
@@ -60,7 +68,8 @@ Or view [milestones](https://github.com/bihius/guard-proxy/milestones)
    - `cp deploy/docker/.env.example deploy/docker/.env`
    - Update secrets in `deploy/docker/.env`
 2. Start the stack:
-   - `make dev`
+   - `make run` for normal mode
+   - `make dev` for HAProxy and Coraza debug logging
 3. Access services:
    - Frontend: `http://localhost:3000`
    - API via HAProxy: `http://localhost:8080`
