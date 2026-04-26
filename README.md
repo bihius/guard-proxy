@@ -12,7 +12,7 @@ This project is being developed as a master's thesis at Wroclaw University DSW.
 
 - **HAProxy 3.0** reference reverse proxy with SPOE integration
 - **Coraza SPOA** with OWASP CRS 4.x for request inspection
-- **Fail-closed WAF degraded mode** when Coraza inspection is unavailable
+- **WAF degraded-mode error signalling** for Coraza inspection failures
 - **FastAPI backend** for auth, vhosts, policies, rule overrides, logs, and health
 - **React admin panel** served by the Docker Compose stack
 - **Docker Compose full-stack deployment** for local development and smoke testing
