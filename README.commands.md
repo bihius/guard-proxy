@@ -58,7 +58,8 @@ docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env
 docker volume ls | grep guard-proxy                                  # Inspect pgdata, log, and generated_config volumes
 make ps                                                              # Show service status
 make logs                                                            # Follow all service logs
-make down                                                            # Stop stack and remove volumes
+make down                                                            # Stop stack (keeps named volumes)
+make clean                                                           # Stop stack and remove volumes
 make seed                                                            # Seed admin user in backend container
 ```
 
