@@ -1,0 +1,20 @@
+# Debug variant of coraza-spoa.yaml.
+# Mounted by docker-compose.debug.yml (used by `make dev`).
+# Do NOT use against real traffic: all request details are logged.
+
+bind: 0.0.0.0:9000
+log_level: debug
+log_file: /dev/stdout
+log_format: console
+
+default_application: default
+
+applications:
+  - name: default
+    directives: |
+      Include /etc/coraza/coraza.conf
+    response_check: false
+    transaction_ttl_ms: 60000
+    log_level: debug
+    log_file: /dev/stdout
+    log_format: console

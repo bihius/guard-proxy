@@ -1,0 +1,12 @@
+# Debug overlay for the Guard Proxy stack.
+# Applied on top of docker-compose.yml by `make dev`.
+# Enables HAProxy verbose output (-d flag) and Coraza debug logging.
+# Do NOT use against real traffic.
+
+services:
+  haproxy:
+    command: ["haproxy", "-d", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+
+  coraza:
+    volumes:
+      - ../../configs/coraza/coraza-spoa.debug.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro
