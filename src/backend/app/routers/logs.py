@@ -17,6 +17,7 @@ from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
+
 def require_log_ingest_secret(
     x_guard_proxy_ingest_secret: str | None = Header(
         default=None,

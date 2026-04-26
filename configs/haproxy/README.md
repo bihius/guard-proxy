@@ -114,9 +114,9 @@ The configuration is exercised in two ways:
    ```sh
    docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env up -d --build
    docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env ps
-   curl -i -H 'Host: app.local' http://localhost:8080/health
-   curl -i -H 'Host: app.local' "http://localhost:8080/?id=1%27%20OR%20%271%27=%271"
-   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env down -v
+   curl -i http://localhost:8080/health
+   curl -i "http://localhost:8080/?id=1%27%20OR%20%271%27=%271"
+   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env down
    ```
 
    All five services should become healthy. The benign `/health` request

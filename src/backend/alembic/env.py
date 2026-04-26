@@ -1,9 +1,11 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.config import get_database_settings
+from app.database import Base
+from app.models import *  # noqa: F403 — register all models for Alembic metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -18,14 +20,10 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from app.config import get_database_settings
-from app.database import Base
-from app.models import *  # noqa: F403 — importuje wszystkie modele
 
 database_settings = get_database_settings()
 
-# Nadpisz URL z .env (settings.database_url) zamiast hardcoded z alembic.ini
-# Dzięki temu: dev=SQLite, prod=PostgreSQL — automatycznie z DATABASE_URL w .env
+# Override URL from settings (e.g. DATABASE_URL in .env) instead of alembic.ini alone.
 config.set_main_option("sqlalchemy.url", database_settings.database_url)
 
 target_metadata = Base.metadata

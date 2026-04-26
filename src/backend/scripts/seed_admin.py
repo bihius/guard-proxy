@@ -2,7 +2,8 @@
 
 Usage:
     uv run python scripts/seed_admin.py
-    uv run python scripts/seed_admin.py --email admin@example.com --password supersecretpw
+    uv run python scripts/seed_admin.py --email admin@example.com \\
+        --password supersecretpw
 
 If --email / --password are not provided, the script reads
 ADMIN_EMAIL and ADMIN_PASSWORD from the environment (or `.env` file).

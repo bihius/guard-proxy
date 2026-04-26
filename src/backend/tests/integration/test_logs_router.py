@@ -368,7 +368,11 @@ def test_ingest_log_event_persists_valid_payload(
     log_ingest_headers: dict[str, str],
 ) -> None:
     """A valid ingest request should store the event in the database."""
-    resp = client.post("/logs/ingest", json=_ingest_payload(), headers=log_ingest_headers)
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(),
+        headers=log_ingest_headers,
+    )
     assert resp.status_code == 201
 
     body = resp.json()
@@ -445,7 +449,11 @@ def test_ingest_log_event_is_idempotent_when_producer_event_id_retries(
     log_ingest_headers: dict[str, str],
 ) -> None:
     """Retrying the same producer event id should return the existing record."""
-    first = client.post("/logs/ingest", json=_ingest_payload(), headers=log_ingest_headers)
+    first = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(),
+        headers=log_ingest_headers,
+    )
     second = client.post(
         "/logs/ingest",
         json=_ingest_payload(message="Changed body should still dedupe"),
@@ -480,4 +488,3 @@ def test_ingest_then_list_logs_returns_persisted_event(
     body = resp.json()
     assert body["total"] == 1
     assert body["items"][0]["producer_event_id"] == "coraza-event-3"
-
