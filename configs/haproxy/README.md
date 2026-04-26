@@ -86,6 +86,56 @@ equal `"deny"` and the request is forwarded — i.e. the proxy
 fail-opens. Hardening this into an explicit degraded mode is tracked
 in #80; M1 only needs the happy path.
 
+## Troubleshooting SPOE frames
+
+The M1 reference stack keeps HAProxy and Coraza in verbose mode so a
+single request can be followed across both services. HAProxy runs with
+the `-d` debug flag and logs to stdout at `debug` level. Coraza SPOA
+logs to stdout at `debug` level.
+
+1. Start the stack and follow only the WAF path logs:
+
+   ```sh
+   docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env up -d --build
+   docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env logs -f haproxy coraza
+   ```
+
+2. Send a request with an explicit correlation id:
+
+   ```sh
+   curl -i \
+     -H "Host: app.local" \
+     -H "X-Request-ID: spoe-debug-1" \
+     "http://localhost:8080/?id=1%27%20OR%20%271%27=%271"
+   ```
+
+3. Check HAProxy output first:
+
+   - the request should pass through `fe_http`;
+   - non-`/health` requests should trigger `send-spoe-group coraza coraza-req`;
+   - denied requests should show a `403` generated before `be_app`;
+   - allowed requests with a score should include the `X-WAF-Score` header.
+
+4. Check Coraza output next:
+
+   - the SPOA should receive the `default` application name;
+   - request metadata should match the `coraza-req` arguments documented above;
+   - matching CRS rules should also appear in `/var/log/coraza/audit.json`.
+
+5. If HAProxy returns `421`, the request failed the reference host ACL
+   before routing. Retry with `Host: app.local`.
+
+6. If HAProxy returns an application response while Coraza is down,
+   this is the expected M1 fail-open behavior from `option
+   set-on-error error`; degraded-mode handling is tracked in #80.
+
+For raw frame inspection, capture the local SPOA port while reproducing
+the request:
+
+```sh
+tcpdump -i lo -A -s 0 port 9000
+```
+
 ## Validating the config
 
 The configuration is exercised in two ways:
