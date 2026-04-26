@@ -1,8 +1,17 @@
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+
+def _find_repo_root(start: Path) -> Path:
+    for candidate in (start, *start.parents):
+        if (candidate / "pyproject.toml").exists() or (candidate / ".git").exists():
+            return candidate
+
+    raise FileNotFoundError(
+        f"Could not locate repository root from {start}; expected pyproject.toml or .git"
+    )
 
 
+REPO_ROOT = _find_repo_root(Path(__file__).resolve().parent)
 def test_reference_haproxy_config_enables_debug_logging() -> None:
     config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
 
