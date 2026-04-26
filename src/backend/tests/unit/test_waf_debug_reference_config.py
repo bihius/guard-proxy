@@ -76,14 +76,16 @@ def test_haproxy_readme_documents_spoe_troubleshooting() -> None:
 def test_reference_haproxy_config_fails_closed_on_spoe_errors() -> None:
     config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
 
-    assert "var(txn.coraza.error) -m found" in config
     assert (
         "http-request set-log-level err if { var(txn.coraza.error) -m found }"
         in config
     )
-    assert "http-request return status 503" in config
-    assert "X-WAF-Degraded true" in config
-    assert "X-WAF-Error %[var(txn.coraza.error)]" in config
+    assert (
+        "http-request return status 503 "
+        'hdr "X-WAF-Degraded" "true" '
+        'hdr "X-WAF-Error" "%[var(txn.coraza.error)]" '
+        "if { var(txn.coraza.error) -m found }" in config
+    )
 
 
 def test_haproxy_readme_documents_fail_closed_degraded_mode() -> None:
