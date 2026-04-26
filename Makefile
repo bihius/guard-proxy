@@ -1,10 +1,14 @@
 COMPOSE_FILE := deploy/docker/docker-compose.yml
+COMPOSE_DEBUG_FILE := deploy/docker/docker-compose.debug.yml
 ENV_FILE := deploy/docker/.env
 
-.PHONY: dev down clean logs ps seed coraza-build
+.PHONY: run dev down clean logs ps seed coraza-build
+
+run:
+	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build
 
 dev:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build
+	docker-compose -f $(COMPOSE_FILE) -f $(COMPOSE_DEBUG_FILE) --env-file $(ENV_FILE) up --build
 
 down:
 	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down

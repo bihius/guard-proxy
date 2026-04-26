@@ -44,7 +44,7 @@ pnpm run dev          # Dev server (port 3000)
 ```bash
 haproxy -c -f configs/haproxy/haproxy.cfg  # Validate config
 systemctl reload haproxy                    # Graceful reload (NEVER restart in prod)
-tcpdump -i lo -A -s 0 port 9000            # Debug SPOE traffic
+docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env exec haproxy tcpdump -i any -A -s 0 port 9000  # Debug SPOE traffic (inside container)
 ```
 
 ## Docker
@@ -52,9 +52,10 @@ tcpdump -i lo -A -s 0 port 9000            # Debug SPOE traffic
 ```bash
 cp deploy/docker/.env.example deploy/docker/.env                     # Create env file for compose
 docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env config
-make dev                                                             # Start all services (runs backend migrations, attached, with build)
+make run                                                             # Start all services (normal mode)
+make dev                                                             # Start all services with HAProxy -d flag and Coraza debug logging
 make coraza-build                                                    # Build the pinned Coraza SPOA + CRS image
-docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza  # Reload mounted Coraza config/rules
+docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza  # Reload mounted Coraza config/rules
 docker volume ls | grep guard-proxy                                  # Inspect pgdata, log, and generated_config volumes
 make ps                                                              # Show service status
 make logs                                                            # Follow all service logs
