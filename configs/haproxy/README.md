@@ -129,11 +129,14 @@ logs to stdout at `debug` level.
    this is the expected M1 fail-open behavior from `option
    set-on-error error`; degraded-mode handling is tracked in #80.
 
-For raw frame inspection, capture the local SPOA port while reproducing
-the request:
+For raw frame inspection in the Docker Compose setup, capture the SPOA
+traffic from inside the `haproxy` container while reproducing the
+request. Container-to-container traffic does not normally traverse the
+host `lo` interface:
 
 ```sh
-tcpdump -i lo -A -s 0 port 9000
+docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
+  exec haproxy tcpdump -i any -A -s 0 port 9000
 ```
 
 ## Validating the config
