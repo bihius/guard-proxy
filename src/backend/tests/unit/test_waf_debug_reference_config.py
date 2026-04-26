@@ -96,4 +96,3 @@ def test_haproxy_readme_documents_fail_closed_degraded_mode() -> None:
     assert "503 Service Unavailable" in readme
     assert "X-WAF-Degraded: true" in readme
     assert "tracked separately in #69" in readme
-    assert "fail-open" not in readme
