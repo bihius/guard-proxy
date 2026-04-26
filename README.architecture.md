@@ -60,10 +60,10 @@ with `503 Service Unavailable` and WAF degraded headers.
 
 ### Request Processing
 1. Client sends an HTTP request to HAProxy.
-2. In the current M1 reference config, HAProxy sends request-phase metadata to Coraza SPOA through SPOE before enforcing the unknown-host deny ACL.
-3. Coraza evaluates OWASP CRS rules and returns allow/deny metadata.
-4. HAProxy enforces the WAF decision, rejects unknown hosts, or returns `503` if SPOE inspection fails.
-5. HAProxy forwards allowed requests to the FastAPI backend.
+2. HAProxy rejects unknown hosts with `421` before WAF inspection.
+3. HAProxy sends request-phase metadata to Coraza SPOA through SPOE.
+4. Coraza evaluates OWASP CRS rules and returns allow/deny metadata.
+5. HAProxy returns `403` for denied traffic, `503` for WAF inspection failures (`txn.coraza.error`), or forwards allowed requests to the FastAPI backend.
 
 ### Policy Management
 1. Admin users manage vhosts, policies, and rule overrides through the React UI and FastAPI API.
