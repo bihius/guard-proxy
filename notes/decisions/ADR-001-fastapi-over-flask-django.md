@@ -15,7 +15,7 @@ The Guard Proxy system requires a backend API for the policy management panel. T
 The backend needs to be type-safe (complex policy schemas), provide auto-generated API documentation (thesis deliverable), and keep async-capable options available for future runtime and I/O-heavy paths.
 
 ## Decision
-Use **FastAPI** (Python 3.11+) as the backend web framework.
+Use **FastAPI** (Python 3.13+) as the backend web framework.
 
 ## Current M1 Implementation
 
