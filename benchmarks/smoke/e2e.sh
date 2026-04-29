@@ -146,7 +146,7 @@ assert_status "SQL injection request" "403" "${HAPROXY_BASE_URL}/?id=1%27%20OR%2
 
 assert_status "Degraded request without Coraza" "503" "${HAPROXY_BASE_URL}/"
 assert_header "Degraded WAF status header" "X-WAF-Status: degraded" "${HAPROXY_BASE_URL}/"
-assert_header "Degraded WAF reason header" "X-WAF-Degraded-Reason:" "${HAPROXY_BASE_URL}/"
+assert_header "Degraded WAF reason header" "X-WAF-Degraded-Reason: coraza-unavailable" "${HAPROXY_BASE_URL}/"
 assert_status "Health bypass while Coraza is stopped" "200" "${HAPROXY_BASE_URL}/health"
 
 echo "E2E smoke test passed."
