@@ -53,6 +53,7 @@ docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env
 cp deploy/docker/.env.example deploy/docker/.env                     # Create env file for compose
 docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env config
 make run                                                             # Start all services (normal mode)
+HAPROXY_HTTP_PORT=18080 make run                                     # Start HAProxy on an alternate host port
 make dev                                                             # Start all services with HAProxy -d flag and Coraza debug logging
 make coraza-build                                                    # Build the pinned Coraza SPOA + CRS image
 docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza  # Reload mounted Coraza config/rules

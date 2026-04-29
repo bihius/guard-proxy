@@ -43,7 +43,8 @@ headers, and body data to Coraza SPOA over SPOE. Coraza evaluates the request
 against the configured OWASP CRS bundle and returns transaction variables such
 as the action and anomaly score. HAProxy blocks `deny` decisions with `403`.
 If SPOE inspection is unavailable or returns an error, HAProxy fails closed
-with `503 Service Unavailable` and WAF degraded headers.
+with `503 Service Unavailable`, `X-WAF-Status: degraded`, and a
+machine-readable degraded reason header.
 
 ## Components
 
@@ -63,7 +64,7 @@ with `503 Service Unavailable` and WAF degraded headers.
 2. HAProxy rejects unknown hosts with `421` before WAF inspection.
 3. HAProxy sends request-phase metadata to Coraza SPOA through SPOE.
 4. Coraza evaluates OWASP CRS rules and returns allow/deny metadata.
-5. HAProxy returns `403` for denied traffic, `503` for WAF inspection failures (`txn.coraza.error`), or forwards allowed requests to the FastAPI backend.
+5. HAProxy returns `403` for denied traffic, `503` for WAF inspection failures (`coraza-unavailable` or `spoe-processing-error`), or forwards allowed requests to the FastAPI backend.
 
 ### Policy Management
 1. Admin users manage vhosts, policies, and rule overrides through the React UI and FastAPI API.
