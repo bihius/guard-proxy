@@ -15,7 +15,15 @@ The Guard Proxy system requires a backend API for the policy management panel. T
 The backend needs to be type-safe (complex policy schemas), provide auto-generated API documentation (thesis deliverable), and keep async-capable options available for future runtime and I/O-heavy paths.
 
 ## Decision
-Use **FastAPI** (Python 3.11+) as the backend web framework.
+Use **FastAPI** (Python 3.13+) as the backend web framework.
+
+## Current M1 Implementation
+
+The backend currently targets Python 3.13 in `src/backend/pyproject.toml`.
+Database access uses synchronous SQLAlchemy sessions for MVP scope, as recorded
+in [ADR-006](ADR-006-sync-sqlalchemy-for-mvp.md). FastAPI remains the API
+framework and still keeps an async migration path open for future runtime or
+I/O-heavy work.
 
 ## Rationale
 
