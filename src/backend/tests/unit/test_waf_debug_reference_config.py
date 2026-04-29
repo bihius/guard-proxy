@@ -34,6 +34,14 @@ def test_default_docker_compose_does_not_use_debug_flag() -> None:
     assert '"-d"' not in compose
 
 
+def test_default_docker_compose_starts_haproxy_before_coraza_is_healthy() -> None:
+    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+
+    assert "coraza:\n        condition: service_started" in compose
+    assert "coraza:\n        condition: service_healthy" not in compose
+    assert '"${HAPROXY_HTTP_PORT:-8080}:80"' in compose
+
+
 def test_debug_coraza_spoa_config_enables_debug_logging() -> None:
     config = (REPO_ROOT / "configs/coraza/coraza-spoa.debug.yaml").read_text()
 
@@ -77,7 +85,18 @@ def test_reference_haproxy_config_fails_closed_on_spoe_errors() -> None:
     config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
 
     assert (
-        "http-request set-log-level err if { var(txn.coraza.error) -m found }"
+        "http-request set-var(txn.waf_degraded_reason) "
+        "str(spoe-processing-error) if { var(txn.coraza.error) -m found }"
+        in config
+    )
+    assert (
+        "http-request set-log-level err if "
+        "{ var(txn.waf_degraded_reason) -m found }"
+        in config
+    )
+    assert (
+        "http-request capture var(txn.waf_degraded_reason) len 32 "
+        "if { var(txn.waf_degraded_reason) -m found }"
         in config
     )
 
@@ -89,22 +108,71 @@ def test_reference_haproxy_config_fails_closed_on_spoe_errors() -> None:
         (
             line.strip()
             for line in config.splitlines()
-            if line.strip().startswith("http-request return status 503")
+            if "X-WAF-Degraded-Reason spoe-processing-error" in line
         ),
         None,
     )
-    assert return_line is not None, "No 'http-request return status 503' rule found"
+    assert return_line is not None, "No SPOE error return rule found"
+    assert return_line.startswith("http-request return status 503")
     assert (
-        "hdr X-WAF-Degraded true" in return_line
-        or 'hdr "X-WAF-Degraded" "true"' in return_line
-    ), f"X-WAF-Degraded header missing from return rule: {return_line}"
+        "hdr X-WAF-Status degraded" in return_line
+        or 'hdr "X-WAF-Status" "degraded"' in return_line
+    ), f"X-WAF-Status header missing from return rule: {return_line}"
+    assert "hdr X-WAF-Degraded-Reason spoe-processing-error" in return_line, (
+        f"X-WAF-Degraded-Reason header missing from return rule: {return_line}"
+    )
     assert (
-        "hdr X-WAF-Error %[var(txn.coraza.error)]" in return_line
-        or 'hdr "X-WAF-Error" "%[var(txn.coraza.error)]"' in return_line
-    ), f"X-WAF-Error header missing from return rule: {return_line}"
+        "hdr X-WAF-Error-Code %[var(txn.coraza.error)]" in return_line
+        or 'hdr "X-WAF-Error-Code" "%[var(txn.coraza.error)]"' in return_line
+    ), f"X-WAF-Error-Code header missing from return rule: {return_line}"
     assert "if { var(txn.coraza.error) -m found }" in return_line, (
         f"Condition missing from return rule: {return_line}"
     )
+
+
+def test_reference_haproxy_config_fails_closed_when_coraza_is_unavailable() -> None:
+    config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
+
+    assert (
+        "http-request set-var(txn.waf_degraded_reason) "
+        "str(coraza-unavailable) if !is_health { nbsrv(coraza-spoa) eq 0 }"
+        in config
+    )
+
+    unavailable_line = next(
+        (
+            line.strip()
+            for line in config.splitlines()
+            if "X-WAF-Degraded-Reason coraza-unavailable" in line
+        ),
+        None,
+    )
+    assert unavailable_line is not None, "No coraza-unavailable return rule found"
+    assert unavailable_line.startswith("http-request return status 503")
+    assert "hdr X-WAF-Status degraded" in unavailable_line
+    assert "hdr X-WAF-Degraded-Reason coraza-unavailable" in unavailable_line
+    assert "if { var(txn.waf_degraded_reason) -m str coraza-unavailable }" in (
+        unavailable_line
+    )
+
+
+def test_reference_haproxy_config_preserves_host_health_and_waf_rules() -> None:
+    config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
+
+    assert "acl is_health path /health" in config
+    assert "http-request send-spoe-group coraza coraza-req unless is_health" in config
+    assert "http-request deny deny_status 421 if !host_app" in config
+    assert (
+        "http-request deny deny_status 403 if "
+        "{ var(txn.coraza.action) -m str deny }"
+        in config
+    )
+
+
+def test_reference_coraza_spoe_config_sets_error_variable() -> None:
+    config = (REPO_ROOT / "configs/haproxy/coraza.cfg").read_text()
+
+    assert "option              set-on-error  error" in config
 
 
 def test_haproxy_readme_documents_fail_closed_degraded_mode() -> None:
@@ -113,5 +181,8 @@ def test_haproxy_readme_documents_fail_closed_degraded_mode() -> None:
     assert "## Degraded-mode behaviour" in readme
     assert "fails closed" in readme
     assert "503 Service Unavailable" in readme
-    assert "X-WAF-Degraded: true" in readme
+    assert "X-WAF-Status: degraded" in readme
+    assert "X-WAF-Degraded-Reason" in readme
+    assert "coraza-unavailable" in readme
+    assert "spoe-processing-error" in readme
     assert "tracked separately in #69" in readme
