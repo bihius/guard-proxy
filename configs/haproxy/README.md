@@ -34,9 +34,15 @@ Client ──► HAProxy :80 ──► (SPOE) ──► Coraza SPOA :9000
    `coraza-spoa` backend (TCP, `coraza:9000`).
 4. The SPOA evaluates the request against Coraza/CRS rules and
    returns variables under `txn.coraza.*`.
-5. If `txn.coraza.action == "deny"`, HAProxy responds with
+5. If the `coraza-spoa` backend has no usable servers, HAProxy
+   returns `503 Service Unavailable` with degraded-mode headers before
+   attempting SPOE.
+6. If SPOE starts but fails, `txn.coraza.error` is set and HAProxy
+   returns `503 Service Unavailable` with degraded-mode headers before
+   contacting the backend.
+7. If `txn.coraza.action == "deny"`, HAProxy responds with
    `403 Forbidden` and never contacts the backend.
-6. Otherwise the request is routed to `be_app`, which forwards to
+8. Otherwise the request is routed to `be_app`, which forwards to
    `backend:8000` (the FastAPI service in Docker Compose).
 
 ## SPOE variables
@@ -48,6 +54,7 @@ All variables set by the SPOA are namespaced via
 |----------------------|--------------------------------------------------------|
 | `txn.coraza.action`  | Decision string (`deny` blocks; anything else allows)  |
 | `txn.coraza.anomaly_score` | Inbound anomaly score from the rule set, propagated as header |
+| `txn.coraza.error`   | SPOE/SPOP error code set by `option set-on-error error` |
 | `txn.coraza.id`      | Transaction id correlated with HAProxy's `unique-id`  |
 
 The exact set of variables produced depends on the Coraza SPOA
@@ -80,22 +87,25 @@ Response-phase inspection is deliberately out of scope for M1
 
 ## Degraded-mode behaviour
 
-`spoe-agent` is configured with `option set-on-error error`. If the
-SPOA is unreachable, times out, returns a malformed response, or
-returns an internal processing error, HAProxy sets
-`txn.coraza.error` to the SPOE/SPOP error code.
+`spoe-agent` is configured with `option set-on-error error`. If SPOE
+processing starts and then times out, receives a malformed response, or
+hits an internal processing error, HAProxy sets `txn.coraza.error` to
+the SPOE/SPOP error code. HAProxy also checks `nbsrv(coraza-spoa)` before
+sending SPOE, so startup and unhealthy-container windows fail closed even
+when no SPOE exchange can begin.
 
 The M1 reference configuration fails closed for protected traffic:
-when `txn.coraza.error` is present, HAProxy returns
-`503 Service Unavailable` before contacting `be_app`. The response
-includes `X-WAF-Degraded: true` and `X-WAF-Error: <code>` so operators
-can distinguish WAF degraded mode from an application outage. HAProxy
-also raises the request log level to `err` for these requests.
+degraded requests return `503 Service Unavailable` before contacting
+`be_app`. Responses include `X-WAF-Status: degraded` and
+`X-WAF-Degraded-Reason`, whose value is either `coraza-unavailable` or
+`spoe-processing-error`. SPOE processing failures also include
+`X-WAF-Error-Code: <code>`. HAProxy raises these requests to `err` log
+level and captures the degraded reason in the access log.
 
-This covers startup or unhealthy Coraza containers, connection
-failures, SPOE processing timeouts, malformed WAF responses, and
-transient runtime failures. Backend/dashboard status reporting is
-tracked separately in #69.
+This intentionally trades availability for safety: if inspection is not
+available, protected application traffic is not forwarded. `/health`
+continues to bypass WAF inspection, and backend/dashboard status
+reporting is tracked separately in #69.
 
 ## Troubleshooting SPOE frames
 
@@ -139,10 +149,11 @@ mode uses `info` logging.
 5. If HAProxy returns `421`, the request failed the reference host ACL
    before routing. Retry with `Host: app.local`.
 
-6. If HAProxy returns `503` with `X-WAF-Degraded: true`, Coraza/SPOA
+6. If HAProxy returns `503` with `X-WAF-Status: degraded`, Coraza/SPOA
    inspection failed and the proxy failed closed before contacting the
-   backend. Use the `X-WAF-Error` value and HAProxy `err` log line to
-   identify the SPOE/SPOP failure class.
+   backend. Use `X-WAF-Degraded-Reason`, `X-WAF-Error-Code` when
+   present, and the HAProxy `err` log line to identify the failure
+   class.
 
 For raw frame inspection in the Docker Compose setup, capture the SPOA
 traffic from inside the `haproxy` container while reproducing the

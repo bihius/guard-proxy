@@ -7,6 +7,8 @@ COMPOSE_FILE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
 ENV_FILE="${REPO_ROOT}/deploy/docker/.env"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-120}"
 SMOKE_PROJECT="${SMOKE_PROJECT:-guard-proxy-smoke}"
+HAPROXY_HTTP_PORT="${HAPROXY_HTTP_PORT:-8080}"
+HAPROXY_BASE_URL="http://127.0.0.1:${HAPROXY_HTTP_PORT}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing ${ENV_FILE}. Copy deploy/docker/.env.example to deploy/docker/.env first." >&2
@@ -104,6 +106,31 @@ assert_status() {
   echo "${description}: got HTTP ${actual}."
 }
 
+assert_header() {
+  local description="$1"
+  local expected="$2"
+  local url="$3"
+  local headers
+
+  headers="$(
+    curl \
+      --silent \
+      --show-error \
+      --output /dev/null \
+      --dump-header - \
+      --header 'Host: app.local' \
+      "${url}"
+  )"
+
+  if ! grep -Fqi "${expected}" <<<"${headers}"; then
+    echo "${description}: expected response header containing '${expected}'." >&2
+    echo "${headers}" >&2
+    return 1
+  fi
+
+  echo "${description}: found '${expected}'."
+}
+
 cd "${REPO_ROOT}"
 
 "${COMPOSE[@]}" up -d --build postgres backend coraza haproxy
@@ -112,7 +139,14 @@ wait_for_healthy backend
 wait_for_healthy coraza
 wait_for_healthy haproxy
 
-assert_status "Benign request" "200" "http://127.0.0.1:8080/health"
-assert_status "SQL injection request" "403" "http://127.0.0.1:8080/?id=1%27%20OR%20%271%27%3D%271"
+assert_status "Benign request" "200" "${HAPROXY_BASE_URL}/health"
+assert_status "SQL injection request" "403" "${HAPROXY_BASE_URL}/?id=1%27%20OR%20%271%27%3D%271"
+
+"${COMPOSE[@]}" stop coraza
+
+assert_status "Degraded request without Coraza" "503" "${HAPROXY_BASE_URL}/"
+assert_header "Degraded WAF status header" "X-WAF-Status: degraded" "${HAPROXY_BASE_URL}/"
+assert_header "Degraded WAF reason header" "X-WAF-Degraded-Reason:" "${HAPROXY_BASE_URL}/"
+assert_status "Health bypass while Coraza is stopped" "200" "${HAPROXY_BASE_URL}/health"
 
 echo "E2E smoke test passed."
