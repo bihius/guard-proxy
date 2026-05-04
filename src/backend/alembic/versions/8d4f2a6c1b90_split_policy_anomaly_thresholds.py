@@ -57,10 +57,15 @@ def upgrade() -> None:
             )
         )
 
+    # Clamp any legacy 0 values to 1 so rows satisfy the new >= 1 CHECK
+    # constraints below.  The old constraint allowed anomaly_threshold >= 0,
+    # so existing production data may legitimately contain 0.
     op.execute(
         "UPDATE policies "
-        "SET inbound_anomaly_threshold = anomaly_threshold, "
-        "outbound_anomaly_threshold = anomaly_threshold"
+        "SET inbound_anomaly_threshold = CASE WHEN anomaly_threshold < 1 THEN 1 "
+        "ELSE anomaly_threshold END, "
+        "outbound_anomaly_threshold = CASE WHEN anomaly_threshold < 1 THEN 1 "
+        "ELSE anomaly_threshold END"
     )
 
     with op.batch_alter_table("policies") as batch_op:
