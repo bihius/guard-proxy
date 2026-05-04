@@ -84,7 +84,7 @@ class HaproxyRenderContext:
             self.vhost_acl_name, "HaproxyRenderContext.vhost_acl_name"
         )
         for host in self.vhost_hosts:
-            _validate_haproxy_host(host, "vhost_hosts entry")
+            _validate_haproxy_host(host, "HaproxyRenderContext.vhost_hosts")
 
 
 _ENVIRONMENT = Environment(

@@ -106,7 +106,7 @@ def test_haproxy_render_context_rejects_unsafe_acl_name(vhost_acl_name: str) -> 
     ],
 )
 def test_haproxy_render_context_rejects_unsafe_host(host: str) -> None:
-    with pytest.raises(ValueError, match="vhost_hosts"):
+    with pytest.raises(ValueError, match="HaproxyRenderContext.vhost_hosts"):
         HaproxyRenderContext(
             vhost_acl_name="safe_acl",
             vhost_hosts=(host,),
@@ -146,7 +146,7 @@ def test_haproxy_render_context_rejects_empty_acl_name() -> None:
 
 
 def test_haproxy_render_context_rejects_empty_host() -> None:
-    with pytest.raises(ValueError, match="vhost_hosts"):
+    with pytest.raises(ValueError, match="HaproxyRenderContext.vhost_hosts"):
         HaproxyRenderContext(
             vhost_acl_name="safe_acl",
             vhost_hosts=("",),
