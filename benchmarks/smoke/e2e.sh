@@ -143,6 +143,8 @@ assert_status "Benign request" "200" "${HAPROXY_BASE_URL}/health"
 assert_status "SQL injection request" "403" "${HAPROXY_BASE_URL}/?id=1%27%20OR%20%271%27%3D%271"
 
 "${COMPOSE[@]}" stop coraza
+# Wait for HAProxy to mark the coraza server DOWN (inter 2s fall 1 = at most 2 s).
+sleep 5
 
 assert_status "Degraded request without Coraza" "503" "${HAPROXY_BASE_URL}/"
 assert_header "Degraded WAF status header" "X-WAF-Status: degraded" "${HAPROXY_BASE_URL}/"
