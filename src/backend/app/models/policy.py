@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Enum,
     ForeignKey,
     Integer,
     String,
@@ -24,13 +26,21 @@ if TYPE_CHECKING:
     from app.models.vhost import VHost
 
 
+class PolicyEnforcementMode(enum.StrEnum):
+    """WAF enforcement mode for a policy."""
+
+    block = "block"
+    detect_only = "detect_only"
+
+
 class Policy(Base):
     """policies table storing WAF configuration templates.
 
     A policy defines how aggressively WAF filters traffic:
     - paranoia_level 1 = fewer false positives, less blocking
     - paranoia_level 4 = very aggressive, may block legitimate requests
-    - anomaly_threshold = how many "suspicion" points before a request is blocked
+    - inbound/outbound anomaly thresholds decide when CRS flags traffic
+    - enforcement_mode controls whether CRS blocks or only logs matches
     """
 
     __tablename__ = "policies"
@@ -40,8 +50,12 @@ class Policy(Base):
             name="ck_policies_paranoia_level",
         ),
         CheckConstraint(
-            "anomaly_threshold >= 0",
-            name="ck_policies_anomaly_threshold",
+            "inbound_anomaly_threshold >= 1",
+            name="ck_policies_inbound_anomaly_threshold",
+        ),
+        CheckConstraint(
+            "outbound_anomaly_threshold >= 1",
+            name="ck_policies_outbound_anomaly_threshold",
         ),
     )
 
@@ -63,10 +77,20 @@ class Policy(Base):
         nullable=False,
         default=1,  # 1-4, least aggressive by default
     )
-    anomaly_threshold: Mapped[int] = mapped_column(
+    inbound_anomaly_threshold: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         default=5,  # default OWASP CRS threshold
+    )
+    outbound_anomaly_threshold: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=4,  # CRS default outbound threshold
+    )
+    enforcement_mode: Mapped[PolicyEnforcementMode] = mapped_column(
+        Enum(PolicyEnforcementMode),
+        nullable=False,
+        default=PolicyEnforcementMode.block,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

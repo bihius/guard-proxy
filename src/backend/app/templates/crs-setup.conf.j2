@@ -1,0 +1,43 @@
+# Guard Proxy CRS 4.x baseline.
+#
+# Keep this file small and explicit. The full upstream reference lives in
+# configs/coraza/crs/crs-setup.conf.example.
+
+SecRuleEngine {{ sec_rule_engine }}
+
+SecAction \
+    "id:900000,\
+    phase:1,\
+    pass,\
+    nolog,\
+    tag:'OWASP_CRS',\
+    ver:'OWASP_CRS/4.25.0',\
+    setvar:tx.blocking_paranoia_level={{ policy.paranoia_level }}"
+
+SecAction \
+    "id:900005,\
+    phase:1,\
+    pass,\
+    nolog,\
+    tag:'OWASP_CRS',\
+    ver:'OWASP_CRS/4.25.0',\
+    setvar:tx.detection_paranoia_level={{ policy.paranoia_level }}"
+
+SecAction \
+    "id:900110,\
+    phase:1,\
+    pass,\
+    nolog,\
+    tag:'OWASP_CRS',\
+    ver:'OWASP_CRS/4.25.0',\
+    setvar:tx.inbound_anomaly_score_threshold={{ policy.inbound_anomaly_threshold }},\
+    setvar:tx.outbound_anomaly_score_threshold={{ policy.outbound_anomaly_threshold }}"
+
+SecAction \
+    "id:900990,\
+    phase:1,\
+    pass,\
+    nolog,\
+    tag:'OWASP_CRS',\
+    ver:'OWASP_CRS/4.25.0',\
+    setvar:tx.crs_setup_version=4250"
