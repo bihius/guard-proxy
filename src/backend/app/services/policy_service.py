@@ -3,12 +3,14 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.policy import Policy
+from app.models.policy import Policy, PolicyEnforcementMode
 
 NON_NULLABLE_PATCH_FIELDS = {
     "name",
     "paranoia_level",
-    "anomaly_threshold",
+    "inbound_anomaly_threshold",
+    "outbound_anomaly_threshold",
+    "enforcement_mode",
     "is_active",
 }
 
@@ -17,7 +19,9 @@ PATCHABLE_FIELDS = {
     "name",
     "description",
     "paranoia_level",
-    "anomaly_threshold",
+    "inbound_anomaly_threshold",
+    "outbound_anomaly_threshold",
+    "enforcement_mode",
     "is_active",
 }
 
@@ -71,7 +75,9 @@ class PolicyService:
         name: str,
         description: str | None,
         paranoia_level: int,
-        anomaly_threshold: int,
+        inbound_anomaly_threshold: int,
+        outbound_anomaly_threshold: int,
+        enforcement_mode: PolicyEnforcementMode,
         created_by: int | None,
     ) -> Policy:
         """Create and persist a new policy."""
@@ -79,7 +85,9 @@ class PolicyService:
             name=name,
             description=description,
             paranoia_level=paranoia_level,
-            anomaly_threshold=anomaly_threshold,
+            inbound_anomaly_threshold=inbound_anomaly_threshold,
+            outbound_anomaly_threshold=outbound_anomaly_threshold,
+            enforcement_mode=enforcement_mode,
             is_active=True,
             created_by=created_by,
         )

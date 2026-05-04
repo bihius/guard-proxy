@@ -14,7 +14,9 @@ def _create_policy(
     name: str = "Default Policy",
     description: str = "Domyslna polityka",
     paranoia_level: int = 2,
-    anomaly_threshold: int = 5,
+    inbound_anomaly_threshold: int = 5,
+    outbound_anomaly_threshold: int = 5,
+    enforcement_mode: str = "block",
 ) -> dict[str, Any]:
     """Pomocniczo tworzy politykę i zwraca body JSON."""
     resp = client.post(
@@ -24,7 +26,9 @@ def _create_policy(
             "name": name,
             "description": description,
             "paranoia_level": paranoia_level,
-            "anomaly_threshold": anomaly_threshold,
+            "inbound_anomaly_threshold": inbound_anomaly_threshold,
+            "outbound_anomaly_threshold": outbound_anomaly_threshold,
+            "enforcement_mode": enforcement_mode,
         },
     )
     assert resp.status_code == 201
@@ -47,7 +51,9 @@ def test_create_policy_admin_returns_201(
             "name": "Strict",
             "description": "Wysoka ochrona",
             "paranoia_level": 4,
-            "anomaly_threshold": 7,
+            "inbound_anomaly_threshold": 7,
+            "outbound_anomaly_threshold": 8,
+            "enforcement_mode": "detect_only",
         },
     )
 
@@ -57,7 +63,9 @@ def test_create_policy_admin_returns_201(
     assert body["name"] == "Strict"
     assert body["description"] == "Wysoka ochrona"
     assert body["paranoia_level"] == 4
-    assert body["anomaly_threshold"] == 7
+    assert body["inbound_anomaly_threshold"] == 7
+    assert body["outbound_anomaly_threshold"] == 8
+    assert body["enforcement_mode"] == "detect_only"
     assert body["is_active"] is True
     assert body["created_by"] == admin_user.id
 
@@ -72,7 +80,8 @@ def test_create_policy_viewer_forbidden(
         json={
             "name": "Viewer policy",
             "paranoia_level": 1,
-            "anomaly_threshold": 5,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
         },
     )
     assert resp.status_code == 403
@@ -91,7 +100,8 @@ def test_create_policy_duplicate_name_returns_409(
         json={
             "name": "Duplicate",
             "paranoia_level": 2,
-            "anomaly_threshold": 5,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
         },
     )
     assert resp.status_code == 409
@@ -108,7 +118,8 @@ def test_create_policy_invalid_paranoia_level_returns_422(
         json={
             "name": "Invalid paranoia",
             "paranoia_level": 5,
-            "anomaly_threshold": 5,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
         },
     )
     assert resp.status_code == 422
@@ -200,7 +211,8 @@ def test_patch_policy_admin_partial_update(
         name="Patch me",
         description="Opis",
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
     )
 
     resp = client.patch(
@@ -213,7 +225,8 @@ def test_patch_policy_admin_partial_update(
     assert body["name"] == "Patch me"
     assert body["description"] == "Opis"
     assert body["paranoia_level"] == 3
-    assert body["anomaly_threshold"] == 5
+    assert body["inbound_anomaly_threshold"] == 5
+    assert body["outbound_anomaly_threshold"] == 5
     assert body["is_active"] is False
 
 

@@ -6,7 +6,7 @@ Without this, Alembic generates an empty migration (it does not see tables).
 """
 
 from app.models.log import Log, LogAction, LogSeverity
-from app.models.policy import Policy
+from app.models.policy import Policy, PolicyEnforcementMode
 from app.models.rule_override import RuleAction, RuleOverride
 from app.models.user import User, UserRole
 from app.models.vhost import VHost
@@ -15,6 +15,7 @@ __all__ = [
     "User",
     "UserRole",
     "Policy",
+    "PolicyEnforcementMode",
     "VHost",
     "Log",
     "LogAction",

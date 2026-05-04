@@ -14,7 +14,8 @@ def test_policy_paranoia_level_above_max_raises_integrity_error(db: Session) -> 
         Policy(
             name="invalid-paranoia-level",
             paranoia_level=5,
-            anomaly_threshold=5,
+            inbound_anomaly_threshold=5,
+            outbound_anomaly_threshold=5,
             is_active=True,
         )
     )
@@ -27,20 +28,45 @@ def test_policy_paranoia_level_above_max_raises_integrity_error(db: Session) -> 
     db.rollback()
 
 
-def test_policy_negative_anomaly_threshold_raises_integrity_error(db: Session) -> None:
-    """DB must reject negative anomaly thresholds."""
+def test_policy_negative_inbound_anomaly_threshold_raises_integrity_error(
+    db: Session,
+) -> None:
+    """DB must reject negative inbound anomaly thresholds."""
     db.add(
         Policy(
             name="invalid-anomaly-threshold",
             paranoia_level=2,
-            anomaly_threshold=-1,
+            inbound_anomaly_threshold=-1,
+            outbound_anomaly_threshold=5,
             is_active=True,
         )
     )
 
     with pytest.raises(
         IntegrityError,
-        match="ck_policies_anomaly_threshold|CHECK constraint failed",
+        match="ck_policies_inbound_anomaly_threshold|CHECK constraint failed",
+    ):
+        db.commit()
+    db.rollback()
+
+
+def test_policy_negative_outbound_anomaly_threshold_raises_integrity_error(
+    db: Session,
+) -> None:
+    """DB must reject negative outbound anomaly thresholds."""
+    db.add(
+        Policy(
+            name="invalid-outbound-anomaly-threshold",
+            paranoia_level=2,
+            inbound_anomaly_threshold=5,
+            outbound_anomaly_threshold=-1,
+            is_active=True,
+        )
+    )
+
+    with pytest.raises(
+        IntegrityError,
+        match="ck_policies_outbound_anomaly_threshold|CHECK constraint failed",
     ):
         db.commit()
     db.rollback()

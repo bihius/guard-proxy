@@ -19,7 +19,8 @@ def _create_policy(
             "name": name,
             "description": "Policy used in rule override tests",
             "paranoia_level": 2,
-            "anomaly_threshold": 5,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
         },
     )
     assert resp.status_code == 201

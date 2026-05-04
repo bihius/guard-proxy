@@ -1,0 +1,7 @@
+# Guard Proxy CRS rule overrides.
+#
+# Rules are enabled by default through the CRS include. Disabled overrides remove
+# selected CRS rule IDs for the rendered policy.
+{% for override in disabled_rule_overrides %}
+SecRuleRemoveById {{ override.rule_id }}
+{% endfor %}

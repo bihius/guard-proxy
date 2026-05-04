@@ -29,7 +29,8 @@ def _create_policy_for_test(
         name=name,
         description="Policy for vhost service tests",
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
         is_active=True,
         created_by=created_by,
     )
