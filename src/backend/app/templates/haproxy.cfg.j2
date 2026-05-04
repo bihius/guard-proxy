@@ -8,8 +8,8 @@
 #   - Fail closed (503) if SPOA is unavailable or returns an error
 #   - Block requests when Coraza returns action=deny
 #
-# This file is the hand-written seed that the M2 Jinja2 template
-# generator will later reproduce from the policy database.
+# This file is the Jinja2 template used to render the HAProxy
+# configuration from the policy database.
 
 global
     log stdout format raw local0 info
