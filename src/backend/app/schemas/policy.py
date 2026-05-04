@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.policy import PolicyEnforcementMode
 from app.schemas.rule_override import RuleOverrideResponse
 
 
@@ -13,9 +14,11 @@ class PolicyCreate(BaseModel):
     name: str
     description: str | None = None
     paranoia_level: int = Field(default=1, ge=1, le=4)
-    anomaly_threshold: int = 5
+    inbound_anomaly_threshold: int = 5
+    outbound_anomaly_threshold: int = 4
+    enforcement_mode: PolicyEnforcementMode = PolicyEnforcementMode.block
 
-    @field_validator("anomaly_threshold")
+    @field_validator("inbound_anomaly_threshold", "outbound_anomaly_threshold")
     @classmethod
     def anomaly_threshold_positive(cls, v: int) -> int:
         """Anomaly score threshold must be positive."""
@@ -33,10 +36,12 @@ class PolicyUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     paranoia_level: int | None = Field(default=None, ge=1, le=4)
-    anomaly_threshold: int | None = None
+    inbound_anomaly_threshold: int | None = None
+    outbound_anomaly_threshold: int | None = None
+    enforcement_mode: PolicyEnforcementMode | None = None
     is_active: bool | None = None
 
-    @field_validator("anomaly_threshold")
+    @field_validator("inbound_anomaly_threshold", "outbound_anomaly_threshold")
     @classmethod
     def anomaly_threshold_positive(cls, v: int | None) -> int | None:
         if v is not None and v < 1:
@@ -53,7 +58,9 @@ class PolicyResponse(BaseModel):
     name: str
     description: str | None
     paranoia_level: int
-    anomaly_threshold: int
+    inbound_anomaly_threshold: int
+    outbound_anomaly_threshold: int
+    enforcement_mode: PolicyEnforcementMode
     is_active: bool
     created_by: int | None
     created_at: datetime

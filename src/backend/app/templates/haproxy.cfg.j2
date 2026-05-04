@@ -1,0 +1,103 @@
+# Reference HAProxy configuration for Guard Proxy M1.
+#
+# Goals:
+#   - Single frontend listening on :80
+#   - Single virtual host routed to a single backend
+#   - Reject unknown hosts before WAF inspection
+#   - SPOE filter forwarding request metadata to Coraza SPOA
+#   - Fail closed (503) if SPOA is unavailable or returns an error
+#   - Block requests when Coraza returns action=deny
+#
+# This file is the hand-written seed that the M2 Jinja2 template
+# generator will later reproduce from the policy database.
+
+global
+    log stdout format raw local0 info
+    maxconn 2000
+    # The SPOE filter expects a writable runtime directory.
+    # Use operator level to avoid exposing administrative Runtime API
+    # commands via the local socket.
+    stats socket /tmp/haproxy.sock mode 660 level operator
+
+defaults
+    mode http
+    log global
+    option httplog
+    option dontlognull
+    timeout connect 5s
+    timeout client  30s
+    timeout server  30s
+
+# --- Public frontend ----------------------------------------------
+frontend fe_http
+    bind *:80
+    # Tag every request with a stable id so log lines and SPOE frames
+    # can be correlated.
+    unique-id-format %[uuid()]
+    unique-id-header X-Request-ID
+    acl is_health path /health
+    http-request set-log-level silent if is_health
+
+    # Reference vhost: accept app.local plus local-dev browser hosts.
+    # Unknown hosts are rejected here, before WAF inspection, so that
+    # Coraza does not process traffic destined for no valid backend.
+    acl {{ vhost_acl_name }} hdr(host) -i {{ vhost_hosts | join(" ") }}
+    http-request deny deny_status 421 if !{{ vhost_acl_name }}
+
+    # Fail closed before SPOE when HAProxy has no usable Coraza SPOA
+    # server. This covers startup and unhealthy-container windows.
+    http-request set-var(txn.waf_degraded_reason) str(coraza-unavailable) if !is_health { nbsrv(coraza-spoa) eq 0 }
+    http-request set-log-level err if { var(txn.waf_degraded_reason) -m found }
+    http-request capture var(txn.waf_degraded_reason) len 32 if { var(txn.waf_degraded_reason) -m found }
+    http-request return status 503 content-type text/plain string "WAF inspection unavailable" hdr X-WAF-Status degraded hdr X-WAF-Degraded-Reason coraza-unavailable if { var(txn.waf_degraded_reason) -m str coraza-unavailable }
+
+    # Hand the request off to the Coraza SPOA. The engine name
+    # ("coraza") must match the [coraza] section in coraza.cfg.
+    filter spoe engine coraza config /usr/local/etc/haproxy/coraza.cfg
+    http-request send-spoe-group coraza coraza-req unless is_health
+
+    # Fail closed when SPOE processing starts but fails. set-on-error
+    # in coraza.cfg stores the HAProxy/SPOP error code in
+    # txn.coraza.error; using -m found ensures every code is blocked.
+    http-request set-var(txn.waf_degraded_reason) str(spoe-processing-error) if { var(txn.coraza.error) -m found }
+    http-request set-log-level err if { var(txn.waf_degraded_reason) -m found }
+    http-request capture var(txn.waf_degraded_reason) len 32 if { var(txn.waf_degraded_reason) -m found }
+    http-request return status 503 content-type text/plain string "WAF inspection unavailable" hdr X-WAF-Status degraded hdr X-WAF-Degraded-Reason spoe-processing-error hdr X-WAF-Error-Code %[var(txn.coraza.error)] if { var(txn.coraza.error) -m found }
+
+    # If the engine explicitly returns action=deny we stop the
+    # transaction with 403.
+    http-request deny deny_status 403 if { var(txn.coraza.action) -m str deny }
+
+    # Optional: log the WAF anomaly score on allowed requests so it
+    # shows up in the access log for debugging.
+    http-request set-header X-WAF-Score %[var(txn.coraza.anomaly_score)] if { var(txn.coraza.anomaly_score) -m found }
+
+    use_backend {{ backend.name }} if {{ vhost_acl_name }}
+    default_backend {{ backend.name }}
+
+# --- Application backend (single vhost target) -------------------
+backend {{ backend.name }}
+    option forwardfor
+    option httpchk GET /health
+    http-check expect status 200
+    # init-addr none lets `haproxy -c` succeed even when the
+    # `backend` DNS name is not resolvable (e.g. outside compose).
+    server {{ backend.server_name }} {{ backend.address }} check inter 5s fall 3 rise 2 init-addr last,libc,none
+
+# --- Coraza SPOA backend used by the SPOE filter -----------------
+# The SPOA speaks SPOP (binary, request/response) over TCP, so this
+# backend runs in mode tcp and must NOT have an HTTP check.
+backend coraza-spoa
+    mode tcp
+    option spop-check
+    timeout connect 5s
+    timeout server  3m
+    server coraza coraza:9000 check inter 2s fall 3 rise 2 init-addr last,libc,none
+
+# --- Local stats endpoint (dev convenience, not exposed publicly) -
+listen stats
+    bind 127.0.0.1:8404
+    mode http
+    stats enable
+    stats uri /stats
+    stats refresh 10s

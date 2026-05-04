@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
-from app.models.policy import Policy  # noqa: E402
+from app.models.policy import Policy, PolicyEnforcementMode  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.policy_service import (  # noqa: E402
     PolicyDisallowedFieldError,
@@ -35,7 +35,9 @@ def test_create_policy_persists_values_and_created_by(
         name="Strict",
         description="High protection",
         paranoia_level=4,
-        anomaly_threshold=7,
+        inbound_anomaly_threshold=7,
+        outbound_anomaly_threshold=8,
+        enforcement_mode=PolicyEnforcementMode.detect_only,
         created_by=admin_user.id,
     )
 
@@ -43,7 +45,9 @@ def test_create_policy_persists_values_and_created_by(
     assert policy.name == "Strict"
     assert policy.description == "High protection"
     assert policy.paranoia_level == 4
-    assert policy.anomaly_threshold == 7
+    assert policy.inbound_anomaly_threshold == 7
+    assert policy.outbound_anomaly_threshold == 8
+    assert policy.enforcement_mode == PolicyEnforcementMode.detect_only
     assert policy.is_active is True
     assert policy.created_by == admin_user.id
 
@@ -57,7 +61,9 @@ def test_create_policy_duplicate_name_raises_error(
         name="Duplicate",
         description=None,
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 
@@ -66,7 +72,9 @@ def test_create_policy_duplicate_name_raises_error(
             name="Duplicate",
             description=None,
             paranoia_level=1,
-            anomaly_threshold=3,
+            inbound_anomaly_threshold=3,
+            outbound_anomaly_threshold=3,
+            enforcement_mode=PolicyEnforcementMode.block,
             created_by=admin_user.id,
         )
 
@@ -80,14 +88,18 @@ def test_list_policies_returns_items_sorted_by_id(
         name="Alpha",
         description=None,
         paranoia_level=1,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
     second = service.create_policy(
         name="Beta",
         description=None,
         paranoia_level=2,
-        anomaly_threshold=6,
+        inbound_anomaly_threshold=6,
+        outbound_anomaly_threshold=6,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 
@@ -103,7 +115,9 @@ def test_get_policy_returns_existing_policy(db: Session, admin_user: User) -> No
         name="Detail",
         description="Read me",
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 
@@ -130,7 +144,9 @@ def test_update_policy_partial_update_changes_only_selected_fields(
         name="Patch me",
         description="Before",
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 
@@ -142,7 +158,8 @@ def test_update_policy_partial_update_changes_only_selected_fields(
     assert updated.name == "Patch me"
     assert updated.description == "Before"
     assert updated.paranoia_level == 3
-    assert updated.anomaly_threshold == 5
+    assert updated.inbound_anomaly_threshold == 5
+    assert updated.outbound_anomaly_threshold == 5
     assert updated.is_active is False
 
 
@@ -155,7 +172,9 @@ def test_update_policy_null_for_non_nullable_field_raises_error(
         name="Null check",
         description=None,
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 
@@ -175,14 +194,18 @@ def test_update_policy_duplicate_name_raises_error(
         name="Alpha",
         description=None,
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
     second = service.create_policy(
         name="Beta",
         description=None,
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 
@@ -196,7 +219,9 @@ def test_delete_policy_removes_existing_policy(db: Session, admin_user: User) ->
         name="Delete me",
         description=None,
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 
@@ -221,7 +246,9 @@ def test_update_policy_disallowed_field_raises_error(
         name="Allowlist check",
         description=None,
         paranoia_level=2,
-        anomaly_threshold=5,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
         created_by=admin_user.id,
     )
 

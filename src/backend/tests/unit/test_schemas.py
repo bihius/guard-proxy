@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
+from app.models.policy import PolicyEnforcementMode  # noqa: E402
 from app.models.rule_override import RuleAction  # noqa: E402
 from app.schemas.log import LogIngestRequest  # noqa: E402
 from app.schemas.policy import PolicyCreate, PolicyUpdate  # noqa: E402
@@ -93,8 +94,17 @@ def test_user_update_password_valid() -> None:
 
 
 def test_policy_create_valid() -> None:
-    p = PolicyCreate(name="default", paranoia_level=2, anomaly_threshold=10)
+    p = PolicyCreate(
+        name="default",
+        paranoia_level=2,
+        inbound_anomaly_threshold=10,
+        outbound_anomaly_threshold=11,
+        enforcement_mode=PolicyEnforcementMode.detect_only,
+    )
     assert p.paranoia_level == 2
+    assert p.inbound_anomaly_threshold == 10
+    assert p.outbound_anomaly_threshold == 11
+    assert p.enforcement_mode == PolicyEnforcementMode.detect_only
 
 
 def test_policy_create_paranoia_level_zero() -> None:
@@ -117,20 +127,25 @@ def test_policy_create_paranoia_level_boundaries() -> None:
     assert p4.paranoia_level == 4
 
 
-def test_policy_create_anomaly_threshold_zero() -> None:
+def test_policy_create_inbound_anomaly_threshold_zero() -> None:
     """An anomaly threshold of 0 is invalid; it must be at least 1."""
     with pytest.raises(ValidationError, match="at least 1"):
-        PolicyCreate(name="x", anomaly_threshold=0)
+        PolicyCreate(name="x", inbound_anomaly_threshold=0)
 
 
-def test_policy_create_anomaly_threshold_negative() -> None:
+def test_policy_create_outbound_anomaly_threshold_negative() -> None:
     with pytest.raises(ValidationError, match="at least 1"):
-        PolicyCreate(name="x", anomaly_threshold=-5)
+        PolicyCreate(name="x", outbound_anomaly_threshold=-5)
 
 
 def test_policy_create_anomaly_threshold_one_valid() -> None:
-    p = PolicyCreate(name="x", anomaly_threshold=1)
-    assert p.anomaly_threshold == 1
+    p = PolicyCreate(
+        name="x",
+        inbound_anomaly_threshold=1,
+        outbound_anomaly_threshold=1,
+    )
+    assert p.inbound_anomaly_threshold == 1
+    assert p.outbound_anomaly_threshold == 1
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +165,7 @@ def test_policy_update_paranoia_invalid() -> None:
 
 def test_policy_update_anomaly_zero_invalid() -> None:
     with pytest.raises(ValidationError, match="at least 1"):
-        PolicyUpdate(anomaly_threshold=0)
+        PolicyUpdate(inbound_anomaly_threshold=0)
 
 
 def test_policy_create_schema_exposes_paranoia_level_bounds() -> None:
