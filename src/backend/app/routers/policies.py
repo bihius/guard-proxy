@@ -34,7 +34,9 @@ def create_policy(
             name=body.name,
             description=body.description,
             paranoia_level=body.paranoia_level,
-            anomaly_threshold=body.anomaly_threshold,
+            inbound_anomaly_threshold=body.inbound_anomaly_threshold,
+            outbound_anomaly_threshold=body.outbound_anomaly_threshold,
+            enforcement_mode=body.enforcement_mode,
             created_by=current_user.id,
         )
     except PolicyNameAlreadyExistsError as error:
