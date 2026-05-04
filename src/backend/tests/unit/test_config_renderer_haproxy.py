@@ -75,6 +75,67 @@ def test_haproxy_template_parameterises_vhost_and_backend() -> None:
     assert "server api api-backend:9000 check" in rendered
 
 
+@pytest.mark.parametrize(
+    "vhost_acl_name",
+    [
+        "has space",
+        "has\nnewline",
+        "has\ttab",
+        "has#comment",
+        "has;semi",
+        "has{brace",
+    ],
+)
+def test_haproxy_render_context_rejects_unsafe_acl_name(vhost_acl_name: str) -> None:
+    with pytest.raises(ValueError, match="vhost_acl_name"):
+        HaproxyRenderContext(
+            vhost_acl_name=vhost_acl_name,
+            vhost_hosts=("safe.host",),
+            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+        )
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "has space",
+        "has\nnewline",
+        "has\ttab",
+        "has#comment",
+        "has;semi",
+    ],
+)
+def test_haproxy_render_context_rejects_unsafe_host(host: str) -> None:
+    with pytest.raises(ValueError, match="vhost_hosts"):
+        HaproxyRenderContext(
+            vhost_acl_name="safe_acl",
+            vhost_hosts=(host,),
+            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+        )
+
+
+@pytest.mark.parametrize(
+    "field,kwargs",
+    [
+        ("name", {"name": "has space", "server_name": "srv", "address": "host:80"}),
+        ("name", {"name": "has\nnewline", "server_name": "srv", "address": "host:80"}),
+        (
+            "server_name",
+            {"name": "be", "server_name": "has space", "address": "host:80"},
+        ),
+        (
+            "server_name",
+            {"name": "be", "server_name": "has\nnewline", "address": "host:80"},
+        ),
+        ("address", {"name": "be", "server_name": "srv", "address": "has space"}),
+        ("address", {"name": "be", "server_name": "srv", "address": "has\nnewline"}),
+    ],
+)
+def test_haproxy_backend_rejects_unsafe_values(field: str, kwargs: dict) -> None:
+    with pytest.raises(ValueError, match="HaproxyBackend"):
+        HaproxyBackend(**kwargs)
+
+
 @pytest.mark.skipif(shutil.which("haproxy") is None, reason="haproxy is not installed")
 def test_rendered_haproxy_template_validates_with_haproxy(tmp_path: Path) -> None:
     rendered_path = tmp_path / "haproxy.cfg"
