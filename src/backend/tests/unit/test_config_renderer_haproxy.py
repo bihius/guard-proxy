@@ -136,6 +136,37 @@ def test_haproxy_backend_rejects_unsafe_values(field: str, kwargs: dict) -> None
         HaproxyBackend(**kwargs)
 
 
+def test_haproxy_render_context_rejects_empty_acl_name() -> None:
+    with pytest.raises(ValueError, match="vhost_acl_name"):
+        HaproxyRenderContext(
+            vhost_acl_name="",
+            vhost_hosts=("safe.host",),
+            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+        )
+
+
+def test_haproxy_render_context_rejects_empty_host() -> None:
+    with pytest.raises(ValueError, match="vhost_hosts"):
+        HaproxyRenderContext(
+            vhost_acl_name="safe_acl",
+            vhost_hosts=("",),
+            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+        )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"name": "", "server_name": "srv", "address": "host:80"},
+        {"name": "be", "server_name": "", "address": "host:80"},
+        {"name": "be", "server_name": "srv", "address": ""},
+    ],
+)
+def test_haproxy_backend_rejects_empty_values(kwargs: dict) -> None:
+    with pytest.raises(ValueError, match="HaproxyBackend"):
+        HaproxyBackend(**kwargs)
+
+
 @pytest.mark.skipif(shutil.which("haproxy") is None, reason="haproxy is not installed")
 def test_rendered_haproxy_template_validates_with_haproxy(tmp_path: Path) -> None:
     rendered_path = tmp_path / "haproxy.cfg"

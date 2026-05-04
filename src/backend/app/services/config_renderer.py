@@ -23,6 +23,8 @@ _HAPROXY_ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 
 
 def _validate_haproxy_identifier(value: str, field: str) -> None:
+    if not value:
+        raise ValueError(f"{field} must not be empty")
     if not _HAPROXY_IDENTIFIER_RE.match(value):
         raise ValueError(
             f"{field} {value!r} contains characters unsafe for HAProxy config; "
@@ -31,6 +33,8 @@ def _validate_haproxy_identifier(value: str, field: str) -> None:
 
 
 def _validate_haproxy_host(value: str, field: str) -> None:
+    if not value:
+        raise ValueError(f"{field} must not be empty")
     if not _HAPROXY_HOST_RE.match(value):
         raise ValueError(
             f"{field} {value!r} contains characters unsafe for HAProxy config; "
@@ -53,6 +57,8 @@ class HaproxyBackend:
     def __post_init__(self) -> None:
         _validate_haproxy_identifier(self.name, "HaproxyBackend.name")
         _validate_haproxy_identifier(self.server_name, "HaproxyBackend.server_name")
+        if not self.address:
+            raise ValueError("HaproxyBackend.address must not be empty")
         if not _HAPROXY_ADDRESS_RE.match(self.address):
             raise ValueError(
                 f"HaproxyBackend.address {self.address!r} contains characters that are "
