@@ -38,11 +38,17 @@ frontend fe_http
     acl is_health path /health
     http-request set-log-level silent if is_health
 
-    # Reference vhost: accept app.local plus local-dev browser hosts.
+    # Reference vhost: accept known hosts from generated config.
     # Unknown hosts are rejected here, before WAF inspection, so that
     # Coraza does not process traffic destined for no valid backend.
-    acl {{ vhost_acl_name }} hdr(host) -i {{ vhost_hosts | join(" ") }}
-    http-request deny deny_status 421 if !{{ vhost_acl_name }}
+{% for vhost in vhosts %}
+    acl {{ vhost.acl_name }} hdr(host) -i {{ vhost.hosts | join(" ") }}
+{% endfor %}
+{% if vhosts %}
+    http-request deny deny_status 421 if {% for vhost in vhosts %}!{{ vhost.acl_name }}{% if not loop.last %} {% endif %}{% endfor %}
+{% else %}
+    http-request deny deny_status 421
+{% endif %}
 
     # Fail closed before SPOE when HAProxy has no usable Coraza SPOA
     # server. This covers startup and unhealthy-container windows.
@@ -72,17 +78,23 @@ frontend fe_http
     # shows up in the access log for debugging.
     http-request set-header X-WAF-Score %[var(txn.coraza.anomaly_score)] if { var(txn.coraza.anomaly_score) -m found }
 
-    use_backend {{ backend.name }} if {{ vhost_acl_name }}
-    default_backend {{ backend.name }}
+{% for vhost in vhosts %}
+    use_backend {{ vhost.backend_name }} if {{ vhost.acl_name }}
+{% endfor %}
+{% if vhosts %}
+    default_backend {{ vhosts[0].backend_name }}
+{% endif %}
 
-# --- Application backend (single vhost target) -------------------
-backend {{ backend.name }}
+# --- Application backends ----------------------------------------
+{% for vhost in vhosts %}
+backend {{ vhost.backend_name }}
     option forwardfor
     option httpchk GET /health
     http-check expect status 200
     # init-addr none lets `haproxy -c` succeed even when the
     # `backend` DNS name is not resolvable (e.g. outside compose).
-    server {{ backend.server_name }} {{ backend.address }} check inter 5s fall 3 rise 2 init-addr last,libc,none
+    server {{ vhost.backend_server_name }} {{ vhost.backend_address }} check inter 5s fall 3 rise 2 init-addr last,libc,none
+{% endfor %}
 
 # --- Coraza SPOA backend used by the SPOE filter -----------------
 # The SPOA speaks SPOP (binary, request/response) over TCP, so this
