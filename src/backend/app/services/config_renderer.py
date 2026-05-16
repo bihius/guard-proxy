@@ -96,13 +96,24 @@ _ENVIRONMENT = Environment(
 
 
 def render_haproxy_cfg(context: HaproxyRenderContext) -> str:
-    """Render haproxy.cfg from already prepared values."""
+    """Render haproxy.cfg for a single vhost context."""
+    return render_haproxy_cfg_multi([context])
+
+
+def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
+    """Render haproxy.cfg from one or many prepared vhost contexts."""
     template = _ENVIRONMENT.get_template("haproxy.cfg.j2")
-    return template.render(
-        vhost_acl_name=context.vhost_acl_name,
-        vhost_hosts=context.vhost_hosts,
-        backend=context.backend,
-    )
+    vhosts = [
+        {
+            "acl_name": context.vhost_acl_name,
+            "hosts": context.vhost_hosts,
+            "backend_name": context.backend.name,
+            "backend_server_name": context.backend.server_name,
+            "backend_address": context.backend.address,
+        }
+        for context in vhost_contexts
+    ]
+    return template.render(vhosts=vhosts)
 
 
 def render_crs_setup(policy: Policy) -> str:
