@@ -131,6 +131,43 @@ assert_header() {
   echo "${description}: found '${expected}'."
 }
 
+wait_for_header() {
+  local description="$1"
+  local expected="$2"
+  local url="$3"
+  local timeout="${4:-20}"
+  local deadline=$((SECONDS + timeout))
+  local headers=""
+
+  echo "Waiting for ${description}..."
+  while (( SECONDS < deadline )); do
+    headers="$(
+      curl \
+        --silent \
+        --show-error \
+        --output /dev/null \
+        --dump-header - \
+        --header 'Host: app.local' \
+        --max-time 2 \
+        "${url}" \
+        2>/dev/null || true
+    )"
+
+    if grep -Fqi "${expected}" <<<"${headers}"; then
+      echo "${description}: found '${expected}'."
+      return 0
+    fi
+
+    sleep 1
+  done
+
+  echo "${description}: timed out waiting for response header containing '${expected}'." >&2
+  if [[ -n "${headers}" ]]; then
+    echo "${headers}" >&2
+  fi
+  return 1
+}
+
 cd "${REPO_ROOT}"
 
 "${COMPOSE[@]}" up -d --build postgres backend coraza haproxy
@@ -143,8 +180,8 @@ assert_status "Benign request" "200" "${HAPROXY_BASE_URL}/health"
 assert_status "SQL injection request" "403" "${HAPROXY_BASE_URL}/?id=1%27%20OR%20%271%27%3D%271"
 
 "${COMPOSE[@]}" stop coraza
-# Wait for HAProxy to mark the coraza server DOWN (inter 2s fall 1 = at most 2 s).
-sleep 5
+# Wait until HAProxy starts returning the explicit unavailable reason.
+wait_for_header "Coraza unavailable transition" "X-WAF-Degraded-Reason: coraza-unavailable" "${HAPROXY_BASE_URL}/" 20
 
 assert_status "Degraded request without Coraza" "503" "${HAPROXY_BASE_URL}/"
 assert_header "Degraded WAF status header" "X-WAF-Status: degraded" "${HAPROXY_BASE_URL}/"
