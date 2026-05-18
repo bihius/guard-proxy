@@ -15,8 +15,28 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.6"
+          enable-cache: true
+          cache-dependency-glob: src/backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: src/backend
+        run: uv sync --frozen --extra dev
+
       - name: Prepare Docker Compose environment
         run: cp deploy/docker/.env.example deploy/docker/.env
+
+      - name: Run policy apply e2e test
+        working-directory: src/backend
+        run: uv run pytest -m e2e tests/e2e/test_policy_apply.py
 
       - name: Run E2E smoke test
         run: bash benchmarks/smoke/e2e.sh
