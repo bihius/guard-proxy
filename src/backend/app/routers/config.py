@@ -13,7 +13,8 @@ from app.models.rule_override import RuleOverride
 from app.models.user import User
 from app.models.vhost import VHost
 from app.schemas.config import ConfigApplyResponse, GeneratedConfigOut
-from app.services.config_apply import ApplyStatus, apply as _apply
+from app.services.config_apply import ApplyStatus
+from app.services.config_apply import apply as _apply
 from app.services.config_generator import generate
 
 router = APIRouter(prefix="/config", tags=["config"])
@@ -64,7 +65,9 @@ def apply_config(
             rollback_output=result.rollback_output,
         )
 
-        http_code = _HTTP_STATUS.get(result.status, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        http_code = _HTTP_STATUS.get(
+            result.status, status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
         if http_code == status.HTTP_200_OK:
             return response
         return JSONResponse(status_code=http_code, content=response.model_dump())
