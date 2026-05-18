@@ -23,6 +23,7 @@ class ApplyStatus(StrEnum):
     """Outcome classes for config apply attempts."""
 
     success = "success"
+    write_failed = "write_failed"
     validation_failed = "validation_failed"
     reload_failed_rolled_back = "reload_failed_rolled_back"
     rollback_failed = "rollback_failed"
@@ -68,7 +69,7 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
             error,
         )
         return ApplyResult(
-            status=ApplyStatus.rollback_failed,
+            status=ApplyStatus.write_failed,
             correlation_id=correlation_id,
             checksum=checksum,
             message=f"Failed to prepare candidate files: {error}",
@@ -78,6 +79,7 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
 
     validation = _validate_haproxy(candidate_dir / "haproxy.cfg")
     if not validation.ok:
+        shutil.rmtree(candidate_dir, ignore_errors=True)
         logger.warning(
             "config-apply validation failed correlation_id=%s output=%s",
             correlation_id,
@@ -166,7 +168,7 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
 
 
 @dataclass(frozen=True)
-class _CommandResult:
+class CommandResult:
     ok: bool
     output: str
 
@@ -184,7 +186,7 @@ def _write_candidate(candidate_dir: Path, generated: GeneratedConfig) -> None:
     )
 
 
-def _validate_haproxy(config_path: Path) -> _CommandResult:
+def _validate_haproxy(config_path: Path) -> CommandResult:
     try:
         result = subprocess.run(
             [
@@ -199,13 +201,13 @@ def _validate_haproxy(config_path: Path) -> _CommandResult:
             timeout=settings.haproxy_validation_timeout_seconds,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        return _CommandResult(ok=False, output=str(error))
+        return CommandResult(ok=False, output=str(error))
 
     output = _join_output(result.stdout, result.stderr)
-    return _CommandResult(ok=result.returncode == 0, output=output)
+    return CommandResult(ok=result.returncode == 0, output=output)
 
 
-def _reload_haproxy() -> _CommandResult:
+def _reload_haproxy() -> CommandResult:
     socket_path = settings.haproxy_master_socket_path
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -220,12 +222,13 @@ def _reload_haproxy() -> _CommandResult:
                     break
                 output_chunks.append(chunk)
     except OSError as error:
-        return _CommandResult(ok=False, output=str(error))
+        return CommandResult(ok=False, output=str(error))
 
     output = b"".join(output_chunks).decode("utf-8", errors="replace").strip()
     output_lower = output.lower()
-    is_success = "success" in output_lower and "fail" not in output_lower
-    return _CommandResult(ok=is_success, output=output)
+    _error_keywords = ("error", "fail", "denied", "permission")
+    is_error = any(kw in output_lower for kw in _error_keywords)
+    return CommandResult(ok=not is_error, output=output)
 
 
 def _swap_current_link(current_link: Path, target: Path, runtime_root: Path) -> None:
