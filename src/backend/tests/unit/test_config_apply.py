@@ -6,7 +6,7 @@ from pathlib import Path
 from app.config import settings
 from app.services.config_apply import (
     ApplyStatus,
-    _CommandResult,
+    CommandResult,
     apply,
 )
 from app.services.config_generator import GeneratedConfig
@@ -41,11 +41,11 @@ def test_apply_success_writes_files_and_switches_current(
     monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
     monkeypatch.setattr(
         "app.services.config_apply._validate_haproxy",
-        lambda _: _CommandResult(ok=True, output="Configuration file is valid"),
+        lambda _: CommandResult(ok=True, output="Configuration file is valid"),
     )
     monkeypatch.setattr(
         "app.services.config_apply._reload_haproxy",
-        lambda: _CommandResult(ok=True, output="Reload succeeded"),
+        lambda: CommandResult(ok=True, output="Reload succeeded"),
     )
 
     result = apply(_sample_generated())
@@ -73,11 +73,11 @@ def test_apply_validation_failure_keeps_current_unchanged(
     monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
     monkeypatch.setattr(
         "app.services.config_apply._validate_haproxy",
-        lambda _: _CommandResult(ok=False, output="line 42 parse error"),
+        lambda _: CommandResult(ok=False, output="line 42 parse error"),
     )
     monkeypatch.setattr(
         "app.services.config_apply._reload_haproxy",
-        lambda: _CommandResult(ok=True, output="should not run"),
+        lambda: CommandResult(ok=True, output="should not run"),
     )
 
     result = apply(_sample_generated())
@@ -96,13 +96,13 @@ def test_apply_reload_failure_rolls_back_to_previous_release(
     monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
     monkeypatch.setattr(
         "app.services.config_apply._validate_haproxy",
-        lambda _: _CommandResult(ok=True, output="valid"),
+        lambda _: CommandResult(ok=True, output="valid"),
     )
 
     reload_results = iter(
         [
-            _CommandResult(ok=False, output="reload failed"),
-            _CommandResult(ok=True, output="rollback reload ok"),
+            CommandResult(ok=False, output="reload failed"),
+            CommandResult(ok=True, output="rollback reload ok"),
         ]
     )
     monkeypatch.setattr(
@@ -127,13 +127,13 @@ def test_apply_reports_rollback_failed_when_second_reload_fails(
     monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
     monkeypatch.setattr(
         "app.services.config_apply._validate_haproxy",
-        lambda _: _CommandResult(ok=True, output="valid"),
+        lambda _: CommandResult(ok=True, output="valid"),
     )
 
     reload_results = iter(
         [
-            _CommandResult(ok=False, output="reload failed"),
-            _CommandResult(ok=False, output="rollback reload failed"),
+            CommandResult(ok=False, output="reload failed"),
+            CommandResult(ok=False, output="rollback reload failed"),
         ]
     )
     monkeypatch.setattr(
@@ -148,6 +148,25 @@ def test_apply_reports_rollback_failed_when_second_reload_fails(
     assert "rollback reload failed" in (result.rollback_output or "")
 
 
+def test_apply_write_failure_returns_write_failed_and_leaves_current_unchanged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    previous = _seed_current_release(runtime_root)
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._write_candidate",
+        lambda *_: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    result = apply(_sample_generated())
+
+    assert result.status == ApplyStatus.write_failed
+    assert "disk full" in result.message
+    assert (runtime_root / "current").resolve() == previous.resolve()
+
+
 def test_apply_logs_attempt_with_correlation_id(
     tmp_path: Path,
     monkeypatch,
@@ -157,11 +176,11 @@ def test_apply_logs_attempt_with_correlation_id(
     monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
     monkeypatch.setattr(
         "app.services.config_apply._validate_haproxy",
-        lambda _: _CommandResult(ok=True, output="valid"),
+        lambda _: CommandResult(ok=True, output="valid"),
     )
     monkeypatch.setattr(
         "app.services.config_apply._reload_haproxy",
-        lambda: _CommandResult(ok=True, output="reload ok"),
+        lambda: CommandResult(ok=True, output="reload ok"),
     )
     caplog.set_level(logging.INFO, logger="app.services.config_apply")
 
