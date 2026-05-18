@@ -68,6 +68,7 @@ make seed                                                            # Seed admi
 
 ```bash
 bash benchmarks/smoke/e2e.sh  # Compose stack: benign request returns 200, SQLi returns 403
+cd src/backend && uv run pytest -m e2e tests/e2e/test_policy_apply.py  # Policy apply changes live WAF behavior
 ```
 
 ## Security Testing

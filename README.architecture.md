@@ -18,7 +18,7 @@ graph TB
     BE -.->|writes generated runtime config| RV[(guard_proxy_runtime)]
     RV -.->|read-only mount| H
     RV -.->|read-only rule overrides| CS
-    CS -.->|inotify watches /runtime| CS
+    CS -.->|polls /runtime/current| CS
 ```
 
 ## Request Flow
@@ -76,10 +76,10 @@ machine-readable degraded reason header.
 4. HAProxy reads the active generated `haproxy.cfg` from the volume and reloads
    through its Runtime API socket when `POST /config/apply` succeeds.
 5. Coraza reads the active generated `rule-overrides.conf` from the same volume
-   after CRS rules are loaded. The Coraza container runs an inotify supervisor
-   that watches the `/runtime` directory; when the backend atomically swaps the
-   `current` symlink, the supervisor detects the change and restarts
-   `coraza-spoa` automatically — no Docker socket access required.
+   after CRS rules are loaded. The Coraza container runs a supervisor that polls
+   the `/runtime/current` symlink; when the backend atomically swaps it, the
+   supervisor restarts `coraza-spoa` automatically — no Docker socket access
+   required.
 
 ### Runtime Event Ingestion
 1. Runtime WAF events can be represented as structured log payloads.
@@ -132,16 +132,17 @@ non-root `app` user, and then drops privileges before running migrations and
 Uvicorn. HAProxy copies the checked-in reference config into the same seed
 release when no generated `haproxy.cfg` exists yet.
 
-The Coraza container image is built on `alpine:3.19` with `tini` as PID 1 and
-`inotify-tools` installed. A shell supervisor (`coraza-supervisor.sh`) starts
-`coraza-spoa` as a child process and calls `inotifywait` in a loop. When the
-backend performs an atomic `os.replace` of the `current` symlink, the supervisor
-detects the `moved_to` or `create` event for `current` and restarts
-`coraza-spoa` — picking up the new `rule-overrides.conf` without any external
-signal or Docker socket access. Note that this is a full process restart, not a
-hot-reload: port 9000 is briefly unavailable (~sub-second) during the restart,
-causing HAProxy SPOE to return an error for any request that lands in that
-window. This is acceptable for a manual rule-apply operation.
+The Coraza container image is built on `alpine:3.19` with `tini` as PID 1. A
+shell supervisor (`coraza-supervisor.sh`) starts as root long enough to make the
+audit log volume writable, drops to the non-root `coraza` user, starts
+`coraza-spoa` as a child process, and polls `/runtime/current` once per second.
+When the backend performs an atomic `os.replace` of the `current` symlink, the
+supervisor restarts `coraza-spoa` — picking up the new `rule-overrides.conf`
+without any external signal or Docker socket access. Note that this is a full
+process restart, not a hot-reload: port 9000 is briefly unavailable
+(~sub-second) during the restart, causing HAProxy SPOE to return an error for
+any request that lands in that window. This is acceptable for a manual
+rule-apply operation.
 
 ## Key Decisions
 
