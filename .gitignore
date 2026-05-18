@@ -14,6 +14,7 @@ CLAUDE.md
 AGENTS.md
 CODEX.md
 .claude/
+.git/hooks/post-checkout
 .opencode/
 .opencodeignore
 opencode.json
