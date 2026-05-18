@@ -18,10 +18,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:${PATH}"
 
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app && useradd --system --gid app --home-dir /app --no-create-home --shell /usr/sbin/nologin app
 
 WORKDIR /app
-RUN chown app:app /app
+RUN mkdir -p /runtime/crs && chown app:app /app /runtime /runtime/crs
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app alembic alembic
@@ -31,5 +38,5 @@ COPY --chown=app:app alembic.ini alembic.ini
 
 EXPOSE 8000
 
-USER app
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
