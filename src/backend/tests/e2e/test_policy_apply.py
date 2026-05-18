@@ -10,6 +10,7 @@ import subprocess
 import time
 import uuid
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -24,6 +25,8 @@ SCANNER_USER_AGENT = "nuclei"
 SCANNER_RULE_ID = 913100
 HTTP_TIMEOUT_SECONDS = 5
 SERVICE_TIMEOUT_SECONDS = 180
+# Coraza's supervisor polls /runtime/current every second before restarting SPOA.
+# Keep this timeout comfortably above that lower bound plus container scheduling.
 RELOAD_TIMEOUT_SECONDS = 45
 
 
@@ -124,6 +127,7 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     assert f"SecRuleRemoveById {SCANNER_RULE_ID}" not in applied["generated_config"][
         "rule_overrides_conf"
     ]
+    _assert_coraza_runtime_override(compose_stack, should_exist=False)
     _wait_for_scanner_status(compose_stack, 403, "scanner request before override")
 
     override = _api_json(
@@ -144,6 +148,9 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
         f"SecRuleRemoveById {SCANNER_RULE_ID}"
         in applied["generated_config"]["rule_overrides_conf"]
     )
+    _assert_coraza_runtime_override(compose_stack, should_exist=True)
+    # The runtime-file assertion proves the override reached Coraza's mount;
+    # the HTTP verdict is still the user-visible contract for issue #114.
     _wait_for_scanner_status(
         compose_stack,
         200,
@@ -162,6 +169,7 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     assert f"SecRuleRemoveById {SCANNER_RULE_ID}" not in applied["generated_config"][
         "rule_overrides_conf"
     ]
+    _assert_coraza_runtime_override(compose_stack, should_exist=False)
     _wait_for_scanner_status(compose_stack, 403, "scanner request after re-enable")
 
 
@@ -175,30 +183,15 @@ def _require_e2e_prerequisites() -> None:
         )
     if shutil.which("docker") is None:
         pytest.fail("Docker is required for policy apply e2e tests.")
-    if not _command_ok(["docker", "compose", "version"]) and shutil.which(
-        "docker-compose"
-    ) is None:
+    try:
+        _docker_compose_prefix()
+    except RuntimeError:
         pytest.fail("Docker Compose is required for policy apply e2e tests.")
 
 
 def _compose_command(project_name: str) -> list[str]:
-    if _command_ok(["docker", "compose", "version"]):
-        return [
-            "docker",
-            "compose",
-            "-f",
-            str(COMPOSE_FILE),
-            "--env-file",
-            str(ENV_FILE),
-            "--project-name",
-            project_name,
-        ]
-
-    docker_compose = shutil.which("docker-compose")
-    if docker_compose is None:
-        raise RuntimeError("Docker Compose is required")
     return [
-        docker_compose,
+        *_docker_compose_prefix(),
         "-f",
         str(COMPOSE_FILE),
         "--env-file",
@@ -206,6 +199,17 @@ def _compose_command(project_name: str) -> list[str]:
         "--project-name",
         project_name,
     ]
+
+
+@lru_cache
+def _docker_compose_prefix() -> tuple[str, ...]:
+    if _command_ok(["docker", "compose", "version"]):
+        return ("docker", "compose")
+
+    docker_compose = shutil.which("docker-compose")
+    if docker_compose is None:
+        raise RuntimeError("Docker Compose is required")
+    return (docker_compose,)
 
 
 def _command_ok(command: list[str]) -> bool:
@@ -330,6 +334,25 @@ def _apply_config(stack: ComposeStack, token: str) -> dict[str, Any]:
     response = _api_json(stack, "POST", "/config/apply", token=token)
     assert response["status"] == "success"
     return response
+
+
+def _assert_coraza_runtime_override(stack: ComposeStack, *, should_exist: bool) -> None:
+    result = _run(
+        stack.command
+        + [
+            "exec",
+            "-T",
+            "coraza",
+            "cat",
+            "/runtime/current/rule-overrides.conf",
+        ],
+        env=stack.env,
+    )
+    expected = f"SecRuleRemoveById {SCANNER_RULE_ID}"
+    if should_exist:
+        assert expected in result.stdout
+    else:
+        assert expected not in result.stdout
 
 
 def _api_json(
