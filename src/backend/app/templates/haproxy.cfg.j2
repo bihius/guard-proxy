@@ -2,7 +2,7 @@
 #
 # Goals:
 #   - Single frontend listening on :80
-#   - Single virtual host routed to a single backend
+#   - Virtual hosts routed to their configured backends
 #   - Reject unknown hosts before WAF inspection
 #   - SPOE filter forwarding request metadata to Coraza SPOA
 #   - Fail closed (503) if SPOA is unavailable or returns an error
@@ -38,11 +38,14 @@ frontend fe_http
     acl is_health path /health
     http-request set-log-level silent if is_health
 
-    # Reference vhost: accept app.local plus local-dev browser hosts.
+    # Known vhosts. Match Host without the optional request port so local
+    # Docker/browser requests such as app.local:8080 still route correctly.
     # Unknown hosts are rejected here, before WAF inspection, so that
     # Coraza does not process traffic destined for no valid backend.
-    acl {{ vhost_acl_name }} hdr(host) -i {{ vhost_hosts | join(" ") }}
-    http-request deny deny_status 421 if !{{ vhost_acl_name }}
+{% for route in routes %}
+    acl {{ route.vhost_acl_name }} hdr(host),field(1,:) -i {{ route.vhost_hosts | join(" ") }}
+{% endfor %}
+    http-request deny deny_status 421 if{% for route in routes %} !{{ route.vhost_acl_name }}{% endfor %}
 
     # Fail closed before SPOE when HAProxy has no usable Coraza SPOA
     # server. This covers startup and unhealthy-container windows.
@@ -72,17 +75,22 @@ frontend fe_http
     # shows up in the access log for debugging.
     http-request set-header X-WAF-Score %[var(txn.coraza.anomaly_score)] if { var(txn.coraza.anomaly_score) -m found }
 
-    use_backend {{ backend.name }} if {{ vhost_acl_name }}
-    default_backend {{ backend.name }}
+{% for route in routes %}
+    use_backend {{ route.backend.name }} if {{ route.vhost_acl_name }}
+{% endfor %}
+    default_backend {{ default_backend.name }}
 
-# --- Application backend (single vhost target) -------------------
-backend {{ backend.name }}
+# --- Application backends ----------------------------------------
+{% for route in routes %}
+backend {{ route.backend.name }}
     option forwardfor
     option httpchk GET /health
     http-check expect status 200
     # init-addr none lets `haproxy -c` succeed even when the
     # `backend` DNS name is not resolvable (e.g. outside compose).
-    server {{ backend.server_name }} {{ backend.address }} check inter 5s fall 3 rise 2 init-addr last,libc,none
+    server {{ route.backend.server_name }} {{ route.backend.address }} check inter 5s fall 3 rise 2 init-addr last,libc,none
+
+{% endfor %}
 
 # --- Coraza SPOA backend used by the SPOE filter -----------------
 # The SPOA speaks SPOP (binary, request/response) over TCP, so this
