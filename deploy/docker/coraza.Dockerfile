@@ -13,8 +13,14 @@ COPY configs/coraza/crs-setup.conf /etc/coraza/crs-setup.conf
 COPY configs/coraza/crs /etc/coraza/crs
 COPY deploy/docker/coraza-supervisor.sh /usr/local/bin/coraza-supervisor
 
-RUN chmod +x /usr/local/bin/coraza-supervisor \
-    && /usr/local/bin/coraza-spoa -h >/dev/null 2>&1 || true
+RUN addgroup -S coraza && adduser -S -G coraza coraza
+
+RUN chmod +x /usr/local/bin/coraza-supervisor
+# Verify the binary is executable; fails the build if the upstream image
+# switches to a dynamically-linked binary that can't run on musl/alpine.
+RUN /usr/local/bin/coraza-spoa --version >/dev/null
+
+USER coraza
 
 EXPOSE 9000
 
