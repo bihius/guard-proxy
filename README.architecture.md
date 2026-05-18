@@ -17,7 +17,8 @@ graph TB
     BE --> DB[(PostgreSQL)]
     BE -.->|writes generated runtime config| RV[(guard_proxy_runtime)]
     RV -.->|read-only mount| H
-    RV -.->|future CRS artifacts| CS
+    RV -.->|read-only rule overrides| CS
+    CS -.->|inotify watches /runtime| CS
 ```
 
 ## Request Flow
@@ -70,8 +71,15 @@ machine-readable degraded reason header.
 ### Policy Management
 1. Admin users manage vhosts, policies, and rule overrides through the React UI and FastAPI API.
 2. FastAPI persists control-plane state in PostgreSQL.
-3. M1 stores policy data but still uses hand-written HAProxy and Coraza reference configuration.
-4. FastAPI writes generated runtime config into the shared `guard_proxy_runtime` volume. HAProxy mounts that volume read-only at `/runtime`; validation, graceful reloads, rollback, and richer per-vhost runtime policy wiring are future M2 work.
+3. FastAPI writes generated runtime config into the shared
+   `guard_proxy_runtime` volume.
+4. HAProxy reads the active generated `haproxy.cfg` from the volume and reloads
+   through its Runtime API socket when `POST /config/apply` succeeds.
+5. Coraza reads the active generated `rule-overrides.conf` from the same volume
+   after CRS rules are loaded. The Coraza container runs an inotify supervisor
+   that watches the `/runtime` directory; when the backend atomically swaps the
+   `current` symlink, the supervisor detects the change and restarts
+   `coraza-spoa` automatically — no Docker socket access required.
 
 ### Runtime Event Ingestion
 1. Runtime WAF events can be represented as structured log payloads.
@@ -105,22 +113,35 @@ tears the stack down.
 ### Shared Runtime Volume
 
 Generated runtime artifacts live in the Docker named volume
-`guard_proxy_runtime`. The backend mounts it read-write at `/runtime`, while
-HAProxy mounts the same volume read-only at `/runtime`.
+`guard_proxy_runtime`. The backend mounts it read-write at
+`/var/lib/guard-proxy/generated`, HAProxy mounts the same volume at
+`/etc/haproxy/generated`, and Coraza mounts it read-only at `/runtime`.
 
-The reserved layout for future generated artifacts is:
+The active release is selected through the `current` symlink:
 
 ```text
-/runtime/
-  haproxy.cfg  # generated HAProxy config
-  crs/         # generated CRS artifacts
+/runtime/current/
+  haproxy.cfg           # generated HAProxy config
+  crs-setup.conf        # generated CRS setup snapshot
+  rule-overrides.conf   # generated CRS rule removals
 ```
 
-The backend container starts as root only long enough to create `/runtime/crs`,
-assign the mounted volume to the non-root `app` user, and then drops privileges
-before running migrations and Uvicorn. HAProxy continues to boot from the
-checked-in seed config in `configs/haproxy/haproxy.cfg` until generated config
-deployment and reload orchestration are enabled.
+The backend container starts as root only long enough to create and seed
+Coraza's generated rule override include, assign the runtime volume to the
+non-root `app` user, and then drops privileges before running migrations and
+Uvicorn. HAProxy copies the checked-in reference config into the same seed
+release when no generated `haproxy.cfg` exists yet.
+
+The Coraza container image is built on `alpine:3.19` with `tini` as PID 1 and
+`inotify-tools` installed. A shell supervisor (`coraza-supervisor.sh`) starts
+`coraza-spoa` as a child process and calls `inotifywait` in a loop. When the
+backend performs an atomic `os.replace` of the `current` symlink, the supervisor
+detects the `moved_to` or `create` event for `current` and restarts
+`coraza-spoa` — picking up the new `rule-overrides.conf` without any external
+signal or Docker socket access. Note that this is a full process restart, not a
+hot-reload: port 9000 is briefly unavailable (~sub-second) during the restart,
+causing HAProxy SPOE to return an error for any request that lands in that
+window. This is acceptable for a manual rule-apply operation.
 
 ## Key Decisions
 

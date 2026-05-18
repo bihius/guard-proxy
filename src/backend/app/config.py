@@ -76,7 +76,6 @@ class Settings(EnvFileSettings):
     haproxy_validation_timeout_seconds: int = 10
     haproxy_master_socket_path: str = "/var/run/haproxy/master.sock"
     haproxy_reload_timeout_seconds: int = 10
-
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_empty(cls, value: str) -> str:
