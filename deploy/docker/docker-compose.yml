@@ -25,7 +25,7 @@ services:
       - .env
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
-      GUARD_PROXY_RUNTIME_DIR: /runtime
+      GUARD_PROXY_RUNTIME_DIR: /var/lib/guard-proxy/generated
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,4 +127,4 @@ volumes:
   haproxy_runtime:
   coraza_logs:
   backend_logs:
-  guard_proxy_runtime:
+  generated_config:

@@ -25,7 +25,7 @@ RUN apt-get update \
 RUN groupadd --system app && useradd --system --gid app --home-dir /app --no-create-home --shell /usr/sbin/nologin app
 
 WORKDIR /app
-RUN mkdir -p /runtime/crs && chown app:app /app /runtime /runtime/crs
+RUN mkdir -p /var/lib/guard-proxy/generated/crs && chown app:app /app /var/lib/guard-proxy/generated /var/lib/guard-proxy/generated/crs
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
