@@ -45,7 +45,11 @@ frontend fe_http
 {% for route in routes %}
     acl {{ route.vhost_acl_name }} hdr(host),field(1,:) -i {{ route.vhost_hosts | join(" ") }}
 {% endfor %}
+{% if routes %}
     http-request deny deny_status 421 if{% for route in routes %} !{{ route.vhost_acl_name }}{% endfor %}
+{% else %}
+    http-request deny deny_status 421
+{% endif %}
 
     # Fail closed before SPOE when HAProxy has no usable Coraza SPOA
     # server. This covers startup and unhealthy-container windows.
@@ -78,7 +82,9 @@ frontend fe_http
 {% for route in routes %}
     use_backend {{ route.backend.name }} if {{ route.vhost_acl_name }}
 {% endfor %}
+{% if default_backend is not none %}
     default_backend {{ default_backend.name }}
+{% endif %}
 
 # --- Application backends ----------------------------------------
 {% for route in routes %}

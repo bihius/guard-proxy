@@ -9,8 +9,11 @@ from app.models.policy import Policy, PolicyEnforcementMode
 from app.models.rule_override import RuleOverride
 from app.models.vhost import VHost
 from app.services.config_renderer import (
+    CrsPolicyRenderContext,
     HaproxyBackend,
     HaproxyRenderContext,
+    HaproxyRoute,
+    RuleOverrideRenderContext,
     render_crs_setup,
     render_haproxy_cfg_multi,
     render_rule_overrides,
@@ -38,10 +41,12 @@ def generate(
     )
     vhost_contexts = [_to_haproxy_context(vhost) for vhost in active_vhosts]
 
-    active_policy = _pick_active_policy(active_vhosts, policies, rule_overrides)
+    active_policy, active_overrides = _pick_active_policy(
+        active_vhosts, policies, rule_overrides
+    )
     haproxy_cfg = render_haproxy_cfg_multi(vhost_contexts)
     crs_setup_conf = render_crs_setup(active_policy)
-    rule_overrides_conf = render_rule_overrides(active_policy)
+    rule_overrides_conf = render_rule_overrides(active_overrides)
 
     return GeneratedConfig(
         haproxy_cfg=haproxy_cfg,
@@ -54,7 +59,7 @@ def _pick_active_policy(
     active_vhosts: list[VHost],
     policies: list[Policy],
     rule_overrides: list[RuleOverride],
-) -> Policy:
+) -> tuple[CrsPolicyRenderContext, tuple[RuleOverrideRenderContext, ...]]:
     policies_by_id = {policy.id: policy for policy in policies}
     overrides_by_policy_id: dict[int, list[RuleOverride]] = {}
     for override in rule_overrides:
@@ -66,39 +71,63 @@ def _pick_active_policy(
         policy = policies_by_id.get(vhost.policy_id)
         if policy is None or not policy.is_active:
             continue
-        policy.rule_overrides = overrides_by_policy_id.get(policy.id, [])
-        return policy
+        return (
+            _to_crs_policy_context(policy),
+            _to_rule_override_contexts(overrides_by_policy_id.get(policy.id, [])),
+        )
 
-    default_policy = Policy(
-        id=0,
-        name="default-detect-only",
-        description="Auto-generated default policy",
-        paranoia_level=1,
-        inbound_anomaly_threshold=5,
-        outbound_anomaly_threshold=4,
-        enforcement_mode=PolicyEnforcementMode.detect_only,
-        is_active=True,
+    return (
+        CrsPolicyRenderContext(
+            paranoia_level=1,
+            inbound_anomaly_threshold=5,
+            outbound_anomaly_threshold=4,
+            enforcement_mode=PolicyEnforcementMode.detect_only,
+        ),
+        (),
     )
-    default_policy.rule_overrides = []
-    return default_policy
 
 
 def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
     domain_slug = _slug(vhost.domain)
     backend_address = _extract_backend_address(vhost.backend_url)
     return HaproxyRenderContext(
-        vhost_acl_name=f"host_{domain_slug}",
-        vhost_hosts=(vhost.domain,),
-        backend=HaproxyBackend(
-            name=f"be_{domain_slug}",
-            server_name=f"srv_{domain_slug}",
-            address=backend_address,
-        ),
+        routes=(
+            HaproxyRoute(
+                vhost_acl_name=f"host_{domain_slug}",
+                vhost_hosts=(vhost.domain,),
+                backend=HaproxyBackend(
+                    name=f"be_{domain_slug}",
+                    server_name=f"srv_{domain_slug}",
+                    address=backend_address,
+                ),
+            ),
+        )
     )
 
 
 def _slug(value: str) -> str:
     return value.replace(".", "_").replace("-", "_")
+
+
+def _to_crs_policy_context(policy: Policy) -> CrsPolicyRenderContext:
+    return CrsPolicyRenderContext(
+        paranoia_level=policy.paranoia_level,
+        inbound_anomaly_threshold=policy.inbound_anomaly_threshold,
+        outbound_anomaly_threshold=policy.outbound_anomaly_threshold,
+        enforcement_mode=policy.enforcement_mode,
+    )
+
+
+def _to_rule_override_contexts(
+    overrides: list[RuleOverride],
+) -> tuple[RuleOverrideRenderContext, ...]:
+    return tuple(
+        RuleOverrideRenderContext(
+            rule_id=override.rule_id,
+            action=override.action,
+        )
+        for override in overrides
+    )
 
 
 def _extract_backend_address(backend_url: str) -> str:
