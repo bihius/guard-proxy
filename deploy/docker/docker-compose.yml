@@ -25,6 +25,7 @@ services:
       - .env
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      GUARD_PROXY_RUNTIME_DIR: /runtime
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,7 +40,7 @@ services:
       retries: 10
     volumes:
       - backend_logs:/var/log/guard-proxy
-      - generated_config:/var/lib/guard-proxy/generated
+      - guard_proxy_runtime:/runtime
     networks:
       - gp_internal
 
@@ -97,7 +98,7 @@ services:
       - ../../configs/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
       - haproxy_logs:/var/log/haproxy
-      - generated_config:/etc/haproxy/generated:ro
+      - guard_proxy_runtime:/runtime:ro
     healthcheck:
       test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg"]
       interval: 10s
@@ -118,4 +119,4 @@ volumes:
   haproxy_logs:
   coraza_logs:
   backend_logs:
-  generated_config:
+  guard_proxy_runtime:
