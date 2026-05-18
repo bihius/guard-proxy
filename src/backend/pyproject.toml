@@ -51,3 +51,7 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-m 'not e2e'"
+markers = [
+    "e2e: full Docker Compose end-to-end tests excluded from default pytest runs",
+]
