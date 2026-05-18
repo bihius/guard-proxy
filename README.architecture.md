@@ -108,12 +108,12 @@ Generated runtime artifacts live in the Docker named volume
 `guard_proxy_runtime`. The backend mounts it read-write at `/runtime`, while
 HAProxy mounts the same volume read-only at `/runtime`.
 
-The reserved layout is:
+The reserved layout for future generated artifacts is:
 
 ```text
 /runtime/
-  haproxy.cfg  # generated HAProxy config, written by the backend
-  crs/         # generated CRS artifacts, written by the backend
+  haproxy.cfg  # generated HAProxy config
+  crs/         # generated CRS artifacts
 ```
 
 The backend container starts as root only long enough to create `/runtime/crs`,
