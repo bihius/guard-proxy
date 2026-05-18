@@ -141,11 +141,21 @@ _ENVIRONMENT = Environment(
 
 
 def render_haproxy_cfg(context: HaproxyRenderContext) -> str:
-    """Render haproxy.cfg from already prepared values."""
+    """Render haproxy.cfg for a single vhost context."""
+    return _render_haproxy_routes(context.routes)
+
+
+def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
+    """Render haproxy.cfg from one or many prepared vhost contexts."""
+    routes = tuple(route for context in vhost_contexts for route in context.routes)
+    return _render_haproxy_routes(routes)
+
+
+def _render_haproxy_routes(routes: tuple[HaproxyRoute, ...]) -> str:
     template = _ENVIRONMENT.get_template("haproxy.cfg.j2")
     return template.render(
-        routes=context.routes,
-        default_backend=context.routes[0].backend,
+        routes=routes,
+        default_backend=routes[0].backend if routes else None,
     )
 
 
