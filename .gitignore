@@ -13,6 +13,7 @@
 CLAUDE.md
 AGENTS.md
 CODEX.md
+.claude/
 .opencode/
 .opencodeignore
 opencode.json
