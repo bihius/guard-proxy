@@ -138,7 +138,10 @@ The Coraza container image is built on `alpine:3.19` with `tini` as PID 1 and
 backend performs an atomic `os.replace` of the `current` symlink, the supervisor
 detects the `moved_to` or `create` event for `current` and restarts
 `coraza-spoa` — picking up the new `rule-overrides.conf` without any external
-signal or Docker socket access.
+signal or Docker socket access. Note that this is a full process restart, not a
+hot-reload: port 9000 is briefly unavailable (~sub-second) during the restart,
+causing HAProxy SPOE to return an error for any request that lands in that
+window. This is acceptable for a manual rule-apply operation.
 
 ## Key Decisions
 
