@@ -6,7 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings, validate_runtime_settings
-from app.routers import auth, logs, policies, rule_overrides, runtime_status, vhosts
+from app.routers import (
+    auth,
+    config,
+    logs,
+    policies,
+    rule_overrides,
+    runtime_status,
+    vhosts,
+)
 
 
 class _HealthcheckAccessFilter(logging.Filter):
@@ -49,6 +57,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(config.router)
 app.include_router(logs.router)
 app.include_router(policies.router)
 app.include_router(rule_overrides.router)
