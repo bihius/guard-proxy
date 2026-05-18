@@ -40,7 +40,8 @@ services:
       retries: 10
     volumes:
       - backend_logs:/var/log/guard-proxy
-      - guard_proxy_runtime:/runtime
+      - generated_config:/var/lib/guard-proxy/generated
+      - haproxy_runtime:/var/run/haproxy
     networks:
       - gp_internal
 
@@ -85,7 +86,12 @@ services:
 
   haproxy:
     image: haproxy:3.0-alpine
-    command: ["haproxy", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+    command:
+      [
+        "sh",
+        "-c",
+        "set -eu; if [ ! -f /etc/haproxy/generated/current/haproxy.cfg ]; then mkdir -p /etc/haproxy/generated/releases/seed; cp /usr/local/etc/haproxy/haproxy.cfg /etc/haproxy/generated/releases/seed/haproxy.cfg; ln -sfn releases/seed /etc/haproxy/generated/current; fi; exec haproxy -W -S /var/run/haproxy/master.sock,mode,660,level,operator -f /etc/haproxy/generated/current/haproxy.cfg",
+      ]
     restart: unless-stopped
     depends_on:
       backend:
@@ -98,9 +104,10 @@ services:
       - ../../configs/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
       - haproxy_logs:/var/log/haproxy
-      - guard_proxy_runtime:/runtime:ro
+      - generated_config:/etc/haproxy/generated
+      - haproxy_runtime:/var/run/haproxy
     healthcheck:
-      test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg"]
+      test: ["CMD-SHELL", "haproxy -c -f /etc/haproxy/generated/current/haproxy.cfg"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -117,6 +124,7 @@ networks:
 volumes:
   pgdata:
   haproxy_logs:
+  haproxy_runtime:
   coraza_logs:
   backend_logs:
   guard_proxy_runtime:

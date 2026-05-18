@@ -71,11 +71,37 @@ class Settings(EnvFileSettings):
     # Database
     database_url: str = "sqlite:///./guard_proxy.db"
     debug: bool = False
+    runtime_generated_config_root: str = "/var/lib/guard-proxy/generated"
+    haproxy_validation_binary: str = "haproxy"
+    haproxy_validation_timeout_seconds: int = 10
+    haproxy_master_socket_path: str = "/var/run/haproxy/master.sock"
+    haproxy_reload_timeout_seconds: int = 10
 
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_empty(cls, value: str) -> str:
         return _validate_database_url(value)
+
+    @field_validator(
+        "runtime_generated_config_root",
+        "haproxy_validation_binary",
+        "haproxy_master_socket_path",
+    )
+    @classmethod
+    def runtime_paths_must_not_be_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Runtime path settings must not be empty.")
+        return value
+
+    @field_validator(
+        "haproxy_validation_timeout_seconds",
+        "haproxy_reload_timeout_seconds",
+    )
+    @classmethod
+    def timeout_settings_must_be_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Runtime timeout settings must be greater than zero.")
+        return value
 
     # JWT
     jwt_secret_key: str
