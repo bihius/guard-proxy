@@ -27,7 +27,7 @@ def test_generate_one_vhost_no_policy() -> None:
 
     generated = generate(vhosts=[vhost], policies=[], rule_overrides=[])
 
-    assert "acl host_app_local hdr(host) -i app.local" in generated.haproxy_cfg
+    assert "acl host_app_local hdr(host),field(1,:) -i app.local" in generated.haproxy_cfg
     assert "use_backend be_app_local if host_app_local" in generated.haproxy_cfg
     assert "server srv_app_local backend:8000 check" in generated.haproxy_cfg
     assert "SecRuleEngine DetectionOnly" in generated.crs_setup_conf
@@ -54,7 +54,7 @@ def test_generate_one_vhost_with_policy() -> None:
 
     generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
 
-    assert "acl host_api_example_com hdr(host) -i api.example.com" in generated.haproxy_cfg
+    assert "acl host_api_example_com hdr(host),field(1,:) -i api.example.com" in generated.haproxy_cfg
     assert "use_backend be_api_example_com if host_api_example_com" in generated.haproxy_cfg
     assert "SecRuleEngine On" in generated.crs_setup_conf
     assert "setvar:tx.blocking_paranoia_level=2" in generated.crs_setup_conf
