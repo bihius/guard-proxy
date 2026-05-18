@@ -52,10 +52,8 @@ def test_debug_coraza_spoa_config_enables_debug_logging() -> None:
 def test_debug_compose_override_enables_haproxy_debug_flag() -> None:
     compose = (REPO_ROOT / "deploy/docker/docker-compose.debug.yml").read_text()
 
-    assert (
-        'command: ["haproxy", "-d", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]'
-        in compose
-    )
+    assert "exec haproxy -d -W -S /var/run/haproxy/master.sock" in compose
+    assert "-f /etc/haproxy/generated/current/haproxy.cfg" in compose
 
 
 def test_debug_compose_override_mounts_debug_coraza_config() -> None:

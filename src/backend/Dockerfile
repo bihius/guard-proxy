@@ -23,6 +23,10 @@ RUN groupadd --system app && useradd --system --gid app --home-dir /app --no-cre
 WORKDIR /app
 RUN chown app:app /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends haproxy \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app alembic alembic
 COPY --chown=app:app app app
