@@ -30,6 +30,10 @@ RUN mkdir -p /runtime/crs && chown app:app /app /runtime /runtime/crs
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends haproxy \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app alembic alembic
 COPY --chown=app:app app app
