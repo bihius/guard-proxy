@@ -4,7 +4,7 @@ FROM ghcr.io/corazawaf/coraza-spoa:0.6.1 AS upstream
 
 FROM alpine:3.19
 
-RUN apk add --no-cache inotify-tools tini
+RUN apk add --no-cache su-exec tini
 
 COPY --from=upstream /coraza-spoa /usr/local/bin/coraza-spoa
 COPY configs/coraza/coraza-spoa.yaml /etc/coraza-spoa/coraza-spoa.yaml
@@ -15,12 +15,12 @@ COPY deploy/docker/coraza-supervisor.sh /usr/local/bin/coraza-supervisor
 
 RUN addgroup -S coraza && adduser -S -G coraza coraza
 
-RUN chmod +x /usr/local/bin/coraza-supervisor
+RUN mkdir -p /var/log/coraza \
+    && chown -R coraza:coraza /var/log/coraza \
+    && chmod +x /usr/local/bin/coraza-supervisor
 # Verify the binary is executable; fails the build if the upstream image
 # switches to a dynamically-linked binary that can't run on musl/alpine.
 RUN /usr/local/bin/coraza-spoa --version >/dev/null
-
-USER coraza
 
 EXPOSE 9000
 
