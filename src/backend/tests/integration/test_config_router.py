@@ -34,8 +34,15 @@ def test_apply_admin_success(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "runtime_generated_config_root", str(tmp_path / "generated"))
-    monkeypatch.setattr("app.services.config_apply._validate_haproxy", _mock_validate_ok)
+    monkeypatch.setattr(
+        settings,
+        "runtime_generated_config_root",
+        str(tmp_path / "generated"),
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        _mock_validate_ok,
+    )
     monkeypatch.setattr("app.services.config_apply._reload_haproxy", _mock_reload_ok)
 
     resp = client.post("/config/apply", headers=admin_token)
@@ -82,8 +89,15 @@ def test_apply_validation_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "runtime_generated_config_root", str(tmp_path / "generated"))
-    monkeypatch.setattr("app.services.config_apply._validate_haproxy", _mock_validate_fail)
+    monkeypatch.setattr(
+        settings,
+        "runtime_generated_config_root",
+        str(tmp_path / "generated"),
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        _mock_validate_fail,
+    )
     monkeypatch.setattr("app.services.config_apply._reload_haproxy", _mock_reload_ok)
 
     resp = client.post("/config/apply", headers=admin_token)
