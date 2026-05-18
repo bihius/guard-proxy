@@ -217,3 +217,24 @@ def test_settings_ignore_dot_env_example(
     assert (
         getattr(settings, "log_ingest_shared_secret") == "real-log-secret-from-dot-env"
     )
+
+
+def test_settings_reject_empty_haproxy_master_socket_path() -> None:
+    with pytest.raises(ValidationError, match="Runtime path settings must not be empty"):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            HAPROXY_MASTER_SOCKET_PATH="   ",
+        )
+
+
+def test_settings_reject_non_positive_reload_timeout() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="Runtime timeout settings must be greater than zero",
+    ):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            HAPROXY_RELOAD_TIMEOUT_SECONDS="0",
+        )
