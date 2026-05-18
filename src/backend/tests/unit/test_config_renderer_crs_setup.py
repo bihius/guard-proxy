@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from app.models.policy import Policy, PolicyEnforcementMode
-from app.services.config_renderer import render_crs_setup
+from app.models.policy import PolicyEnforcementMode
+from app.services.config_renderer import CrsPolicyRenderContext, render_crs_setup
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -29,14 +29,12 @@ def _policy(
     inbound_anomaly_threshold: int = 5,
     outbound_anomaly_threshold: int = 5,
     enforcement_mode: PolicyEnforcementMode = PolicyEnforcementMode.block,
-) -> Policy:
-    return Policy(
-        name="Renderer policy",
+) -> CrsPolicyRenderContext:
+    return CrsPolicyRenderContext(
         paranoia_level=paranoia_level,
         inbound_anomaly_threshold=inbound_anomaly_threshold,
         outbound_anomaly_threshold=outbound_anomaly_threshold,
         enforcement_mode=enforcement_mode,
-        is_active=True,
     )
 
 
