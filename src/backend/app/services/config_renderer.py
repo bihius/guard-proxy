@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
-from app.models.policy import Policy, PolicyEnforcementMode
-from app.models.rule_override import RuleAction, RuleOverride
+from app.models.policy import PolicyEnforcementMode
+from app.models.rule_override import RuleAction
 
 # HAProxy identifiers (ACL names, backend names, server names): letters, digits,
 # hyphens, and underscores only.  No whitespace, newlines, or shell-special chars.
 _HAPROXY_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
-# HAProxy host values used in ACL conditions: hostname characters plus colon
-# (for optional port) and dots.  No whitespace or newlines.
-_HAPROXY_HOST_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
+# HAProxy host values used in ACL conditions: bare hostname characters only.
+# The HAProxy template strips the request port before matching.
+_HAPROXY_HOST_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # HAProxy backend address (host:port): same allowlist as host values.
 _HAPROXY_ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
@@ -38,7 +39,8 @@ def _validate_haproxy_host(value: str, field: str) -> None:
     if not _HAPROXY_HOST_RE.match(value):
         raise ValueError(
             f"{field} {value!r} contains characters unsafe for HAProxy config; "
-            "only hostname chars (letters, digits, dots, hyphens, colons) are allowed"
+            "only hostname chars (letters, digits, dots, hyphens, underscores) "
+            "are allowed"
         )
 
 
@@ -67,7 +69,7 @@ class HaproxyBackend:
 
 
 @dataclass(frozen=True)
-class HaproxyRenderContext:
+class HaproxyRoute:
     """Prepared HAProxy render input with no database behavior.
 
     All fields are validated on construction to reject characters that could
@@ -83,8 +85,51 @@ class HaproxyRenderContext:
         _validate_haproxy_identifier(
             self.vhost_acl_name, "HaproxyRenderContext.vhost_acl_name"
         )
+        if not self.vhost_hosts:
+            raise ValueError("HaproxyRenderContext.vhost_hosts must not be empty")
         for host in self.vhost_hosts:
             _validate_haproxy_host(host, "HaproxyRenderContext.vhost_hosts")
+
+
+@dataclass(frozen=True)
+class HaproxyRenderContext:
+    """Prepared HAProxy render input for all active virtual hosts."""
+
+    routes: tuple[HaproxyRoute, ...]
+
+    def __post_init__(self) -> None:
+        if not self.routes:
+            raise ValueError("HaproxyRenderContext.routes must not be empty")
+        _ensure_unique(
+            (route.vhost_acl_name for route in self.routes),
+            "HaproxyRenderContext.routes.vhost_acl_name",
+        )
+        _ensure_unique(
+            (route.backend.name for route in self.routes),
+            "HaproxyRenderContext.routes.backend.name",
+        )
+        _ensure_unique(
+            (route.backend.server_name for route in self.routes),
+            "HaproxyRenderContext.routes.backend.server_name",
+        )
+
+
+@dataclass(frozen=True)
+class CrsPolicyRenderContext:
+    """Policy fields needed to render CRS setup without an ORM object."""
+
+    paranoia_level: int
+    inbound_anomaly_threshold: int
+    outbound_anomaly_threshold: int
+    enforcement_mode: PolicyEnforcementMode
+
+
+@dataclass(frozen=True)
+class RuleOverrideRenderContext:
+    """Rule override fields needed to render CRS removals."""
+
+    rule_id: int
+    action: RuleAction
 
 
 _ENVIRONMENT = Environment(
@@ -103,20 +148,13 @@ def render_haproxy_cfg(context: HaproxyRenderContext) -> str:
 def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
     """Render haproxy.cfg from one or many prepared vhost contexts."""
     template = _ENVIRONMENT.get_template("haproxy.cfg.j2")
-    vhosts = [
-        {
-            "acl_name": context.vhost_acl_name,
-            "hosts": context.vhost_hosts,
-            "backend_name": context.backend.name,
-            "backend_server_name": context.backend.server_name,
-            "backend_address": context.backend.address,
-        }
-        for context in vhost_contexts
-    ]
-    return template.render(vhosts=vhosts)
+    return template.render(
+        routes=context.routes,
+        default_backend=context.routes[0].backend,
+    )
 
 
-def render_crs_setup(policy: Policy) -> str:
+def render_crs_setup(policy: CrsPolicyRenderContext) -> str:
     """Render CRS setup configuration for a policy."""
     template = _ENVIRONMENT.get_template("crs-setup.conf.j2")
     sec_rule_engine = (
@@ -127,15 +165,25 @@ def render_crs_setup(policy: Policy) -> str:
     return template.render(policy=policy, sec_rule_engine=sec_rule_engine)
 
 
-def render_rule_overrides(policy: Policy) -> str:
+def render_rule_overrides(overrides: tuple[RuleOverrideRenderContext, ...]) -> str:
     """Render CRS rule removals for disabled policy overrides."""
     template = _ENVIRONMENT.get_template("rule-overrides.conf.j2")
-    disabled_rule_overrides = _sorted_disabled_overrides(policy.rule_overrides)
+    disabled_rule_overrides = _sorted_disabled_overrides(overrides)
     return template.render(disabled_rule_overrides=disabled_rule_overrides)
 
 
-def _sorted_disabled_overrides(overrides: list[RuleOverride]) -> list[RuleOverride]:
+def _sorted_disabled_overrides(
+    overrides: tuple[RuleOverrideRenderContext, ...],
+) -> list[RuleOverrideRenderContext]:
     return sorted(
         (override for override in overrides if override.action == RuleAction.disable),
         key=lambda override: override.rule_id,
     )
+
+
+def _ensure_unique(values: Iterable[str], field: str) -> None:
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            raise ValueError(f"{field} contains duplicate HAProxy identifier {value!r}")
+        seen.add(value)

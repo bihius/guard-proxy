@@ -7,6 +7,7 @@ import pytest
 from app.services.config_renderer import (
     HaproxyBackend,
     HaproxyRenderContext,
+    HaproxyRoute,
     render_haproxy_cfg,
 )
 
@@ -30,21 +31,17 @@ def _normalise_config(config: str) -> str:
 
 def _m1_reference_context() -> HaproxyRenderContext:
     return HaproxyRenderContext(
-        vhost_acl_name="host_app",
-        vhost_hosts=(
-            "app.local",
-            "app.local:80",
-            "app.local:8080",
-            "localhost",
-            "localhost:8080",
-            "127.0.0.1",
-            "127.0.0.1:8080",
-        ),
-        backend=HaproxyBackend(
-            name="be_app",
-            server_name="app",
-            address="backend:8000",
-        ),
+        routes=(
+            HaproxyRoute(
+                vhost_acl_name="host_app",
+                vhost_hosts=("app.local", "localhost", "127.0.0.1"),
+                backend=HaproxyBackend(
+                    name="be_app",
+                    server_name="app",
+                    address="backend:8000",
+                ),
+            ),
+        )
     )
 
 
@@ -58,21 +55,63 @@ def test_haproxy_template_renders_m1_reference_modulo_whitespace() -> None:
 def test_haproxy_template_parameterises_vhost_and_backend() -> None:
     rendered = render_haproxy_cfg(
         HaproxyRenderContext(
-            vhost_acl_name="host_api",
-            vhost_hosts=("api.example.com", "api.example.com:80"),
-            backend=HaproxyBackend(
-                name="be_api",
-                server_name="api",
-                address="api-backend:9000",
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    backend=HaproxyBackend(
+                        name="be_api",
+                        server_name="api",
+                        address="api-backend:9000",
+                    ),
+                ),
             ),
         )
     )
 
-    assert "acl host_api hdr(host) -i api.example.com api.example.com:80" in rendered
+    assert "acl host_api hdr(host),field(1,:) -i api.example.com" in rendered
     assert "http-request deny deny_status 421 if !host_api" in rendered
     assert "use_backend be_api if host_api" in rendered
     assert "default_backend be_api" in rendered
     assert "server api api-backend:9000 check" in rendered
+
+
+def test_haproxy_template_renders_multiple_vhost_routes() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_vhost_1",
+                    vhost_hosts=("foo-bar.com",),
+                    backend=HaproxyBackend(
+                        name="be_vhost_1",
+                        server_name="srv_vhost_1",
+                        address="foo-backend:8000",
+                    ),
+                ),
+                HaproxyRoute(
+                    vhost_acl_name="host_vhost_2",
+                    vhost_hosts=("foo.bar.com",),
+                    backend=HaproxyBackend(
+                        name="be_vhost_2",
+                        server_name="srv_vhost_2",
+                        address="bar-backend:8000",
+                    ),
+                ),
+            )
+        )
+    )
+
+    assert "acl host_vhost_1 hdr(host),field(1,:) -i foo-bar.com" in rendered
+    assert "acl host_vhost_2 hdr(host),field(1,:) -i foo.bar.com" in rendered
+    assert (
+        "http-request deny deny_status 421 if !host_vhost_1 !host_vhost_2"
+        in rendered
+    )
+    assert "use_backend be_vhost_1 if host_vhost_1" in rendered
+    assert "use_backend be_vhost_2 if host_vhost_2" in rendered
+    assert "backend be_vhost_1" in rendered
+    assert "backend be_vhost_2" in rendered
 
 
 @pytest.mark.parametrize(
@@ -89,9 +128,17 @@ def test_haproxy_template_parameterises_vhost_and_backend() -> None:
 def test_haproxy_render_context_rejects_unsafe_acl_name(vhost_acl_name: str) -> None:
     with pytest.raises(ValueError, match="vhost_acl_name"):
         HaproxyRenderContext(
-            vhost_acl_name=vhost_acl_name,
-            vhost_hosts=("safe.host",),
-            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name=vhost_acl_name,
+                    vhost_hosts=("safe.host",),
+                    backend=HaproxyBackend(
+                        name="be",
+                        server_name="srv",
+                        address="host:80",
+                    ),
+                ),
+            )
         )
 
 
@@ -103,14 +150,23 @@ def test_haproxy_render_context_rejects_unsafe_acl_name(vhost_acl_name: str) -> 
         "has\ttab",
         "has#comment",
         "has;semi",
+        "safe.host:8080",
     ],
 )
 def test_haproxy_render_context_rejects_unsafe_host(host: str) -> None:
     with pytest.raises(ValueError, match="HaproxyRenderContext.vhost_hosts"):
         HaproxyRenderContext(
-            vhost_acl_name="safe_acl",
-            vhost_hosts=(host,),
-            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="safe_acl",
+                    vhost_hosts=(host,),
+                    backend=HaproxyBackend(
+                        name="be",
+                        server_name="srv",
+                        address="host:80",
+                    ),
+                ),
+            )
         )
 
 
@@ -139,18 +195,60 @@ def test_haproxy_backend_rejects_unsafe_values(field: str, kwargs: dict) -> None
 def test_haproxy_render_context_rejects_empty_acl_name() -> None:
     with pytest.raises(ValueError, match="vhost_acl_name"):
         HaproxyRenderContext(
-            vhost_acl_name="",
-            vhost_hosts=("safe.host",),
-            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="",
+                    vhost_hosts=("safe.host",),
+                    backend=HaproxyBackend(
+                        name="be",
+                        server_name="srv",
+                        address="host:80",
+                    ),
+                ),
+            )
         )
 
 
 def test_haproxy_render_context_rejects_empty_host() -> None:
     with pytest.raises(ValueError, match="HaproxyRenderContext.vhost_hosts"):
         HaproxyRenderContext(
-            vhost_acl_name="safe_acl",
-            vhost_hosts=("",),
-            backend=HaproxyBackend(name="be", server_name="srv", address="host:80"),
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="safe_acl",
+                    vhost_hosts=("",),
+                    backend=HaproxyBackend(
+                        name="be",
+                        server_name="srv",
+                        address="host:80",
+                    ),
+                ),
+            )
+        )
+
+
+def test_haproxy_render_context_rejects_duplicate_identifiers() -> None:
+    with pytest.raises(ValueError, match="duplicate HAProxy identifier"):
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_duplicate",
+                    vhost_hosts=("one.example.com",),
+                    backend=HaproxyBackend(
+                        name="be_one",
+                        server_name="srv_one",
+                        address="one-backend:8000",
+                    ),
+                ),
+                HaproxyRoute(
+                    vhost_acl_name="host_duplicate",
+                    vhost_hosts=("two.example.com",),
+                    backend=HaproxyBackend(
+                        name="be_two",
+                        server_name="srv_two",
+                        address="two-backend:8000",
+                    ),
+                ),
+            )
         )
 
 
