@@ -3,24 +3,24 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
-from app.services.config_apply import _CommandResult
 
 
-def _mock_validate_ok(_: Path) -> _CommandResult:
-    return _CommandResult(ok=True, output="Configuration file is valid")
+def _mock_validate_ok(_: Path) -> SimpleNamespace:
+    return SimpleNamespace(ok=True, output="Configuration file is valid")
 
 
-def _mock_reload_ok() -> _CommandResult:
-    return _CommandResult(ok=True, output="Reload succeeded")
+def _mock_reload_ok() -> SimpleNamespace:
+    return SimpleNamespace(ok=True, output="Reload succeeded")
 
 
-def _mock_validate_fail(_: Path) -> _CommandResult:
-    return _CommandResult(ok=False, output="line 42 parse error")
+def _mock_validate_fail(_: Path) -> SimpleNamespace:
+    return SimpleNamespace(ok=False, output="line 42 parse error")
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ def test_apply_validation_failure(
 
     resp = client.post("/config/apply", headers=admin_token)
 
-    assert resp.status_code == 200
+    assert resp.status_code == 422
     body = resp.json()
     assert body["status"] == "validation_failed"
     assert "parse error" in body["validation_output"]
