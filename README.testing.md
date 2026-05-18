@@ -39,6 +39,21 @@ The smoke test sends `Host: app.local` because the reference HAProxy
 configuration rejects unknown hosts before WAF inspection. The same smoke test
 also runs nightly and on demand through `.github/workflows/smoke.yml`.
 
+### Policy Apply E2E
+
+The policy apply e2e test starts an isolated Compose project, seeds an admin,
+creates a policy-backed `app.local` vhost, applies runtime config, and verifies
+that disabling and re-enabling CRS rule `913100` changes live request behavior.
+
+Run locally from the backend directory:
+
+```sh
+uv run pytest -m e2e tests/e2e/test_policy_apply.py
+```
+
+The test uses the same prerequisites as the smoke test and is wired into the
+nightly smoke workflow. Normal backend pytest runs exclude tests marked `e2e`.
+
 ## Test Data
 
 - Payloads: `benchmarks/payloads/` (sqli.txt, xss.txt, legitimate.txt)
