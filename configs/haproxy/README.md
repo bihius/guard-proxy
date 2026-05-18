@@ -28,8 +28,8 @@ Client ──► HAProxy :80 ──► (SPOE) ──► Coraza SPOA :9000
 
 1. The client sends an HTTP request to HAProxy on port 80.
 2. The `fe_http` frontend stamps it with `X-Request-ID` and matches
-   the `Host` header against the `host_app` ACL. Anything that is not
-   `app.local` is rejected with `421 Misdirected Request`.
+   the `Host` header, without any request port, against the `host_app`
+   ACL. Unknown hosts are rejected with `421 Misdirected Request`.
 3. The `spoe` filter sends a `coraza-req` message to the
    `coraza-spoa` backend (TCP, `coraza:9000`).
 4. The SPOA evaluates the request against Coraza/CRS rules and
