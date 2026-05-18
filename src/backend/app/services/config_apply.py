@@ -99,7 +99,10 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
 
     reload_result = _reload_haproxy()
     if reload_result.ok:
-        logger.info("config-apply success correlation_id=%s", correlation_id)
+        logger.info(
+            "config-apply success correlation_id=%s",
+            correlation_id,
+        )
         return ApplyResult(
             status=ApplyStatus.success,
             correlation_id=correlation_id,
