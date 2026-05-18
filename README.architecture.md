@@ -15,8 +15,9 @@ graph TB
 
     FE[React Admin UI] -->|REST API| BE
     BE --> DB[(PostgreSQL)]
-    BE -.->|future generated config| H
-    BE -.->|future generated config| CS
+    BE -.->|writes generated runtime config| RV[(guard_proxy_runtime)]
+    RV -.->|read-only mount| H
+    RV -.->|future CRS artifacts| CS
 ```
 
 ## Request Flow
@@ -70,7 +71,7 @@ machine-readable degraded reason header.
 1. Admin users manage vhosts, policies, and rule overrides through the React UI and FastAPI API.
 2. FastAPI persists control-plane state in PostgreSQL.
 3. M1 stores policy data but still uses hand-written HAProxy and Coraza reference configuration.
-4. Generated HAProxy/Coraza config, validation, graceful reloads, rollback, and richer per-vhost runtime policy wiring are future M2 work.
+4. FastAPI writes generated runtime config into the shared `guard_proxy_runtime` volume. HAProxy mounts that volume read-only at `/runtime`; validation, graceful reloads, rollback, and richer per-vhost runtime policy wiring are future M2 work.
 
 ### Runtime Event Ingestion
 1. Runtime WAF events can be represented as structured log payloads.
@@ -100,6 +101,26 @@ Coraza debug logging. The end-to-end smoke test is
 `benchmarks/smoke/e2e.sh`; it starts the stack, waits for healthy services,
 checks a benign request, checks that a SQL injection request is blocked, and
 tears the stack down.
+
+### Shared Runtime Volume
+
+Generated runtime artifacts live in the Docker named volume
+`guard_proxy_runtime`. The backend mounts it read-write at `/runtime`, while
+HAProxy mounts the same volume read-only at `/runtime`.
+
+The reserved layout for future generated artifacts is:
+
+```text
+/runtime/
+  haproxy.cfg  # generated HAProxy config
+  crs/         # generated CRS artifacts
+```
+
+The backend container starts as root only long enough to create `/runtime/crs`,
+assign the mounted volume to the non-root `app` user, and then drops privileges
+before running migrations and Uvicorn. HAProxy continues to boot from the
+checked-in seed config in `configs/haproxy/haproxy.cfg` until generated config
+deployment and reload orchestration are enabled.
 
 ## Key Decisions
 
