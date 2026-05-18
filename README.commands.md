@@ -56,7 +56,7 @@ make run                                                             # Start all
 make dev                                                             # Start all services with HAProxy -d flag and Coraza debug logging
 make coraza-build                                                    # Build the pinned Coraza SPOA + CRS image
 docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza  # Reload mounted Coraza config/rules
-docker volume ls | grep guard-proxy                                  # Inspect pgdata, log, and guard_proxy_runtime volumes
+docker volume ls | grep guard_proxy                                  # Inspect pgdata, log, and guard_proxy_runtime volumes
 make ps                                                              # Show service status
 make logs                                                            # Follow all service logs
 make down                                                            # Stop stack (keeps named volumes)
