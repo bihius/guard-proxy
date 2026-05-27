@@ -34,7 +34,78 @@ git submodule update --init --recursive
 - Response body inspection is disabled for M1, matching ADR-007.
 - Blocking paranoia level is `1`.
 - Inbound and outbound anomaly thresholds are `5`.
-- Relevant audit events are written as JSON to `/var/log/coraza/audit.json`.
+
+## Audit log output
+
+Coraza writes one JSON audit event per line to **stdout** using `SecAuditLogType Serial` + `SecAuditLogFormat JSON`. Each transaction that matches `SecAuditEngine RelevantOnly` (i.e. transactions where at least one rule fired) produces a single JSON object followed by a newline — the format a downstream log shipper can consume directly.
+
+Operational logs from the `coraza-spoa` daemon (startup, health, rule-load messages) go to **stderr**, so the stdout stream is a clean newline-delimited JSON stream.
+
+To inspect events while the stack is running:
+
+```sh
+# stdout only — audit JSON
+docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
+  logs --no-log-prefix coraza | jq -c .
+
+# stderr only — SPOA operational logs
+docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
+  logs --no-log-prefix coraza 2>&1 1>/dev/null
+```
+
+### Event schema and ingest mapping
+
+The table below maps each `LogIngestRequest` field (defined in
+`src/backend/app/schemas/log.py`) to its source path inside the Coraza JSON
+event. This is the contract for the future log shipper (not implemented here).
+
+Parts `ABIJDEFHZ` produce a top-level structure like:
+
+```jsonc
+{
+  "transaction": {
+    "id": "...",
+    "timestamp": "...",
+    "client_ip": "...",
+    "is_interrupted": false,
+    "request": {
+      "method": "GET",
+      "uri": "/path",
+      "headers": { "host": "example.com", ... }
+    },
+    "response": { "status": 200 },
+    "variables": {
+      "tx": {
+        "anomaly_score": "5",
+        "paranoia_level": "1"
+      }
+    }
+  },
+  "messages": [
+    {
+      "message": "...",
+      "data": { "id": "941100", "msg": "XSS Attack ...", "severity": "2" }
+    }
+  ]
+}
+```
+
+| `LogIngestRequest` field | Coraza source path | Notes |
+|---|---|---|
+| `producer_event_id` | `transaction.id` | Unique per transaction |
+| `event_at` | `transaction.timestamp` | ISO 8601 string |
+| `vhost` | `transaction.request.headers.host` | Lowercase |
+| `source_ip` | `transaction.client_ip` | |
+| `method` | `transaction.request.method` | Uppercase |
+| `request_uri` | `transaction.request.uri` | |
+| `status_code` | `transaction.response.status` | May be absent for blocked requests |
+| `action` | derived | `deny` if `transaction.is_interrupted` or any `messages[].data.severity` < 2; `monitor` when `SecRuleEngine DetectionOnly`; else `allow` |
+| `rule_id` | `messages[0].data.id` | First (or highest-severity) fired rule |
+| `rule_message` | `messages[0].data.msg` | Corresponding rule message |
+| `anomaly_score` | `transaction.variables.tx.anomaly_score` | String → int; absent when no rules fired |
+| `paranoia_level` | `transaction.variables.tx.paranoia_level` | String → int |
+| `severity` | derived from `messages[0].data.severity` | Numeric Coraza severity: 0–2 → `critical`/`error`; 3–4 → `warning`; ≥5 → `info` |
+| `raw_context` | full Coraza event JSON | Fallback; stores everything not mapped above |
 
 ## Docker Compose mounts
 

@@ -2,7 +2,7 @@
 
 bind: 0.0.0.0:9000
 log_level: info
-log_file: /dev/stdout
+log_file: /dev/stderr
 log_format: console
 
 default_application: default
@@ -14,5 +14,5 @@ applications:
     response_check: false
     transaction_ttl_ms: 60000
     log_level: info
-    log_file: /dev/stdout
+    log_file: /dev/stderr
     log_format: console
