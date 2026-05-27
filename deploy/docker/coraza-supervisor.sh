@@ -4,18 +4,11 @@ set -eu
 SPOA_BIN=/usr/local/bin/coraza-spoa
 SPOA_CONFIG=/etc/coraza-spoa/coraza-spoa.yaml
 RUNTIME_DIR=/runtime
-LOG_DIR=/var/log/coraza
 POLL_INTERVAL_SECONDS=1
 SPOA_PID=""
 WATCH_PID=""
 
 if [ "$(id -u)" = "0" ]; then
-    # Fresh Compose log volumes are root-owned. Fix ownership once, then drop
-    # privileges before running coraza-spoa.
-    mkdir -p "$LOG_DIR"
-    if [ "$(stat -c '%U:%G' "$LOG_DIR")" != "coraza:coraza" ]; then
-        chown -R coraza:coraza "$LOG_DIR"
-    fi
     exec su-exec coraza "$0" "$@"
 fi
 

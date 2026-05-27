@@ -25,7 +25,7 @@ def test_default_coraza_spoa_config_uses_info_logging() -> None:
     config = (REPO_ROOT / "configs/coraza/coraza-spoa.yaml").read_text()
 
     assert config.count("log_level: info") == 2
-    assert "log_file: /dev/stdout" in config
+    assert "log_file: /dev/stderr" in config
 
 
 def test_default_docker_compose_does_not_use_debug_flag() -> None:
