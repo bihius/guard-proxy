@@ -1,28 +1,14 @@
 # ===== IDE / Editor =====
-.cursor/
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .#*
-*.sublime-project
-*.sublime-workspace
-
-# ===== AI Agent Config =====
-CLAUDE.md
-AGENTS.md
-CODEX.md
-.claude/
-.git/hooks/post-checkout
-.opencode/
-.opencodeignore
-opencode.json
 
 # ===== Private / Working Notes =====
 notes/implementation/
-notes/implementation/frontend-bootstrap-playbook.md
-notes/daily/
+notes/private/
 !notes/decisions/
 
 .obsidian/
@@ -32,78 +18,39 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-develop-eggs/
-eggs/
-.eggs/
-lib/
-!src/frontend/src/lib/
-!src/frontend/src/lib/**
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
-Pipfile.lock
 
-# Virtual Environments
+# Virtual environments
 venv/
 env/
-ENV/
-env.bak/
-venv.bak/
 .venv/
-.pyenv/
 
 # uv
 .uv/
 # uv.lock is intentionally tracked (dependency lockfile)
 
 # Testing
-.tox/
-.nox/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
 coverage.xml
 *.cover
 .pytest_cache/
 htmlcov/
-.hypothesis/
 
-# MyPy / Type checking
+# Type checking
 .mypy_cache/
-.dmypy.json
-dmypy.json
-.pyre/
-.pytype/
-
-# Jupyter
-.ipynb_checkpoints
 
 # ===== Node.js / Frontend =====
 node_modules/
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
 .pnpm-debug.log*
 
 # Build outputs
 dist/
 build/
 *.tsbuildinfo
-.next/
 out/
-.nuxt/
-.cache/
-.parcel-cache/
 .vite/
 
 # ===== Environment / Secrets =====
@@ -140,16 +87,6 @@ logs/
 
 # ===== OS =====
 .DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
 
 # ===== Temporary / Backup =====
 *.tmp
@@ -169,8 +106,6 @@ $RECYCLE.BIN/
 *.mov
 *.avi
 *.mkv
-*.iso
-*.dmg
 
 # ===== Benchmark Results =====
 benchmarks/results/*.json
@@ -182,13 +117,8 @@ benchmarks/results/*.csv
 *.pid
 haproxy.stats
 
-
-# ===== Thesis  =====
+# ===== Thesis =====
 thesis/
-
-
-
 
 # ===== Keep Empty Directories =====
 !.gitkeep
-notes/github-issues-plan.md

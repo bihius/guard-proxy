@@ -5,7 +5,7 @@ ENV_FILE := deploy/docker/.env
 .PHONY: run dev down clean logs ps seed coraza-build
 
 run:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build
+	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build -d
 
 dev:
 	docker-compose -f $(COMPOSE_FILE) -f $(COMPOSE_DEBUG_FILE) --env-file $(ENV_FILE) up --build
