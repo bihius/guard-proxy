@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import {
   AlertTriangleIcon,
@@ -11,8 +11,17 @@ import { RoleBadge } from "@/components/shared/RoleBadge";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatCard } from "@/components/shared/StatCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ApplyConfigButton } from "@/features/runtime/ApplyConfigButton";
+import type { ApplyResult } from "@/features/runtime/ApplyConfigButton";
+import { RuntimeStatusCard } from "@/features/runtime/RuntimeStatusCard";
+import { useRuntimeStatus } from "@/features/runtime/use-runtime-status";
+import { useAuth } from "@/hooks/use-auth";
 
 export function DashboardPage() {
+  const { role } = useAuth();
+  const runtimeStatus = useRuntimeStatus();
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+
   return (
     <section className="space-y-8">
       <PageHeader
@@ -21,11 +30,34 @@ export function DashboardPage() {
         description="This starter dashboard shows the shared building blocks for the rest of the team: stat cards, section cards, and consistent status badges."
         actions={
           <>
-            <RoleBadge role="admin" />
+            {role ? <RoleBadge role={role} /> : null}
             <StatusBadge label="Development" tone="info" />
+            <ApplyConfigButton
+              runtimeStatus={runtimeStatus}
+              onResult={(result) => setApplyResult(result)}
+            />
           </>
         }
       />
+
+      {applyResult ? (
+        <div
+          className={`flex items-start justify-between gap-4 rounded-[var(--radius-md)] border px-4 py-3 text-sm font-medium ${
+            applyResult.kind === "success"
+              ? "border-success/30 bg-success-soft text-success"
+              : "border-error/30 bg-error-soft text-error"
+          }`}
+        >
+          <span>{applyResult.message}</span>
+          <button
+            type="button"
+            onClick={() => setApplyResult(null)}
+            className="shrink-0 text-current opacity-60 hover:opacity-100"
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -82,25 +114,7 @@ export function DashboardPage() {
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="Quick status"
-          description="Small composable status block for future platform health indicators."
-        >
-          <div className="space-y-3">
-            <StatusRow
-              label="Frontend shell"
-              badge={<StatusBadge label="Ready" tone="success" />}
-            />
-            <StatusRow
-              label="Auth foundation"
-              badge={<StatusBadge label="Ready" tone="success" />}
-            />
-            <StatusRow
-              label="Dashboard data"
-              badge={<StatusBadge label="Mocked" tone="warning" />}
-            />
-          </div>
-        </SectionCard>
+        <RuntimeStatusCard status={runtimeStatus} />
       </div>
     </section>
   );
@@ -120,20 +134,6 @@ function ActivityRow({ title, description, badge }: ActivityRowProps) {
         {badge}
       </div>
       <p className="text-sm leading-6 text-fg-muted">{description}</p>
-    </div>
-  );
-}
-
-type StatusRowProps = {
-  label: string;
-  badge: ReactNode;
-};
-
-function StatusRow({ label, badge }: StatusRowProps) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
-      <span className="text-sm font-medium text-fg">{label}</span>
-      {badge}
     </div>
   );
 }
