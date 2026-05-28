@@ -57,9 +57,11 @@ def test_deployment_state_is_deployed_when_latest_reload_succeeded(db: Session) 
     assert status.latest_reload.status == RuntimeOperationStatus.success
 
 
-def test_deployment_state_stays_never_deployed_with_only_failed_reloads(
+def test_deployment_state_is_failed_with_only_failed_reloads_and_no_prior_success(
     db: Session,
 ) -> None:
+    """A failed reload with no prior successful reload is 'failed', not 'never_deployed'.
+    The API was called and a reload was attempted; that attempt failed."""
     _add_operation(
         db,
         operation_type=RuntimeOperationType.reload,
@@ -70,7 +72,7 @@ def test_deployment_state_stays_never_deployed_with_only_failed_reloads(
 
     status = service.get_runtime_status()
 
-    assert status.deployment_state == "never_deployed"
+    assert status.deployment_state == "failed"
     assert status.latest_reload is not None
     assert status.latest_reload.status == RuntimeOperationStatus.failed
 
@@ -294,3 +296,83 @@ def test_checksum_changes_when_generated_content_changes() -> None:
     )
 
     assert checksum_a != checksum_b
+
+
+# ---------------------------------------------------------------------------
+# MED M6 — policy-less vhosts must not cause "policy id 0" error
+# ---------------------------------------------------------------------------
+
+
+def test_generated_config_allows_policy_less_vhost_alongside_policy_bound(
+    db: Session,
+) -> None:
+    """A mix of policy-less and policy-bound active vhosts should not raise.
+    Previously this caused 'found effective policies: 0, <id>' due to sentinel 0."""
+    policy = _add_policy(db, name="Production")
+    _add_vhost(
+        db,
+        domain="app.example.com",
+        backend_url="http://app-backend:8000",
+        policy_id=policy.id,
+    )
+    _add_vhost(
+        db,
+        domain="api.example.com",
+        backend_url="http://api-backend:8000",
+        policy_id=None,  # policy-less
+    )
+    db.commit()
+    service = RuntimeStatusService(db)
+
+    status = service.get_runtime_status()
+
+    assert status.generated_config.can_generate is True
+    assert status.generated_config.error is None
+    # The policy-less vhost should be reported in the warning field
+    assert status.generated_config.unbound_vhost_domains == ["api.example.com"]
+
+
+def test_generated_config_reports_unbound_vhost_domains(db: Session) -> None:
+    """All policy-less active vhosts are listed in unbound_vhost_domains."""
+    _add_vhost(
+        db,
+        domain="a.example.com",
+        backend_url="http://a-backend:8000",
+        policy_id=None,
+    )
+    _add_vhost(
+        db,
+        domain="b.example.com",
+        backend_url="http://b-backend:8000",
+        policy_id=None,
+    )
+    db.commit()
+    service = RuntimeStatusService(db)
+
+    status = service.get_runtime_status()
+
+    assert status.generated_config.can_generate is True
+    assert status.generated_config.unbound_vhost_domains is not None
+    assert set(status.generated_config.unbound_vhost_domains) == {
+        "a.example.com",
+        "b.example.com",
+    }
+
+
+def test_generated_config_unbound_vhost_domains_is_none_when_all_bound(
+    db: Session,
+) -> None:
+    policy = _add_policy(db, name="Strict")
+    _add_vhost(
+        db,
+        domain="app.example.com",
+        backend_url="http://app-backend:8000",
+        policy_id=policy.id,
+    )
+    db.commit()
+    service = RuntimeStatusService(db)
+
+    status = service.get_runtime_status()
+
+    assert status.generated_config.can_generate is True
+    assert status.generated_config.unbound_vhost_domains is None
