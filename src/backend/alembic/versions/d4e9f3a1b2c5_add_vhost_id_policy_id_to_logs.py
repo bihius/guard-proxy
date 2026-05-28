@@ -1,7 +1,7 @@
 """add vhost_id and policy_id FK columns to logs
 
 Revision ID: d4e9f3a1b2c5
-Revises: c7a2e5b8f1d0
+Revises: 6b5c4a3d2e10
 Create Date: 2026-05-28 00:00:00.000000
 
 """
