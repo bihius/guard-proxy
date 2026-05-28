@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.log import Log, LogAction, LogSeverity
+from app.models.policy import Policy
+from app.models.vhost import VHost
 
 
 def _create_log(
@@ -104,7 +106,7 @@ def test_list_logs_returns_paginated_results_for_admin(
     body = resp.json()
     assert body["total"] == 2
     assert body["page"] == 1
-    assert body["page_size"] == 20
+    assert body["page_size"] == 50
     assert [item["id"] for item in body["items"]] == [newer.id, older.id]
     assert body["items"][0]["action"] == "deny"
     assert body["items"][0]["rule_id"] == 949110
@@ -515,3 +517,253 @@ def test_ingest_then_list_logs_returns_persisted_event(
     body = resp.json()
     assert body["total"] == 1
     assert body["items"][0]["producer_event_id"] == "coraza-event-3"
+
+
+# ---------------------------------------------------------------------------
+# Helpers for vhost/policy seeding
+# ---------------------------------------------------------------------------
+
+
+def _create_policy(db: Session, *, name: str) -> "Policy":
+    policy = Policy(name=name)
+    db.add(policy)
+    db.flush()
+    return policy
+
+
+def _create_vhost(
+    db: Session,
+    *,
+    domain: str,
+    policy: "Policy | None" = None,
+) -> "VHost":
+    vh = VHost(
+        domain=domain,
+        backend_url="http://localhost:8080",
+        policy_id=policy.id if policy is not None else None,
+    )
+    db.add(vh)
+    db.flush()
+    return vh
+
+
+# ---------------------------------------------------------------------------
+# Ingest — vhost_id / policy_id resolution
+# ---------------------------------------------------------------------------
+
+
+def test_ingest_populates_vhost_id_and_policy_id_when_vhost_exists(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """Ingest sets vhost_id and policy_id from the matching VHost record."""
+    policy = _create_policy(db, name="test-policy")
+    vh = _create_vhost(db, domain="app.example.com", policy=policy)
+    db.commit()
+
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(producer_event_id="ev-res-1"),
+        headers=log_ingest_headers,
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["vhost_id"] == vh.id
+    assert body["policy_id"] == policy.id
+
+
+def test_ingest_leaves_vhost_id_null_when_no_vhost_matches(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """Ingest leaves vhost_id and policy_id NULL when the domain is unknown."""
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="ev-res-2",
+            vhost="unknown.example.com",
+        ),
+        headers=log_ingest_headers,
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["vhost_id"] is None
+    assert body["policy_id"] is None
+
+
+def test_ingest_sets_vhost_id_but_not_policy_id_when_vhost_has_no_policy(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """Ingest sets vhost_id but leaves policy_id NULL when VHost has no policy."""
+    vh = _create_vhost(db, domain="nopolicy.example.com", policy=None)
+    db.commit()
+
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="ev-res-3",
+            vhost="nopolicy.example.com",
+        ),
+        headers=log_ingest_headers,
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["vhost_id"] == vh.id
+    assert body["policy_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# List — vhost_id / policy_id / min_score filters
+# ---------------------------------------------------------------------------
+
+
+def test_list_logs_filters_by_vhost_id(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+) -> None:
+    """Filtering by vhost_id returns only logs that match that vhost."""
+    vh1 = _create_vhost(db, domain="site-a.example.com")
+    vh2 = _create_vhost(db, domain="site-b.example.com")
+    _create_log(
+        db,
+        event_at=datetime(2026, 5, 1, 10, 0, 0),
+        vhost="site-a.example.com",
+        message="from site-a",
+    )
+    log_b = _create_log(
+        db,
+        event_at=datetime(2026, 5, 1, 11, 0, 0),
+        vhost="site-b.example.com",
+        message="from site-b",
+    )
+    log_b.vhost_id = vh2.id
+    db.flush()
+    # assign vhost_id manually to site-a log
+    db.query(Log).filter(Log.vhost == "site-a.example.com").update(
+        {"vhost_id": vh1.id}
+    )
+    db.commit()
+
+    resp = client.get(
+        "/logs",
+        headers=admin_token,
+        params={"vhost_id": vh2.id},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["message"] == "from site-b"
+
+
+def test_list_logs_filters_by_policy_id(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+) -> None:
+    """Filtering by policy_id returns only logs assigned to that policy."""
+    policy = _create_policy(db, name="strict-pol")
+    log_with = _create_log(
+        db,
+        event_at=datetime(2026, 5, 1, 10, 0, 0),
+        message="has policy",
+    )
+    log_with.policy_id = policy.id
+    _create_log(
+        db,
+        event_at=datetime(2026, 5, 1, 11, 0, 0),
+        message="no policy",
+    )
+    db.commit()
+
+    resp = client.get(
+        "/logs",
+        headers=admin_token,
+        params={"policy_id": policy.id},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["message"] == "has policy"
+
+
+def test_list_logs_filters_by_min_score(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+) -> None:
+    """min_score filters out logs with anomaly_score below threshold and NULLs."""
+    _create_log(
+        db,
+        event_at=datetime(2026, 5, 1, 10, 0, 0),
+        anomaly_score=5,
+        message="low score",
+    )
+    _create_log(
+        db,
+        event_at=datetime(2026, 5, 1, 11, 0, 0),
+        anomaly_score=15,
+        message="high score",
+    )
+    _create_log(
+        db,
+        event_at=datetime(2026, 5, 1, 12, 0, 0),
+        anomaly_score=None,
+        message="null score",
+    )
+
+    resp = client.get(
+        "/logs",
+        headers=admin_token,
+        params={"min_score": 10},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["message"] == "high score"
+
+
+# ---------------------------------------------------------------------------
+# Pagination bounds
+# ---------------------------------------------------------------------------
+
+
+def test_list_logs_accepts_page_size_500(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """page_size=500 is within the new cap and should be accepted."""
+    resp = client.get(
+        "/logs",
+        headers=admin_token,
+        params={"page_size": 500},
+    )
+    assert resp.status_code == 200
+
+
+def test_list_logs_rejects_page_size_501(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """page_size=501 exceeds the cap and should be rejected with 422."""
+    resp = client.get(
+        "/logs",
+        headers=admin_token,
+        params={"page_size": 501},
+    )
+    assert resp.status_code == 422
+
+
+def test_list_logs_default_page_size_is_50(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+) -> None:
+    """Default page_size is 50; response envelope reflects this."""
+    resp = client.get("/logs", headers=admin_token)
+    assert resp.status_code == 200
+    assert resp.json()["page_size"] == 50
