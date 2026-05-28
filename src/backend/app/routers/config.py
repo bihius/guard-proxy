@@ -23,7 +23,10 @@ _apply_lock = threading.Lock()
 
 _HTTP_STATUS: dict[ApplyStatus, int] = {
     ApplyStatus.success: status.HTTP_200_OK,
+    ApplyStatus.write_failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
+    ApplyStatus.state_invalid: status.HTTP_500_INTERNAL_SERVER_ERROR,
     ApplyStatus.validation_failed: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ApplyStatus.reload_failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
     ApplyStatus.reload_failed_rolled_back: status.HTTP_500_INTERNAL_SERVER_ERROR,
     ApplyStatus.rollback_failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
 }

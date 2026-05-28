@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -18,13 +19,23 @@ from app.services.config_generator import GeneratedConfig
 
 logger = logging.getLogger(__name__)
 
+# Anchored to the start of a line so common benign substrings such as
+# "no error", "failover ready", or "warning: bind ... failed for ipv6,
+# continuing" do not trigger false-positive failure detection.
+_RELOAD_ERROR_RE = re.compile(
+    r"^\s*(error|fail|denied|permission)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 
 class ApplyStatus(StrEnum):
     """Outcome classes for config apply attempts."""
 
     success = "success"
     write_failed = "write_failed"
+    state_invalid = "state_invalid"
     validation_failed = "validation_failed"
+    reload_failed = "reload_failed"
     reload_failed_rolled_back = "reload_failed_rolled_back"
     rollback_failed = "rollback_failed"
 
@@ -52,7 +63,26 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
     releases_root = runtime_root / "releases"
     candidate_dir = releases_root / correlation_id
     current_link = runtime_root / "current"
-    previous_target = _read_current_symlink(current_link)
+
+    # Clean up any orphaned temp symlinks left by a previous crash.
+    _sweep_orphaned_temp_links(runtime_root)
+
+    try:
+        previous_target = _read_current_symlink(current_link)
+    except RuntimeError as exc:
+        logger.error(
+            "config-apply state-invalid correlation_id=%s error=%s",
+            correlation_id,
+            exc,
+        )
+        return ApplyResult(
+            status=ApplyStatus.state_invalid,
+            correlation_id=correlation_id,
+            checksum=checksum,
+            message=f"Runtime directory state is invalid: {exc}",
+            candidate_path=str(candidate_dir),
+            active_path=str(_resolve_current(current_link)),
+        )
 
     logger.info(
         "config-apply start correlation_id=%s checksum=%s",
@@ -121,14 +151,57 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
     )
 
     if previous_target is None:
+        # No previous release to roll back to. Remove the symlink and the
+        # failed candidate so neither a restart nor the next apply sees broken
+        # state. HAProxy is still running from whatever config it loaded at
+        # container start; the symlink simply doesn't exist until the next
+        # successful apply.
+        try:
+            current_link.unlink(missing_ok=True)
+        except OSError:
+            pass
+        shutil.rmtree(candidate_dir, ignore_errors=True)
+        logger.error(
+            "config-apply reload failed, no previous release; candidate cleaned up "
+            "correlation_id=%s",
+            correlation_id,
+        )
+        return ApplyResult(
+            status=ApplyStatus.reload_failed,
+            correlation_id=correlation_id,
+            checksum=checksum,
+            message=(
+                "Reload failed with no previous release to roll back to; "
+                "candidate cleaned up. HAProxy is running from its startup config."
+            ),
+            candidate_path=str(candidate_dir),
+            active_path=None,
+            validation_output=validation.output,
+            reload_output=reload_result.output,
+        )
+
+    # Validate previous release before attempting rollback reload — it may
+    # have been edited out-of-band. If it no longer validates, skip the reload
+    # and leave current pointing at the candidate (which did pass validation)
+    # so that the next HAProxy restart uses a syntactically valid config.
+    prev_validation = _validate_haproxy(previous_target / "haproxy.cfg")
+    if not prev_validation.ok:
+        logger.critical(
+            "config-apply rollback skipped: previous release no longer validates "
+            "correlation_id=%s",
+            correlation_id,
+        )
         return ApplyResult(
             status=ApplyStatus.rollback_failed,
             correlation_id=correlation_id,
             checksum=checksum,
-            message="Reload failed and no previous release exists for rollback.",
+            message=(
+                "Reload failed and previous release no longer validates; "
+                "current left pointing at new candidate."
+            ),
             candidate_path=str(candidate_dir),
             active_path=str(_resolve_current(current_link)),
-            validation_output=validation.output,
+            validation_output=prev_validation.output,
             reload_output=reload_result.output,
         )
 
@@ -228,9 +301,11 @@ def _reload_haproxy() -> CommandResult:
         return CommandResult(ok=False, output=str(error))
 
     output = b"".join(output_chunks).decode("utf-8", errors="replace").strip()
-    output_lower = output.lower()
-    _error_keywords = ("error", "fail", "denied", "permission")
-    is_error = any(kw in output_lower for kw in _error_keywords)
+    # Use an anchored regex so partial-word matches such as "no error" or
+    # "warning: failed for ipv6, continuing" are not classified as errors.
+    # An empty output (HAProxy 2.7+ returns nothing on success) is treated
+    # as success.
+    is_error = bool(_RELOAD_ERROR_RE.search(output))
     return CommandResult(ok=not is_error, output=output)
 
 
@@ -248,10 +323,16 @@ def _read_current_symlink(current_link: Path) -> Path | None:
     if current_link.is_symlink():
         return _resolve_current(current_link)
 
-    backup_dir = current_link.with_name(f"current-backup-{uuid.uuid4().hex}")
-    shutil.move(str(current_link), str(backup_dir))
-    current_link.symlink_to(os.path.relpath(backup_dir, start=current_link.parent))
-    return backup_dir.resolve()
+    # current exists but is a real directory — this is not a supported state.
+    # The seed step (container init) is responsible for creating the initial
+    # symlink; if it left a directory here instead, the runtime directory is
+    # corrupt. Refuse to proceed so the operator is notified immediately
+    # rather than silently corrupting the directory layout with a non-atomic
+    # move + re-symlink.
+    raise RuntimeError(
+        f"{current_link} is a directory, not a symlink. "
+        "Restore the runtime directory to a clean state and restart the container."
+    )
 
 
 def _resolve_current(current_link: Path) -> Path | None:
@@ -261,6 +342,16 @@ def _resolve_current(current_link: Path) -> Path | None:
         return current_link.resolve(strict=True)
     except OSError:
         return None
+
+
+def _sweep_orphaned_temp_links(runtime_root: Path) -> None:
+    """Remove any .current-*.tmp symlinks left by a previous crash."""
+    for p in runtime_root.glob(".current-*.tmp"):
+        try:
+            p.unlink()
+            logger.debug("swept orphaned temp link %s", p)
+        except OSError:
+            pass
 
 
 def _calculate_checksum(generated: GeneratedConfig) -> str:
