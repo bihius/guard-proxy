@@ -83,8 +83,10 @@ graph TB
 cp deploy/docker/.env.example deploy/docker/.env
 # Edit deploy/docker/.env and set your secrets
 
-make run       # normal mode
+make run       # normal mode or
 make dev       # HAProxy + Coraza debug logging
+
+make seed      # add admin for 
 ```
 
 ### Access
