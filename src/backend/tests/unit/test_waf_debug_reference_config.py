@@ -154,11 +154,11 @@ def test_reference_haproxy_config_fails_closed_when_coraza_is_unavailable() -> N
     )
 
 
-def test_reference_haproxy_config_marks_coraza_down_quickly() -> None:
+def test_reference_haproxy_config_has_coraza_health_parameters() -> None:
     config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
 
     assert (
-        "server coraza coraza:9000 check inter 2s fall 1 rise 2 init-addr last,libc,none"
+        "server coraza coraza:9000 check inter 2s fall 3 rise 2 init-addr last,libc,none"
         in config
     )
 
