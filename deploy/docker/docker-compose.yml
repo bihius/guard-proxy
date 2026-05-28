@@ -97,7 +97,7 @@ services:
       [
         "sh",
         "-c",
-        "set -eu; if [ ! -f /etc/haproxy/generated/current/haproxy.cfg ]; then mkdir -p /etc/haproxy/generated/releases/seed; cp /usr/local/etc/haproxy/haproxy.cfg /etc/haproxy/generated/releases/seed/haproxy.cfg; ln -sfn releases/seed /etc/haproxy/generated/current; fi; exec haproxy -W -S /var/run/haproxy/master.sock,mode,666,level,operator -f /etc/haproxy/generated/current/haproxy.cfg",
+        "set -eu; if [ ! -f /etc/haproxy/generated/current/haproxy.cfg ]; then mkdir -p /etc/haproxy/generated/releases/seed; cp /usr/local/etc/haproxy/haproxy.cfg /etc/haproxy/generated/releases/seed/haproxy.cfg; ln -sfn releases/seed /etc/haproxy/generated/current; fi; exec haproxy -W -S /var/run/haproxy/master.sock,mode,660,level,operator -f /etc/haproxy/generated/current/haproxy.cfg",
       ]
     restart: unless-stopped
     depends_on:
