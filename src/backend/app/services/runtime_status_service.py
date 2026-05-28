@@ -64,6 +64,11 @@ class RuntimeStatusService:
             self.db.query(RuleOverride).order_by(RuleOverride.id.asc()).all()
         )
         active_vhosts = [vhost for vhost in vhosts if vhost.is_active]
+        # Compute before calling _pick_active_policy so they appear in the
+        # response regardless of whether generation succeeds or fails.
+        unbound_vhost_domains = [
+            v.domain for v in active_vhosts if v.policy_id is None
+        ] or None
 
         try:
             active_policy, active_overrides = self._pick_active_policy(
@@ -79,6 +84,7 @@ class RuntimeStatusService:
             return RuntimeGeneratedConfigStatus(
                 can_generate=False,
                 error=str(error),
+                unbound_vhost_domains=unbound_vhost_domains,
             )
 
         return RuntimeGeneratedConfigStatus(
@@ -89,6 +95,7 @@ class RuntimeStatusService:
                 rule_overrides_conf,
             ),
             generated_at=datetime.now(UTC),
+            unbound_vhost_domains=unbound_vhost_domains,
         )
 
     def _get_latest_operation(
@@ -110,18 +117,14 @@ class RuntimeStatusService:
         latest_reload: RuntimeOperationSnapshot | None,
     ) -> DeploymentState:
         if latest_reload is None:
+            # No reload has ever been attempted via the API.
             return "never_deployed"
         if latest_reload.status == RuntimeOperationStatus.success:
             return "deployed"
-
-        latest_successful_reload = (
-            self.db.query(RuntimeOperation.id)
-            .filter(RuntimeOperation.operation_type == RuntimeOperationType.reload)
-            .filter(RuntimeOperation.status == RuntimeOperationStatus.success)
-            .first()
-        )
-        if latest_successful_reload is None:
-            return "never_deployed"
+        # Latest reload was not successful. Whether or not a prior apply ever
+        # succeeded, the current state is "failed" — not "never_deployed".
+        # Returning "never_deployed" here was incorrect because a reload WAS
+        # attempted; it just failed.
         return "failed"
 
     @staticmethod
@@ -153,7 +156,10 @@ class RuntimeStatusService:
         effective_policy_ids: set[int] = set()
         for vhost in active_vhosts:
             if vhost.policy_id is None:
-                effective_policy_ids.add(0)
+                # Policy-less vhosts are served using the default CRS context.
+                # Do NOT add a sentinel 0 here — that caused "policy id 0" to
+                # appear in the multiple-policy error message when mixed with
+                # policy-bound vhosts.
                 continue
 
             policy = policies_by_id.get(vhost.policy_id)
@@ -178,8 +184,9 @@ class RuntimeStatusService:
                 f"found effective policies: {policy_list}"
             )
 
-        effective_policy_id = next(iter(effective_policy_ids), 0)
-        if effective_policy_id == 0:
+        effective_policy_id = next(iter(effective_policy_ids), None)
+        if effective_policy_id is None:
+            # No policy-bound vhosts; use the default CRS context.
             return (
                 CrsPolicyRenderContext(
                     paranoia_level=1,
