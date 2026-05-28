@@ -109,7 +109,7 @@ def list_logs(
     method: str | None = Query(default=None, min_length=1, max_length=16),
     status_code: int | None = Query(default=None, ge=100, le=599),
     rule_id: int | None = Query(default=None, gt=0),
-    page: int = Query(default=1, ge=1),
+    page: int = Query(default=1, ge=1, le=10_000),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),

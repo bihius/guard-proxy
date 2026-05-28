@@ -466,6 +466,33 @@ def test_ingest_log_event_is_idempotent_when_producer_event_id_retries(
     assert db.query(Log).count() == 1
 
 
+def test_list_logs_rejects_page_above_upper_bound(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """A page number above 10 000 should be rejected with 422."""
+    resp = client.get(
+        "/logs",
+        headers=admin_token,
+        params={"page": 10_001},
+    )
+    assert resp.status_code == 422
+
+
+def test_list_logs_accepts_page_at_upper_bound(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """A page number of exactly 10 000 should be accepted (returns empty items)."""
+    resp = client.get(
+        "/logs",
+        headers=admin_token,
+        params={"page": 10_000},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+
 def test_ingest_then_list_logs_returns_persisted_event(
     client: TestClient,
     admin_token: dict[str, str],
