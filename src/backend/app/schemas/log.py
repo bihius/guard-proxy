@@ -30,6 +30,8 @@ class LogResponse(BaseModel):
     severity: LogSeverity
     message: str | None
     raw_context: dict[str, Any] | None
+    vhost_id: int | None
+    policy_id: int | None
 
 
 class LogListResponse(BaseModel):

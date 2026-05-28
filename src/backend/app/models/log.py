@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -65,6 +65,12 @@ class Log(Base):
     )
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_context: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    vhost_id: Mapped[int | None] = mapped_column(
+        ForeignKey("vhosts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    policy_id: Mapped[int | None] = mapped_column(
+        ForeignKey("policies.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     def __repr__(self) -> str:
         return (
