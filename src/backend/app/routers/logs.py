@@ -13,6 +13,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.log import Log, LogAction, LogSeverity
 from app.models.user import User
+from app.models.vhost import VHost
 from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
 
 router = APIRouter(prefix="/logs", tags=["logs"])
@@ -38,6 +39,12 @@ def require_log_ingest_secret(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid ingest secret",
         )
+
+
+def _resolve_vhost_refs(db: Session, vhost: str) -> tuple[int | None, int | None]:
+    """Return (vhost_id, policy_id) by matching the vhost domain string."""
+    vh = db.query(VHost).filter(VHost.domain == vhost).one_or_none()
+    return (None, None) if vh is None else (vh.id, vh.policy_id)
 
 
 def _persist_log_event(
@@ -88,6 +95,7 @@ def ingest_log_event(
             return existing
 
     log = Log(**body.model_dump())
+    log.vhost_id, log.policy_id = _resolve_vhost_refs(db, log.vhost)
     persisted, created = _persist_log_event(
         db=db,
         log=log,
@@ -109,8 +117,11 @@ def list_logs(
     method: str | None = Query(default=None, min_length=1, max_length=16),
     status_code: int | None = Query(default=None, ge=100, le=599),
     rule_id: int | None = Query(default=None, gt=0),
+    vhost_id: int | None = Query(default=None, gt=0),
+    policy_id: int | None = Query(default=None, gt=0),
+    min_score: int | None = Query(default=None, ge=0),
     page: int = Query(default=1, ge=1, le=10_000),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> LogListResponse:
@@ -142,6 +153,12 @@ def list_logs(
         query = query.filter(Log.status_code == status_code)
     if rule_id is not None:
         query = query.filter(Log.rule_id == rule_id)
+    if vhost_id is not None:
+        query = query.filter(Log.vhost_id == vhost_id)
+    if policy_id is not None:
+        query = query.filter(Log.policy_id == policy_id)
+    if min_score is not None:
+        query = query.filter(Log.anomaly_score >= min_score)
 
     total = query.count()
     items = (
