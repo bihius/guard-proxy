@@ -146,8 +146,26 @@ def render_haproxy_cfg(context: HaproxyRenderContext) -> str:
 
 
 def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
-    """Render haproxy.cfg from one or many prepared vhost contexts."""
+    """Render haproxy.cfg from one or many prepared vhost contexts.
+
+    Raises ValueError if any ACL name, backend name, or server name is
+    duplicated across the merged set of contexts.  Each HaproxyRenderContext
+    only validates uniqueness within itself; this function performs the
+    cross-context check.
+    """
     routes = tuple(route for context in vhost_contexts for route in context.routes)
+    _ensure_unique(
+        (route.vhost_acl_name for route in routes),
+        "render_haproxy_cfg_multi routes.vhost_acl_name",
+    )
+    _ensure_unique(
+        (route.backend.name for route in routes),
+        "render_haproxy_cfg_multi routes.backend.name",
+    )
+    _ensure_unique(
+        (route.backend.server_name for route in routes),
+        "render_haproxy_cfg_multi routes.backend.server_name",
+    )
     return _render_haproxy_routes(routes)
 
 
