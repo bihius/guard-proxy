@@ -20,6 +20,10 @@ class RuntimeGeneratedConfigStatus(BaseModel):
     checksum: str | None = None
     generated_at: datetime | None = None
     error: str | None = None
+    # Domains of active vhosts that have no policy assigned. They will be
+    # served using the default CRS context. Listed here as a visibility aid
+    # so operators know which vhosts are running without an explicit policy.
+    unbound_vhost_domains: list[str] | None = None
 
 
 class RuntimeOperationSnapshot(BaseModel):
