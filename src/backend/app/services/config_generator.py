@@ -88,25 +88,27 @@ def _pick_active_policy(
 
 
 def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
-    domain_slug = _slug(vhost.domain)
+    if vhost.id is None:
+        raise ValueError(f"Active vhost {vhost.domain!r} has no persisted id")
+    # Use the database id as the naming suffix so that domain names that only
+    # differ by '.' vs '-' (e.g. "app.local" and "app-local") never produce
+    # colliding ACL or backend identifiers.  This matches the strategy used
+    # by RuntimeStatusService._to_haproxy_route.
+    suffix = f"vhost_{vhost.id}"
     backend_address = _extract_backend_address(vhost.backend_url)
     return HaproxyRenderContext(
         routes=(
             HaproxyRoute(
-                vhost_acl_name=f"host_{domain_slug}",
+                vhost_acl_name=f"host_{suffix}",
                 vhost_hosts=(vhost.domain,),
                 backend=HaproxyBackend(
-                    name=f"be_{domain_slug}",
-                    server_name=f"srv_{domain_slug}",
+                    name=f"be_{suffix}",
+                    server_name=f"srv_{suffix}",
                     address=backend_address,
                 ),
             ),
         )
     )
-
-
-def _slug(value: str) -> str:
-    return value.replace(".", "_").replace("-", "_")
 
 
 def _to_crs_policy_context(policy: Policy) -> CrsPolicyRenderContext:
