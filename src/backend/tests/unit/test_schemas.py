@@ -21,7 +21,7 @@ from app.schemas.rule_override import (  # noqa: E402
     RuleOverrideUpdate,
 )
 from app.schemas.user import UserCreate, UserUpdate  # noqa: E402
-from app.schemas.vhost import VHostCreate  # noqa: E402
+from app.schemas.vhost import VHostCreate, VHostUpdate  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # UserCreate
@@ -277,6 +277,45 @@ def test_vhost_create_backend_url_stripped() -> None:
     """Whitespace around the backend URL is stripped."""
     v = VHostCreate(domain="example.com", backend_url="  http://localhost:8080  ")
     assert v.backend_url == "http://localhost:8080"
+
+
+def test_vhost_create_domain_too_long_is_rejected() -> None:
+    """A domain longer than 255 characters should raise ValidationError."""
+    with pytest.raises(ValidationError, match="String should have at most 255 characters"):
+        VHostCreate(domain="a" * 256, backend_url="http://localhost:8080")
+
+
+def test_vhost_create_backend_url_too_long_is_rejected() -> None:
+    """A backend_url longer than 512 characters should raise ValidationError."""
+    long_url = "http://backend.internal/" + "a" * 512
+    with pytest.raises(ValidationError, match="String should have at most 512 characters"):
+        VHostCreate(domain="example.com", backend_url=long_url)
+
+
+def test_vhost_create_domain_at_max_length_is_accepted() -> None:
+    """A domain at the exact 255-character limit should be accepted."""
+    # 251 'a' chars + ".com" = 255 total
+    v = VHostCreate(domain="a" * 251 + ".com", backend_url="http://backend:8000")
+    assert len(v.domain) == 255
+
+
+def test_vhost_update_domain_too_long_is_rejected() -> None:
+    """A domain update longer than 255 characters should raise ValidationError."""
+    with pytest.raises(ValidationError, match="String should have at most 255 characters"):
+        VHostUpdate(domain="a" * 256)
+
+
+def test_vhost_update_backend_url_too_long_is_rejected() -> None:
+    """A backend_url update longer than 512 characters should raise ValidationError."""
+    long_url = "http://backend.internal/" + "a" * 512
+    with pytest.raises(ValidationError, match="String should have at most 512 characters"):
+        VHostUpdate(backend_url=long_url)
+
+
+def test_vhost_update_domain_none_is_accepted() -> None:
+    """None is valid for VHostUpdate.domain (partial update)."""
+    v = VHostUpdate(domain=None)
+    assert v.domain is None
 
 
 def test_log_ingest_request_normalizes_vhost_method_and_optional_text() -> None:
