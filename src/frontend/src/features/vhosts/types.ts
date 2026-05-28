@@ -6,7 +6,7 @@ export type VHost = {
   ssl_enabled: boolean;
   is_active: boolean;
   policy_id: number | null;
-  created_by: number;
+  created_by: number | null;
   created_at: string;
   updated_at: string;
 };
