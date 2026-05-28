@@ -7,6 +7,8 @@ from app.config import settings
 from app.services.config_apply import (
     ApplyStatus,
     CommandResult,
+    _RELOAD_ERROR_RE,
+    _read_current_symlink,
     apply,
 )
 from app.services.config_generator import GeneratedConfig
@@ -192,3 +194,154 @@ def test_apply_logs_attempt_with_correlation_id(
     )
     assert start_record is not None
     assert result.correlation_id in start_record.message
+
+
+# ---------------------------------------------------------------------------
+# HIGH #2 — first-apply reload failure must clean up candidate and symlink
+# ---------------------------------------------------------------------------
+
+
+def test_apply_reload_failure_with_no_previous_cleans_up_and_returns_reload_failed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """When there is no previous release and reload fails, the candidate directory
+    and current symlink must be removed so the next restart uses the startup config."""
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._reload_haproxy",
+        lambda: CommandResult(ok=False, output="reload failed"),
+    )
+
+    result = apply(_sample_generated())
+
+    assert result.status == ApplyStatus.reload_failed
+    assert result.active_path is None
+    # Candidate dir must be cleaned up
+    releases_root = runtime_root / "releases"
+    remaining = list(releases_root.iterdir()) if releases_root.exists() else []
+    assert remaining == [], f"Expected no leftover candidate dirs, found: {remaining}"
+    # current symlink must not exist
+    assert not (runtime_root / "current").exists()
+    assert not (runtime_root / "current").is_symlink()
+
+
+# ---------------------------------------------------------------------------
+# MED M1 — reload error regex must not false-positive on benign substrings
+# ---------------------------------------------------------------------------
+
+
+def test_reload_error_regex_does_not_match_benign_strings() -> None:
+    benign_outputs = [
+        # Common HAProxy success responses to the master socket reload command.
+        "[1] (SIGTERM->MASTER)",
+        "Success=1 Failure=0",
+        # Mid-sentence occurrences that are not line-leading error keywords.
+        "no error",
+        "failover ready",
+        # IPv6 warning during bind — often emitted but non-fatal; the "failed"
+        # substring is not at the start of the line.
+        "warning: bind to 0.0.0.0:80 failed for ipv6, continuing",
+        "",
+    ]
+    for output in benign_outputs:
+        assert not _RELOAD_ERROR_RE.search(output), (
+            f"Regex incorrectly matched benign output: {output!r}"
+        )
+
+
+def test_reload_error_regex_matches_error_lines() -> None:
+    error_outputs = [
+        "error connecting to backend",
+        "fail to bind",
+        "denied by rule",
+        "permission denied",
+        "  error: something went wrong",
+    ]
+    for output in error_outputs:
+        assert _RELOAD_ERROR_RE.search(output), (
+            f"Regex did not match expected error output: {output!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# MED M3 — non-symlink current directory must raise RuntimeError
+# ---------------------------------------------------------------------------
+
+
+def test_read_current_symlink_raises_for_plain_directory(tmp_path: Path) -> None:
+    """A real directory at runtime/current is an invalid state and must raise."""
+    current = tmp_path / "current"
+    current.mkdir()
+    (current / "haproxy.cfg").write_text("global\n", encoding="utf-8")
+
+    import pytest
+    with pytest.raises(RuntimeError, match="is a directory"):
+        _read_current_symlink(current)
+
+
+def test_apply_returns_state_invalid_when_current_is_directory(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    runtime_root.mkdir(parents=True)
+    current = runtime_root / "current"
+    current.mkdir()
+    (current / "haproxy.cfg").write_text("global\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+
+    result = apply(_sample_generated())
+
+    assert result.status == ApplyStatus.state_invalid
+    assert "directory" in result.message.lower()
+
+
+# ---------------------------------------------------------------------------
+# MED M4 — rollback path must validate previous release before reloading
+# ---------------------------------------------------------------------------
+
+
+def test_apply_skips_rollback_reload_when_previous_no_longer_validates(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """If the previous release fails haproxy -c, skip the rollback reload and
+    leave current pointing at the candidate (which passed validation)."""
+    runtime_root = tmp_path / "generated"
+    _seed_current_release(runtime_root)
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+
+    call_count = {"n": 0}
+
+    def _validate_stub(config_path: Path) -> CommandResult:
+        call_count["n"] += 1
+        # First call: candidate validation — succeeds.
+        # Second call: previous release validation in rollback path — fails.
+        if call_count["n"] == 1:
+            return CommandResult(ok=True, output="valid")
+        return CommandResult(ok=False, output="previous config parse error")
+
+    monkeypatch.setattr("app.services.config_apply._validate_haproxy", _validate_stub)
+    monkeypatch.setattr(
+        "app.services.config_apply._reload_haproxy",
+        lambda: CommandResult(ok=False, output="reload failed"),
+    )
+
+    result = apply(_sample_generated())
+
+    assert result.status == ApplyStatus.rollback_failed
+    assert "no longer validates" in result.message
+    # current must still point at the candidate (not the invalid previous)
+    current_resolved = (runtime_root / "current").resolve()
+    releases_root = runtime_root / "releases"
+    candidates = [
+        p for p in releases_root.iterdir()
+        if p.name != "previous" and p.resolve() == current_resolved
+    ]
+    assert candidates, "current should point at the new candidate after rollback skipped"
