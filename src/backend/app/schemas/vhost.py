@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.policy import PolicyResponse
 
@@ -10,8 +10,8 @@ from app.schemas.policy import PolicyResponse
 class VHostCreate(BaseModel):
     """Request body for POST /vhosts."""
 
-    domain: str
-    backend_url: str
+    domain: str = Field(max_length=255)
+    backend_url: str = Field(max_length=512)
     description: str | None = None
     ssl_enabled: bool = False
     is_active: bool = True
@@ -56,8 +56,8 @@ class VHostUpdate(BaseModel):
     All fields are optional.
     """
 
-    domain: str | None = None
-    backend_url: str | None = None
+    domain: str | None = Field(default=None, max_length=255)
+    backend_url: str | None = Field(default=None, max_length=512)
     description: str | None = None
     ssl_enabled: bool | None = None
     is_active: bool | None = None

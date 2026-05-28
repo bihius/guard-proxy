@@ -389,3 +389,50 @@ def test_delete_vhost_not_found_returns_404(
     resp = client.delete("/vhosts/99999", headers=admin_token)
     assert resp.status_code == 404
     assert resp.json()["detail"] == "VHost not found"
+
+
+def test_create_vhost_rejects_domain_exceeding_max_length(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """A domain longer than 255 characters should be rejected with 422."""
+    resp = client.post(
+        "/vhosts",
+        headers=admin_token,
+        json={
+            "domain": "a" * 256,
+            "backend_url": "http://backend:8000",
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_create_vhost_rejects_backend_url_exceeding_max_length(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """A backend_url longer than 512 characters should be rejected with 422."""
+    resp = client.post(
+        "/vhosts",
+        headers=admin_token,
+        json={
+            "domain": "example.com",
+            "backend_url": "http://backend.internal/" + "a" * 512,
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_patch_vhost_rejects_domain_exceeding_max_length(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """A domain PATCH longer than 255 characters should be rejected with 422."""
+    created = _create_vhost(client, admin_token, domain="update-length.example.com")
+
+    resp = client.patch(
+        f"/vhosts/{created['id']}",
+        headers=admin_token,
+        json={"domain": "b" * 256},
+    )
+    assert resp.status_code == 422
