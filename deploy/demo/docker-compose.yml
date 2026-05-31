@@ -1,0 +1,207 @@
+name: guard-proxy-demo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - gp_internal
+
+  backend:
+    build:
+      context: ../../src/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      GUARD_PROXY_RUNTIME_DIR: /var/lib/guard-proxy/generated
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_HTTP_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - backend_logs:/var/log/guard-proxy
+      - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
+      - generated_config:/var/lib/guard-proxy/generated
+      - haproxy_runtime:/var/run/haproxy
+    networks:
+      - gp_internal
+
+  frontend:
+    build:
+      context: ../../src/frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_HTTP_PORT:-3000}:5173"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:5173 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gp_edge
+
+  demo-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      DEMO_APP_NAME: demo-frontend-app
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gp_internal
+
+  demo-api:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      DEMO_APP_NAME: demo-api-service
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gp_internal
+
+  coraza:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/coraza.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ../../configs/coraza/coraza-spoa.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro
+      - ../../configs/coraza/coraza.conf:/etc/coraza/coraza.conf:ro
+      - ../../configs/coraza/crs-setup.conf:/etc/coraza/crs-setup.conf:ro
+      - ../../configs/coraza/crs:/etc/coraza/crs:ro
+      - generated_config:/runtime:ro
+      - coraza_audit:/var/log/coraza
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gp_internal
+
+  log-shipper:
+    build:
+      context: ../../src/log-shipper
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      INGEST_URL: "http://backend:8000/logs/ingest"
+      CORAZA_AUDIT_LOG: "/var/log/coraza/audit.log"
+      SHIPPER_STATE_FILE: "/var/lib/log-shipper/offset"
+    depends_on:
+      backend:
+        condition: service_healthy
+      coraza:
+        condition: service_started
+    volumes:
+      - coraza_audit:/var/log/coraza:ro
+      - shipper_state:/var/lib/log-shipper
+    networks:
+      - gp_internal
+
+  haproxy:
+    image: haproxy:3.0-alpine
+    user: "0:0"
+    command:
+      [
+        "sh",
+        "-c",
+        "set -eu; if [ ! -f /etc/haproxy/generated/current/haproxy.cfg ]; then mkdir -p /etc/haproxy/generated/releases/seed; cp /usr/local/etc/haproxy/haproxy.cfg /etc/haproxy/generated/releases/seed/haproxy.cfg; ln -sfn releases/seed /etc/haproxy/generated/current; fi; exec haproxy -W -S /var/run/haproxy/master.sock,mode,666,level,operator -f /etc/haproxy/generated/current/haproxy.cfg",
+      ]
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      coraza:
+        condition: service_started
+      demo-app:
+        condition: service_healthy
+      demo-api:
+        condition: service_healthy
+    ports:
+      - "${HAPROXY_HTTP_PORT:-8080}:80"
+      - "${HAPROXY_HTTPS_PORT:-8443}:443"
+    volumes:
+      - ../../configs/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
+      - ./certs/demo.pem:/etc/haproxy/certs/demo.pem:ro
+      - haproxy_logs:/var/log/haproxy
+      - generated_config:/etc/haproxy/generated
+      - haproxy_runtime:/var/run/haproxy
+    healthcheck:
+      test: ["CMD-SHELL", "haproxy -c -f /etc/haproxy/generated/current/haproxy.cfg"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gp_edge
+      - gp_internal
+
+networks:
+  gp_edge:
+    driver: bridge
+  gp_internal:
+    driver: bridge
+
+volumes:
+  pgdata:
+  haproxy_logs:
+  haproxy_runtime:
+  backend_logs:
+  generated_config:
+  coraza_audit:
+  shipper_state:
