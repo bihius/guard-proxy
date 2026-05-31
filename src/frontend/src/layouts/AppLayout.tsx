@@ -6,7 +6,7 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-app text-fg">
       <NavBar />
-      <main className="px-6 py-8 lg:px-10">
+      <main className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
         <Outlet />
       </main>
     </div>

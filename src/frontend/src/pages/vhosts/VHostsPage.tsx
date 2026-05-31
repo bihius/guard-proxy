@@ -64,19 +64,20 @@ export function VHostsPage() {
           {
             key: "actions",
             header: "",
+            className: "w-px whitespace-nowrap",
             cell: (row: VHost) => (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setModal({ type: "edit", vhost: row })}
-                  className="btn-ghost rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                  className="rounded-[var(--radius-sm)] border border-border-subtle bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:border-border hover:text-fg"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
                   onClick={() => setModal({ type: "delete", vhost: row })}
-                  className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold text-error transition hover:bg-error-soft"
+                  className="rounded-[var(--radius-sm)] border border-error/50 px-3 py-1.5 text-xs font-semibold text-error transition hover:border-error hover:bg-error-soft"
                 >
                   Delete
                 </button>
