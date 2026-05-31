@@ -10,3 +10,7 @@ export const appRoutes = {
 export function getVHostDetailPath(vhostId: string | number) {
   return `${appRoutes.vhosts}/${vhostId}`;
 }
+
+export function getPolicyDetailPath(policyId: string | number) {
+  return `${appRoutes.policies}/${policyId}`;
+}

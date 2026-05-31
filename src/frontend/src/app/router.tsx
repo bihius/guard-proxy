@@ -8,6 +8,7 @@ import { ForbiddenPage } from "@/pages/forbidden/ForbiddenPage";
 import { LoginPage } from "@/pages/login/LoginPage";
 import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
 import { PoliciesPage } from "@/pages/policies/PoliciesPage";
+import { PolicyDetailPage } from "@/pages/policies/PolicyDetailPage";
 import { VHostDetailPage } from "@/pages/vhosts/VHostDetailPage";
 import { VHostsPage } from "@/pages/vhosts/VHostsPage";
 
@@ -51,6 +52,10 @@ export const router = createBrowserRouter([
           {
             path: appRoutes.policies,
             element: <PoliciesPage />,
+          },
+          {
+            path: `${appRoutes.policies}/:policyId`,
+            element: <PolicyDetailPage />,
           },
         ],
       },
