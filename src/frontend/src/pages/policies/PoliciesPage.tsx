@@ -51,7 +51,7 @@ export function PoliciesPage() {
       cell: (row) => (
         <StatusBadge
           label={row.enforcement_mode === "block" ? "Block" : "Detect only"}
-          tone={row.enforcement_mode === "block" ? "error" : "warning"}
+          tone={row.enforcement_mode === "block" ? "info" : "warning"}
         />
       ),
     },

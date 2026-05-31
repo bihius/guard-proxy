@@ -27,14 +27,10 @@ export function VHostFormModal(props: VHostFormModalProps) {
   const [description, setDescription] = useState(initial?.description ?? "");
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [policyId, setPolicyId] = useState<string>(
-    initial?.policy_id != null
-      ? String(initial.policy_id)
-      : String(policies[0]?.id ?? ""),
+    initial?.policy_id != null ? String(initial.policy_id) : "",
   );
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-
-  const noPolicies = props.mode === "create" && policies.length === 0;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -49,7 +45,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
       description: description || null,
       ssl_enabled: initial?.ssl_enabled ?? false,
       is_active: isActive,
-      policy_id: Number(policyId),
+      policy_id: policyId ? Number(policyId) : null,
     };
 
     try {
@@ -82,7 +78,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
           <button
             type="submit"
             form="vhost-form"
-            disabled={submitting || noPolicies}
+            disabled={submitting}
             className="btn-primary px-4 py-2 text-sm"
           >
             {submitting ? "Saving…" : props.mode === "create" ? "Create" : "Save"}
@@ -153,23 +149,17 @@ export function VHostFormModal(props: VHostFormModalProps) {
           </label>
           <select
             id="vhost-policy"
-            required
             value={policyId}
             onChange={(e) => setPolicyId(e.target.value)}
             className="input-field"
-            disabled={noPolicies}
           >
+            <option value="">None (default policy)</option>
             {policies.map((p) => (
               <option key={p.id} value={String(p.id)}>
                 {p.name}
               </option>
             ))}
           </select>
-          {noPolicies && (
-            <p className="text-xs text-fg-muted">
-              No policies yet — create one on the Policies page first.
-            </p>
-          )}
         </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">

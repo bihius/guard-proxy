@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import type { DataTableColumn } from "@/components/shared/DataTable";
@@ -20,7 +20,7 @@ export function PolicyDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const refreshCountRef = useRef(0);
 
-  function load() {
+  const load = useCallback(() => {
     if (!accessToken || !policyId) return;
 
     const controller = new AbortController();
@@ -43,13 +43,12 @@ export function PolicyDetailPage() {
       });
 
     return () => controller.abort();
-  }
+  }, [accessToken, policyId]);
 
   useEffect(() => {
     const cleanup = load();
     return cleanup;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, policyId]);
+  }, [load]);
 
   const overrideColumns: DataTableColumn<RuleOverride>[] = [
     { key: "rule_id", header: "Rule ID", cell: (row) => String(row.rule_id) },
@@ -108,7 +107,7 @@ export function PolicyDetailPage() {
                 <dd className="mt-1">
                   <StatusBadge
                     label={policy.enforcement_mode === "block" ? "Block" : "Detect only"}
-                    tone={policy.enforcement_mode === "block" ? "error" : "warning"}
+                    tone={policy.enforcement_mode === "block" ? "info" : "warning"}
                   />
                 </dd>
               </div>
