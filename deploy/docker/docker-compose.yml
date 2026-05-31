@@ -82,11 +82,34 @@ services:
       - ../../configs/coraza/crs-setup.conf:/etc/coraza/crs-setup.conf:ro
       - ../../configs/coraza/crs:/etc/coraza/crs:ro
       - generated_config:/runtime:ro
+      - coraza_audit:/var/log/coraza
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - gp_internal
+
+  log-shipper:
+    build:
+      context: ../../src/log-shipper
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      INGEST_URL: "http://backend:8000/logs/ingest"
+      CORAZA_AUDIT_LOG: "/var/log/coraza/audit.log"
+      SHIPPER_STATE_FILE: "/var/lib/log-shipper/offset"
+    depends_on:
+      backend:
+        condition: service_healthy
+      coraza:
+        condition: service_started
+    volumes:
+      - coraza_audit:/var/log/coraza:ro
+      - shipper_state:/var/lib/log-shipper
     networks:
       - gp_internal
 
@@ -134,3 +157,5 @@ volumes:
   haproxy_runtime:
   backend_logs:
   generated_config:
+  coraza_audit:
+  shipper_state:
