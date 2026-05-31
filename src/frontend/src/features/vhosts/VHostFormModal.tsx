@@ -25,7 +25,6 @@ export function VHostFormModal(props: VHostFormModalProps) {
   const [domain, setDomain] = useState(initial?.domain ?? "");
   const [backendUrl, setBackendUrl] = useState(initial?.backend_url ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [sslEnabled, setSslEnabled] = useState(initial?.ssl_enabled ?? false);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [policyId, setPolicyId] = useState<string>(
     initial?.policy_id != null ? String(initial.policy_id) : "",
@@ -44,7 +43,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
       domain,
       backend_url: backendUrl,
       description: description || null,
-      ssl_enabled: sslEnabled,
+      ssl_enabled: initial?.ssl_enabled ?? false,
       is_active: isActive,
       policy_id: policyId ? Number(policyId) : null,
     };
@@ -154,7 +153,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
             onChange={(e) => setPolicyId(e.target.value)}
             className="input-field"
           >
-            <option value="">None</option>
+            <option value="">None (default policy)</option>
             {policies.map((p) => (
               <option key={p.id} value={String(p.id)}>
                 {p.name}
@@ -163,27 +162,15 @@ export function VHostFormModal(props: VHostFormModalProps) {
           </select>
         </div>
 
-        <div className="flex items-center gap-6">
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
-            <input
-              type="checkbox"
-              checked={sslEnabled}
-              onChange={(e) => setSslEnabled(e.target.checked)}
-              className="h-4 w-4 accent-accent"
-            />
-            SSL enabled
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 accent-accent"
-            />
-            Active
-          </label>
-        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          Active
+        </label>
       </form>
     </Modal>
   );

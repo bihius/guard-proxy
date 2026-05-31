@@ -64,7 +64,7 @@ export function DataTable<Row>({
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={`px-4 py-3 align-top text-sm text-fg ${column.className ?? ""}`.trim()}
+                    className={`px-4 py-3 align-middle text-sm text-fg ${column.className ?? ""}`.trim()}
                   >
                     {column.cell(row)}
                   </td>
