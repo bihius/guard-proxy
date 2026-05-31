@@ -25,13 +25,16 @@ export function VHostFormModal(props: VHostFormModalProps) {
   const [domain, setDomain] = useState(initial?.domain ?? "");
   const [backendUrl, setBackendUrl] = useState(initial?.backend_url ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [sslEnabled, setSslEnabled] = useState(initial?.ssl_enabled ?? false);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [policyId, setPolicyId] = useState<string>(
-    initial?.policy_id != null ? String(initial.policy_id) : "",
+    initial?.policy_id != null
+      ? String(initial.policy_id)
+      : String(policies[0]?.id ?? ""),
   );
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  const noPolicies = props.mode === "create" && policies.length === 0;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -44,9 +47,9 @@ export function VHostFormModal(props: VHostFormModalProps) {
       domain,
       backend_url: backendUrl,
       description: description || null,
-      ssl_enabled: sslEnabled,
+      ssl_enabled: initial?.ssl_enabled ?? false,
       is_active: isActive,
-      policy_id: policyId ? Number(policyId) : null,
+      policy_id: Number(policyId),
     };
 
     try {
@@ -79,7 +82,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
           <button
             type="submit"
             form="vhost-form"
-            disabled={submitting}
+            disabled={submitting || noPolicies}
             className="btn-primary px-4 py-2 text-sm"
           >
             {submitting ? "Saving…" : props.mode === "create" ? "Create" : "Save"}
@@ -150,40 +153,34 @@ export function VHostFormModal(props: VHostFormModalProps) {
           </label>
           <select
             id="vhost-policy"
+            required
             value={policyId}
             onChange={(e) => setPolicyId(e.target.value)}
             className="input-field"
+            disabled={noPolicies}
           >
-            <option value="">None</option>
             {policies.map((p) => (
               <option key={p.id} value={String(p.id)}>
                 {p.name}
               </option>
             ))}
           </select>
+          {noPolicies && (
+            <p className="text-xs text-fg-muted">
+              No policies yet — create one on the Policies page first.
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-6">
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
-            <input
-              type="checkbox"
-              checked={sslEnabled}
-              onChange={(e) => setSslEnabled(e.target.checked)}
-              className="h-4 w-4 accent-accent"
-            />
-            SSL enabled
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 accent-accent"
-            />
-            Active
-          </label>
-        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          Active
+        </label>
       </form>
     </Modal>
   );
