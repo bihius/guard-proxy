@@ -37,27 +37,36 @@ git submodule update --init --recursive
 
 ## Audit log output
 
-Coraza writes one JSON audit event per line to **stdout** using `SecAuditLogType Serial` + `SecAuditLogFormat JSON`. Each transaction that matches `SecAuditEngine RelevantOnly` (i.e. transactions where at least one rule fired) produces a single JSON object followed by a newline — the format a downstream log shipper can consume directly.
+Coraza writes one JSON audit event per line to
+**`/var/log/coraza/audit.log`** (on the `coraza_audit` Docker named volume)
+using `SecAuditLogType Serial` + `SecAuditLogFormat JSON`. Each transaction
+that matches `SecAuditEngine RelevantOnly` (i.e. transactions where at least
+one rule fired) produces a single JSON object followed by a newline.
 
-Operational logs from the `coraza-spoa` daemon (startup, health, rule-load messages) go to **stderr**, so the stdout stream is a clean newline-delimited JSON stream.
+Operational logs from the `coraza-spoa` daemon (startup, health, rule-load
+messages) continue to go to **stderr** and appear in `docker logs coraza`.
 
-To inspect events while the stack is running:
+To inspect audit events while the stack is running:
 
 ```sh
-# stdout only — audit JSON
+# tail the audit file inside the container
 docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
-  logs --no-log-prefix coraza | jq -c .
+  exec coraza tail -f /var/log/coraza/audit.log | jq -c .
 
-# stderr only — SPOA operational logs
+# SPOA operational logs (stderr)
 docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
-  logs --no-log-prefix coraza 2>&1 1>/dev/null
+  logs --no-log-prefix coraza
 ```
+
+The log-shipper sidecar (`src/log-shipper/`) tails this file and ships each
+event to `POST /logs/ingest` on the backend. See `README.architecture.md` for
+the full data-flow description.
 
 ### Event schema and ingest mapping
 
 The table below maps each `LogIngestRequest` field (defined in
 `src/backend/app/schemas/log.py`) to its source path inside the Coraza JSON
-event. This is the contract for the future log shipper (not implemented here).
+event. The mapping is implemented in `src/log-shipper/app/mapping.py`.
 
 Parts `ABIJDEFHZ` produce a top-level structure like:
 
