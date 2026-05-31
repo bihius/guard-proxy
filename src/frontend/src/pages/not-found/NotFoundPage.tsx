@@ -14,7 +14,6 @@ export function NotFoundPage() {
     <main className="grid min-h-screen place-items-center bg-app px-6 py-10 text-fg">
       <section className="w-full max-w-3xl space-y-8">
         <PageHeader
-          eyebrow="404"
           title="This page does not exist"
           description="The route could not be matched. Use the shared navigation to get back to a valid part of the app."
         />

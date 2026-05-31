@@ -8,18 +8,15 @@ import { StatusBadge } from "./StatusBadge";
 type PagePlaceholderProps = {
   title: string;
   description: string;
-  eyebrow: string;
 };
 
 export function PagePlaceholder({
   title,
   description,
-  eyebrow,
 }: PagePlaceholderProps) {
   return (
     <section className="space-y-8">
       <PageHeader
-        eyebrow={eyebrow}
         title={title}
         description={description}
         actions={<StatusBadge label="Bootstrap" tone="info" />}

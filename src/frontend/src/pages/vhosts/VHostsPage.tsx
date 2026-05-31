@@ -70,7 +70,7 @@ export function VHostsPage() {
                 <button
                   type="button"
                   onClick={() => setModal({ type: "edit", vhost: row })}
-                  className="rounded-[var(--radius-sm)] border border-border-subtle bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:border-border hover:text-fg"
+                  className="rounded-[var(--radius-sm)] border border-border bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:text-fg"
                 >
                   Edit
                 </button>
@@ -91,7 +91,6 @@ export function VHostsPage() {
   return (
     <section className="space-y-8">
       <PageHeader
-        eyebrow="VHosts"
         title="Virtual hosts"
         description="Manage the domains, backend targets, and WAF policies for each virtual host."
         actions={
