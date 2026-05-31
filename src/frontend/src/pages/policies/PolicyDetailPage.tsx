@@ -77,7 +77,6 @@ export function PolicyDetailPage() {
   return (
     <section className="space-y-8">
       <PageHeader
-        eyebrow="Policies"
         title={policy ? policy.name : "Policy detail"}
         description={policy?.description ?? undefined}
       />
@@ -127,10 +126,6 @@ export function PolicyDetailPage() {
               <div>
                 <dt className="font-medium text-fg-muted">Inbound threshold</dt>
                 <dd className="mt-1 text-fg">{policy.inbound_anomaly_threshold}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-fg-muted">Outbound threshold</dt>
-                <dd className="mt-1 text-fg">{policy.outbound_anomaly_threshold}</dd>
               </div>
             </dl>
           </SectionCard>

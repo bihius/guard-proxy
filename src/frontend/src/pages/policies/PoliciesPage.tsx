@@ -62,10 +62,10 @@ export function PoliciesPage() {
     },
     {
       key: "thresholds",
-      header: "Anomaly thresholds",
+      header: "Inbound threshold",
       cell: (row) => (
         <span className="tabular-nums text-fg-muted">
-          in {row.inbound_anomaly_threshold} / out {row.outbound_anomaly_threshold}
+          {row.inbound_anomaly_threshold}
         </span>
       ),
     },
@@ -92,7 +92,7 @@ export function PoliciesPage() {
                   <button
                     type="button"
                     onClick={() => setModal({ type: "edit", policy: row })}
-                    className="rounded-[var(--radius-sm)] border border-border-subtle bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:border-border hover:text-fg"
+                    className="rounded-[var(--radius-sm)] border border-border bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:text-fg"
                   >
                     Edit
                   </button>
@@ -117,7 +117,6 @@ export function PoliciesPage() {
   return (
     <section className="space-y-8">
       <PageHeader
-        eyebrow="Policies"
         title="WAF policies"
         description="Manage CRS-based WAF policies and assign them to virtual hosts."
         actions={

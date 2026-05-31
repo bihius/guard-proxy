@@ -25,7 +25,6 @@ export function DashboardPage() {
   return (
     <section className="space-y-8">
       <PageHeader
-        eyebrow="Dashboard"
         title="Security operations overview"
         description="This starter dashboard shows the shared building blocks for the rest of the team: stat cards, section cards, and consistent status badges."
         actions={

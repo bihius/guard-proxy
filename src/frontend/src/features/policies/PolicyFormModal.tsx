@@ -172,36 +172,19 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label htmlFor="policy-inbound-threshold" className="block text-sm font-medium text-fg-muted">
-              Inbound threshold
-            </label>
-            <input
-              id="policy-inbound-threshold"
-              type="number"
-              required
-              min={1}
-              value={inboundThreshold}
-              onChange={(e) => setInboundThreshold(e.target.value)}
-              className="input-field"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="policy-outbound-threshold" className="block text-sm font-medium text-fg-muted">
-              Outbound threshold
-            </label>
-            <input
-              id="policy-outbound-threshold"
-              type="number"
-              required
-              min={1}
-              value={outboundThreshold}
-              onChange={(e) => setOutboundThreshold(e.target.value)}
-              className="input-field"
-            />
-          </div>
+        <div className="space-y-1.5">
+          <label htmlFor="policy-inbound-threshold" className="block text-sm font-medium text-fg-muted">
+            Inbound threshold
+          </label>
+          <input
+            id="policy-inbound-threshold"
+            type="number"
+            required
+            min={1}
+            value={inboundThreshold}
+            onChange={(e) => setInboundThreshold(e.target.value)}
+            className="input-field"
+          />
         </div>
 
         {props.mode === "edit" && (
