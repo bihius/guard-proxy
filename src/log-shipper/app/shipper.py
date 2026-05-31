@@ -2,13 +2,14 @@
 
 Durability model: the audit file *is* the buffer. We persist a byte offset and only
 advance it once an event has been accepted (2xx) or is known-undeliverable (a 4xx
-poison pill we deliberately drop). Transient failures (network errors, 5xx, 429)
-trigger exponential backoff with the offset frozen, so a backend outage stalls the
-pipeline rather than dropping events.
+poison pill we deliberately drop). Transient failures (network errors, 5xx, 429,
+and auth errors 401/403) trigger exponential backoff with the offset frozen, so a
+backend outage or misconfigured secret stalls the pipeline rather than dropping events.
 """
 
 from __future__ import annotations
 
+import enum
 import json
 import logging
 import os
@@ -25,6 +26,17 @@ logger = logging.getLogger("log-shipper")
 
 _running = True
 
+# Maximum bytes consumed by a single readline() call.  Coraza audit events are
+# typically 2–10 KB; 1 MB is a generous upper bound that prevents an unterminated
+# line from growing the in-memory buffer without limit.
+_MAX_LINE_BYTES = 1 * 1024 * 1024
+
+
+class _ShipResult(enum.Enum):
+    SHIPPED = "shipped"      # accepted by backend (2xx) — advance offset
+    DROPPED = "dropped"      # permanent failure (parse error, 422, etc.) — advance offset
+    ABORTED = "aborted"      # shutdown during retry — do NOT advance offset
+
 
 def _handle_term(_signum: int, _frame: FrameType | None) -> None:
     global _running
@@ -40,6 +52,10 @@ def _load_offset(path: str) -> int:
 
 
 def _persist_offset(path: str, offset: int) -> None:
+    # Atomic rename avoids a torn write, but we intentionally skip fsync: durability
+    # is provided by idempotency (producer_event_id deduplicates at the backend),
+    # so a crash that rolls back the offset is safe — the re-shipped line produces a
+    # 200 rather than a duplicate row.
     tmp = f"{path}.tmp"
     with open(tmp, "w", encoding="utf-8") as handle:
         handle.write(str(offset))
@@ -64,49 +80,71 @@ def _post_event(settings: Settings, payload: dict[str, object]) -> int:
         return response.status
 
 
-def _ship_line(settings: Settings, line: bytes) -> None:
-    """Block until ``line`` is shipped (2xx) or deliberately dropped (parse/4xx)."""
+def _ship_line(settings: Settings, line: bytes) -> _ShipResult:
+    """Block until ``line`` is shipped, dropped, or the process is shutting down.
+
+    Returns:
+        SHIPPED  — backend accepted the event (2xx); advance offset.
+        DROPPED  — permanent failure (unparseable, unmappable, or 4xx payload
+                   rejection); advance offset to skip the poison pill.
+        ABORTED  — shutdown signal arrived during a retry sleep; do NOT advance
+                   the offset so the line is re-attempted on next start.
+    """
 
     text = line.decode("utf-8", errors="replace").strip()
     if not text:
-        return
+        return _ShipResult.DROPPED
 
     try:
         event = json.loads(text)
     except json.JSONDecodeError:
         logger.warning("dropping unparseable audit line")
-        return
+        return _ShipResult.DROPPED
     if not isinstance(event, dict):
         logger.warning("dropping non-object audit line")
-        return
+        return _ShipResult.DROPPED
 
     payload = coraza_event_to_ingest(event)
     if payload is None:
         logger.warning("dropping event that cannot be mapped to an ingest payload")
-        return
+        return _ShipResult.DROPPED
 
     backoff = settings.backoff_base_seconds
     while _running:
         try:
             status = _post_event(settings, payload)
-            logger.info("shipped event id=%s status=%s", payload["rule_id"], status)
-            return
+            logger.info("shipped event producer_event_id=%s status=%s",
+                        payload["producer_event_id"], status)
+            return _ShipResult.SHIPPED
         except urllib.error.HTTPError as error:
-            if error.code == 429 or error.code >= 500:
+            if error.code in (401, 403):
+                # Auth rejection is a config error (wrong shared secret), not a
+                # per-event poison pill.  Stall with backoff so the pipeline pauses
+                # loudly rather than silently shredding the audit stream.
+                logger.warning(
+                    "ingest auth rejected (%s) — check LOG_INGEST_SHARED_SECRET; "
+                    "retrying in %.1fs",
+                    error.code,
+                    backoff,
+                )
+            elif error.code == 429 or error.code >= 500:
                 logger.warning("ingest %s, retrying in %.1fs", error.code, backoff)
             else:
-                # 4xx other than rate limiting: the backend rejected the payload and
-                # will keep doing so. Drop it rather than blocking the pipeline.
+                # Other 4xx (e.g. 422 Unprocessable Entity): the backend rejected
+                # this specific payload and will keep doing so.  Drop it rather
+                # than blocking the pipeline.
                 body = error.read().decode("utf-8", errors="replace")[:500]
                 logger.error("dropping event rejected by ingest (%s): %s",
                              error.code, body)
-                return
+                return _ShipResult.DROPPED
         except urllib.error.URLError as error:
             logger.warning("ingest unreachable (%s), retrying in %.1fs",
                            error.reason, backoff)
 
         _interruptible_sleep(backoff)
         backoff = min(backoff * 2, settings.backoff_max_seconds)
+
+    return _ShipResult.ABORTED
 
 
 def _interruptible_sleep(seconds: float) -> None:
@@ -126,8 +164,13 @@ def run(settings: Settings) -> None:
             _interruptible_sleep(settings.poll_interval_seconds)
             continue
 
+        # Reset on truncation.  Note: rename-based rotation (logrotate copytruncate
+        # excluded) is NOT detected here because we track a byte offset, not an inode.
+        # Coraza uses SecAuditLogType Serial (append-only, never rotated), so this is
+        # safe for the current deployment; rotation support would require inotify or an
+        # inode check.
         if size < offset:
-            logger.warning("audit log truncated/rotated; resetting offset to 0")
+            logger.warning("audit log truncated; resetting offset to 0")
             offset = 0
             _persist_offset(settings.state_file, offset)
 
@@ -135,14 +178,16 @@ def run(settings: Settings) -> None:
         with open(settings.audit_log_path, "rb") as handle:
             handle.seek(offset)
             while _running:
-                line = handle.readline()
+                line = handle.readline(_MAX_LINE_BYTES)
                 if not line:
                     break
                 if not line.endswith(b"\n"):
-                    # Partial trailing line: wait for the writer to finish it.
+                    # Partial trailing line (writer hasn't flushed yet, or the line
+                    # exceeded _MAX_LINE_BYTES): wait for the next poll cycle.
                     break
-                _ship_line(settings, line)
-                if not _running:
+                result = _ship_line(settings, line)
+                if result is _ShipResult.ABORTED:
+                    # Shutdown during retry — do not advance the offset.
                     break
                 offset += len(line)
                 _persist_offset(settings.state_file, offset)

@@ -90,7 +90,7 @@ def coraza_event_to_ingest(event: dict[str, Any]) -> dict[str, Any] | None:
         "producer_event_id": _clean_str(transaction.get("id")),
         "event_at": _event_at(transaction.get("timestamp")),
         "vhost": _vhost(request.get("headers")),
-        "action": _action(is_interrupted, messages),
+        "action": _action(is_interrupted, primary_data),
         "source_ip": source_ip,
         "method": method.upper(),
         "request_uri": request_uri,
@@ -155,14 +155,13 @@ def _primary_rule_data(messages: list[Any]) -> _RuleData | None:
 # Field derivation helpers
 # ---------------------------------------------------------------------------
 
-def _action(is_interrupted: bool, messages: list[Any]) -> str:
+def _action(is_interrupted: bool, primary_data: _RuleData | None) -> str:
     if is_interrupted:
         return "deny"
     # Secondary check: deny when a high-severity rule fired even without interruption
     # (e.g. DetectionOnly-adjacent configs that still log critical hits).
-    rd = _primary_rule_data(messages)
-    if rd is not None and rd.severity_str is not None:
-        if rd.severity_str.lower() in _DENY_SEVERITY_STRINGS:
+    if primary_data is not None and primary_data.severity_str is not None:
+        if primary_data.severity_str.lower() in _DENY_SEVERITY_STRINGS:
             return "deny"
     return "allow"
 
