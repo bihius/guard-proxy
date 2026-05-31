@@ -32,9 +32,7 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
   const [inboundThreshold, setInboundThreshold] = useState<string>(
     String(initial?.inbound_anomaly_threshold ?? 5),
   );
-  const [outboundThreshold, setOutboundThreshold] = useState<string>(
-    String(initial?.outbound_anomaly_threshold ?? 4),
-  );
+  const outboundThreshold = String(initial?.outbound_anomaly_threshold ?? 4);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
