@@ -19,6 +19,9 @@ graph TB
     RV -.->|read-only mount| H
     RV -.->|read-only rule overrides| CS
     CS -.->|polls /runtime/current| CS
+    CS -->|JSON audit events| AF[(coraza_audit volume)]
+    AF -->|tailed by| LS[Log Shipper sidecar]
+    LS -->|POST /logs/ingest| BE
 ```
 
 ## Request Flow
@@ -53,7 +56,8 @@ machine-readable degraded reason header.
 | Component | Role | Location |
 |-----------|------|----------|
 | **HAProxy** | Reference reverse proxy, host routing, SPOE filter, WAF enforcement, degraded-mode handling | `configs/haproxy/` |
-| **Coraza SPOA + OWASP CRS** | Request-phase WAF inspection, CRS anomaly scoring, audit logging seed configuration | `configs/coraza/`, `deploy/docker/coraza.Dockerfile` |
+| **Coraza SPOA + OWASP CRS** | Request-phase WAF inspection, CRS anomaly scoring, JSON audit log | `configs/coraza/`, `deploy/docker/coraza.Dockerfile` |
+| **Log Shipper sidecar** | Tails Coraza's JSON audit file and ships each event to `POST /logs/ingest` with exponential backoff | `src/log-shipper/` |
 | **FastAPI Backend** | Control-plane API for auth, vhosts, policies, rule overrides, logs, and health checks | `src/backend/` |
 | **React Frontend** | Admin panel SPA built with React, TypeScript, Vite, Tailwind CSS, and pnpm | `src/frontend/` |
 | **PostgreSQL** | Docker Compose database for backend state | `deploy/docker/docker-compose.yml` |
@@ -82,11 +86,25 @@ machine-readable degraded reason header.
    required.
 
 ### Runtime Event Ingestion
-1. Runtime WAF events can be represented as structured log payloads.
-2. Producers send events to `POST /logs/ingest`.
-3. FastAPI validates and normalizes payloads into the persisted log event model.
-4. `GET /logs` exposes stored events for the future frontend log viewer.
-5. Full automatic Coraza-to-backend event forwarding and production log presentation remain post-M1 work.
+1. Coraza writes one JSON audit event per newline to
+   `/var/log/coraza/audit.log` on the `coraza_audit` Docker named volume
+   (`SecAuditEngine RelevantOnly` — only transactions where at least one rule
+   fired produce an entry).
+2. The **log-shipper** sidecar (`src/log-shipper/`) tails the audit file from a
+   persisted byte-offset checkpoint. For each complete line it maps the Coraza
+   JSON to a `LogIngestRequest` payload (see `configs/coraza/README.md` for the
+   field mapping) and `POST`s it to `/logs/ingest` with
+   `X-Guard-Proxy-Ingest-Secret`.
+3. The offset is only advanced and persisted after a `2xx` response or a
+   deliberate skip (parse error or `4xx` rejection). Transient failures
+   (`5xx`, network errors, `429`) trigger exponential backoff without advancing
+   the offset — so a backend outage stalls the pipeline rather than dropping
+   events. The `coraza_audit` file itself is the durable buffer.
+4. Idempotency is guaranteed via `producer_event_id` = Coraza
+   `transaction.id`; the backend returns `200` for a duplicate rather than
+   creating a second row.
+5. FastAPI validates and normalizes payloads into the persisted `Log` model.
+6. `GET /logs` exposes stored events for the admin panel log viewer.
 
 ## Deployment
 
@@ -96,11 +114,12 @@ The implemented M1 stack lives in `deploy/docker/docker-compose.yml`.
 
 ```yaml
 services:
-  haproxy:   # host port 8080 -> container port 80
-  coraza:    # internal port 9000 (SPOE)
-  backend:   # internal port 8000 (FastAPI)
-  frontend:  # host port 3000 -> Vite port 5173
-  postgres:  # internal port 5432
+  haproxy:      # host port 8080 -> container port 80
+  coraza:       # internal port 9000 (SPOE)
+  log-shipper:  # tails coraza_audit volume, ships to backend
+  backend:      # internal port 8000 (FastAPI)
+  frontend:     # host port 3000 -> Vite port 5173
+  postgres:     # internal port 5432
 ```
 
 Prepare `deploy/docker/.env` from `deploy/docker/.env.example`, then use
@@ -133,9 +152,11 @@ Uvicorn. HAProxy copies the checked-in reference config into the same seed
 release when no generated `haproxy.cfg` exists yet.
 
 The Coraza container image is built on `alpine:3.19` with `tini` as PID 1. A
-shell supervisor (`coraza-supervisor.sh`) starts as root long enough to make the
-fresh audit log volume writable, drops to the non-root `coraza` user, starts
-`coraza-spoa` as a child process, and polls `/runtime/current` once per second.
+shell supervisor (`coraza-supervisor.sh`) drops to the non-root `coraza` user,
+starts `coraza-spoa` as a child process, and polls `/runtime/current` once per
+second. Coraza writes JSON audit events to `/var/log/coraza/audit.log` on the
+`coraza_audit` named volume, which is mounted read-only by the log-shipper
+sidecar.
 The earlier inotify-based supervisor looked simpler, but it did not reliably
 observe the backend's atomic `current` symlink replacement through the
 read-only runtime volume mount while Coraza kept using the previous loaded
@@ -158,3 +179,4 @@ See `notes/decisions/` for Architecture Decision Records:
 - [ADR-004](notes/decisions/ADR-004-docker-compose-deployment.md) - Docker Compose deployment
 - [ADR-006](notes/decisions/ADR-006-sync-sqlalchemy-for-mvp.md) - Synchronous SQLAlchemy for MVP
 - [ADR-007](notes/decisions/ADR-007-coraza-spoa-integration.md) - Coraza SPOA integration approach
+- [ADR-008](notes/decisions/ADR-008-log-shipper-sidecar.md) - Log shipper: custom Python sidecar over Vector/Fluent Bit
