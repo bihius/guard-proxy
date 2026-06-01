@@ -83,6 +83,7 @@ src/backend/*.db
 
 # ===== Logs =====
 logs/
+!src/**/features/logs/
 *.log
 # Allow source code directories named logs/
 !src/**/logs/

@@ -15,11 +15,13 @@ import { ApplyConfigButton } from "@/features/runtime/ApplyConfigButton";
 import type { ApplyResult } from "@/features/runtime/ApplyConfigButton";
 import { RuntimeStatusCard } from "@/features/runtime/RuntimeStatusCard";
 import { useRuntimeStatus } from "@/features/runtime/use-runtime-status";
+import { useDashboardStats } from "@/features/dashboard/use-dashboard-stats";
 import { useAuth } from "@/hooks/use-auth";
 
 export function DashboardPage() {
   const { role } = useAuth();
   const runtimeStatus = useRuntimeStatus();
+  const stats = useDashboardStats();
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
 
   return (
@@ -61,31 +63,51 @@ export function DashboardPage() {
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Protected vhosts"
-          value="12"
-          hint="Soon this card will be fed by the real VHosts endpoint."
+          value={
+            stats.vhosts.error || stats.vhosts.count === null
+              ? "—"
+              : String(stats.vhosts.count)
+          }
+          hint="Number of virtual hosts currently configured in the WAF."
           tone="info"
           icon={<ServerIcon />}
+          isLoading={stats.vhosts.isLoading}
         />
         <StatCard
           label="Active policies"
-          value="4"
-          hint="Policies define the WAF behavior applied to host traffic."
+          value={
+            stats.policies.error || stats.policies.count === null
+              ? "—"
+              : String(stats.policies.count)
+          }
+          hint="Policies define the WAF behaviour applied to host traffic."
           tone="success"
           icon={<ShieldIcon />}
+          isLoading={stats.policies.isLoading}
         />
         <StatCard
           label="Blocked requests"
-          value="128"
-          hint="This is placeholder data for the future monitoring view."
+          value={
+            stats.blocked.error || stats.blocked.count === null
+              ? "—"
+              : String(stats.blocked.count)
+          }
+          hint="Total requests denied by Coraza rules (action: deny)."
           tone="warning"
           icon={<AlertTriangleIcon />}
+          isLoading={stats.blocked.isLoading}
         />
         <StatCard
           label="Critical alerts"
-          value="0"
-          hint="Good example of a stat card that can stay calm until needed."
+          value={
+            stats.alerts.error || stats.alerts.count === null
+              ? "—"
+              : String(stats.alerts.count)
+          }
+          hint="Log entries with severity: critical across all hosts."
           tone="error"
           icon={<PulseIcon />}
+          isLoading={stats.alerts.isLoading}
         />
       </div>
 
