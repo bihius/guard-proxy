@@ -7,7 +7,7 @@ Subcommands:
 
 Usage (local):
     uv run python scripts/manage_users.py create \\
-        --email alice@example.com --password changeme1234 --full-name "Alice"
+        --email alice@example.com --password '<password>' --full-name "Alice"
     uv run python scripts/manage_users.py list --role admin --active
     uv run python scripts/manage_users.py update alice@example.com --role admin
     uv run python scripts/manage_users.py update 3 --deactivate
@@ -310,7 +310,7 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  %(prog)s create --email alice@example.com "
-            "--password changeme1234 --full-name 'Alice'\n"
+            "--password '<password>' --full-name 'Alice'\n"
             "  %(prog)s list --role admin --active\n"
             "  %(prog)s list --json\n"
             "  %(prog)s update alice@example.com --role viewer\n"
