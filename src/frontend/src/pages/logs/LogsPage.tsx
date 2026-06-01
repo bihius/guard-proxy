@@ -123,8 +123,9 @@ export function LogsPage() {
       <SectionCard title="Filters">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-fg-muted">VHost</label>
+            <label htmlFor="filter-vhost" className="block text-sm font-medium text-fg-muted">VHost</label>
             <input
+              id="filter-vhost"
               type="text"
               value={draft.vhost}
               onChange={(e) => setDraft({ ...draft, vhost: e.target.value })}
@@ -134,8 +135,9 @@ export function LogsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-fg-muted">Action</label>
+            <label htmlFor="filter-action" className="block text-sm font-medium text-fg-muted">Action</label>
             <select
+              id="filter-action"
               value={draft.action}
               onChange={(e) => setDraft({ ...draft, action: e.target.value as LogFilters["action"] })}
               className="input-field"
@@ -148,8 +150,9 @@ export function LogsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-fg-muted">Policy</label>
+            <label htmlFor="filter-policy" className="block text-sm font-medium text-fg-muted">Policy</label>
             <select
+              id="filter-policy"
               value={draft.policy_id ?? ""}
               onChange={(e) =>
                 setDraft({ ...draft, policy_id: e.target.value ? Number(e.target.value) : null })
@@ -166,8 +169,9 @@ export function LogsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-fg-muted">From</label>
+            <label htmlFor="filter-date-from" className="block text-sm font-medium text-fg-muted">From</label>
             <input
+              id="filter-date-from"
               type="datetime-local"
               value={draft.date_from}
               onChange={(e) => setDraft({ ...draft, date_from: e.target.value })}
@@ -176,8 +180,9 @@ export function LogsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-fg-muted">To</label>
+            <label htmlFor="filter-date-to" className="block text-sm font-medium text-fg-muted">To</label>
             <input
+              id="filter-date-to"
               type="datetime-local"
               value={draft.date_to}
               onChange={(e) => setDraft({ ...draft, date_to: e.target.value })}

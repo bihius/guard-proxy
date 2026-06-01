@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Modal } from "@/components/shared/Modal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 
@@ -20,7 +22,7 @@ function severityTone(severity: LogSeverity) {
   return "info" as const;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[10rem_1fr] gap-2 py-1.5">
       <dt className="text-sm font-medium text-fg-muted">{label}</dt>

@@ -1,12 +1,12 @@
 import { apiRequest } from "@/lib/api-client";
 
-import type { LogListResponse } from "./types";
+import type { LogAction, LogListResponse } from "./types";
 
 export type ListLogsParams = {
   page: number;
   page_size: number;
   vhost?: string;
-  action?: string;
+  action?: LogAction;
   policy_id?: number | null;
   date_from?: string;
   date_to?: string;
