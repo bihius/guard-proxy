@@ -31,7 +31,11 @@ export function StatCard({
         <div className="space-y-2">
           <p className="text-sm font-medium text-fg-muted">{label}</p>
           {isLoading ? (
-            <div className="h-9 w-16 animate-pulse rounded-[var(--radius-sm)] bg-surface-hover" />
+            <div
+              className="h-9 w-16 animate-pulse rounded-[var(--radius-sm)] bg-surface-hover"
+              role="status"
+              aria-label="Loading"
+            />
           ) : (
             <p className="font-mono text-3xl font-semibold tracking-tight text-fg">
               {value}

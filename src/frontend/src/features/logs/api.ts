@@ -1,6 +1,6 @@
 import { apiRequest } from "@/lib/api-client";
 
-import type { LogAction, LogListResponse } from "./types";
+import type { LogAction, LogListResponse, LogSeverity } from "./types";
 
 export type ListLogsParams = {
   page: number;
@@ -38,7 +38,7 @@ export function listLogs(token: string, params: ListLogsParams, signal?: AbortSi
 
 type LogTotalParams = {
   action?: LogAction;
-  severity?: string;
+  severity?: LogSeverity;
 };
 
 export function fetchLogTotal(

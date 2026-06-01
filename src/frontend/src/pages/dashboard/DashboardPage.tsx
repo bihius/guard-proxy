@@ -71,7 +71,7 @@ export function DashboardPage() {
           hint="Number of virtual hosts currently configured in the WAF."
           tone="info"
           icon={<ServerIcon />}
-          isLoading={stats.isLoading}
+          isLoading={stats.vhosts.isLoading}
         />
         <StatCard
           label="Active policies"
@@ -83,7 +83,7 @@ export function DashboardPage() {
           hint="Policies define the WAF behaviour applied to host traffic."
           tone="success"
           icon={<ShieldIcon />}
-          isLoading={stats.isLoading}
+          isLoading={stats.policies.isLoading}
         />
         <StatCard
           label="Blocked requests"
@@ -95,7 +95,7 @@ export function DashboardPage() {
           hint="Total requests denied by Coraza rules (action: deny)."
           tone="warning"
           icon={<AlertTriangleIcon />}
-          isLoading={stats.isLoading}
+          isLoading={stats.blocked.isLoading}
         />
         <StatCard
           label="Critical alerts"
@@ -107,7 +107,7 @@ export function DashboardPage() {
           hint="Log entries with severity: critical across all hosts."
           tone="error"
           icon={<PulseIcon />}
-          isLoading={stats.isLoading}
+          isLoading={stats.alerts.isLoading}
         />
       </div>
 
