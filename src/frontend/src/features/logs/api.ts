@@ -1,6 +1,6 @@
 import { apiRequest } from "@/lib/api-client";
 
-import type { LogAction, LogListResponse } from "./types";
+import type { LogAction, LogListResponse, LogSeverity } from "./types";
 
 export type ListLogsParams = {
   page: number;
@@ -34,4 +34,24 @@ export function listLogs(token: string, params: ListLogsParams, signal?: AbortSi
   if (isoTo) query.append("date_to", isoTo);
 
   return apiRequest<LogListResponse>(`/logs?${query.toString()}`, { token, signal });
+}
+
+type LogTotalParams = {
+  action?: LogAction;
+  severity?: LogSeverity;
+};
+
+export function fetchLogTotal(
+  token: string,
+  params: LogTotalParams,
+  signal?: AbortSignal
+): Promise<number> {
+  const query = new URLSearchParams({ page_size: "1" });
+  if (params.action) query.set("action", params.action);
+  if (params.severity) query.set("severity", params.severity);
+
+  return apiRequest<LogListResponse>(`/logs?${query.toString()}`, {
+    token,
+    signal,
+  }).then((res) => res.total);
 }
