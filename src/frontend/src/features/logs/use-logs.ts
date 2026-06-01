@@ -51,7 +51,7 @@ export function useLogs(): LogsState {
           page,
           page_size: PAGE_SIZE,
           vhost: applied.vhost || undefined,
-          action: applied.action || undefined,
+          action: applied.action !== "" ? applied.action : undefined,
           policy_id: applied.policy_id ?? undefined,
           date_from: applied.date_from || undefined,
           date_to: applied.date_to || undefined,
