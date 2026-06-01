@@ -2,7 +2,7 @@ COMPOSE_FILE := deploy/docker/docker-compose.yml
 COMPOSE_DEBUG_FILE := deploy/docker/docker-compose.debug.yml
 ENV_FILE := deploy/docker/.env
 
-.PHONY: run dev down clean logs ps seed coraza-build
+.PHONY: run dev down clean logs ps seed users coraza-build
 
 run:
 	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build -d
@@ -24,6 +24,9 @@ ps:
 
 seed:
 	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/seed_admin.py
+
+users:
+	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(ARGS)
 
 coraza-build:
 	docker build -f deploy/docker/coraza.Dockerfile -t guard-proxy/coraza-spoa:dev .
