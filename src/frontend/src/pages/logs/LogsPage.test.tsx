@@ -1,0 +1,162 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import { AuthContext } from "@/features/auth/auth-context.shared";
+import type { AuthContextValue } from "@/features/auth/auth-context.types";
+import * as logsApi from "@/features/logs/api";
+import * as vhostsApi from "@/features/vhosts/api";
+
+import { LogsPage } from "./LogsPage";
+
+vi.mock("@/features/logs/api");
+vi.mock("@/features/vhosts/api");
+
+function makeAuthContext(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
+  return {
+    user: null,
+    role: "admin",
+    accessToken: "test-token",
+    isAuthenticated: true,
+    isLoading: false,
+    loginError: null,
+    hasRole: vi.fn().mockReturnValue(true),
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    refreshCurrentUser: vi.fn(),
+    ...overrides,
+  };
+}
+
+const mockPolicies = [{ id: 1, name: "Default Policy" }];
+
+const mockLog = {
+  id: 42,
+  producer_event_id: null,
+  event_at: "2026-06-01T10:00:00Z",
+  vhost: "app.example.com",
+  action: "deny" as const,
+  source_ip: "203.0.113.10",
+  method: "POST",
+  request_uri: "/login",
+  status_code: 403,
+  rule_id: 942100,
+  rule_message: "SQL injection attack detected",
+  anomaly_score: 15,
+  paranoia_level: 2,
+  severity: "error" as const,
+  message: null,
+  raw_context: null,
+  vhost_id: 1,
+  policy_id: 1,
+};
+
+const mockListResponse = { items: [mockLog], total: 1, page: 1, page_size: 50 };
+const emptyListResponse = { items: [], total: 0, page: 1, page_size: 50 };
+
+function renderPage() {
+  return render(
+    <AuthContext.Provider value={makeAuthContext()}>
+      <LogsPage />
+    </AuthContext.Provider>,
+  );
+}
+
+describe("LogsPage", () => {
+  it("shows loading state initially", () => {
+    vi.mocked(logsApi.listLogs).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(vhostsApi.listPolicies).mockReturnValue(new Promise(() => undefined));
+
+    renderPage();
+    expect(screen.getByText(/loading logs/i)).toBeInTheDocument();
+  });
+
+  it("renders log rows from API response", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("app.example.com")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("POST")).toBeInTheDocument();
+    expect(screen.getByText("deny")).toBeInTheDocument();
+    expect(screen.getByText("15")).toBeInTheDocument();
+  });
+
+  it("shows error state on API failure", async () => {
+    vi.mocked(logsApi.listLogs).mockRejectedValue(new Error("Network error"));
+    vi.mocked(vhostsApi.listPolicies).mockRejectedValue(new Error("Network error"));
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/failed to load logs/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("shows empty state when no logs match", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(emptyListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue([]);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/no events found/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("applying filters re-fetches with filter params", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText(/vhost/i), "api.example.com");
+    await userEvent.click(screen.getByRole("button", { name: /apply/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(logsApi.listLogs)).toHaveBeenCalledWith(
+        "test-token",
+        expect.objectContaining({ vhost: "api.example.com", page: 1 }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("clearing filters resets to empty params", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText(/vhost/i), "something");
+    await userEvent.click(screen.getByRole("button", { name: /clear/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(logsApi.listLogs)).toHaveBeenLastCalledWith(
+        "test-token",
+        expect.objectContaining({ vhost: undefined, page: 1 }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("View button opens detail modal with log fields", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /view/i }));
+
+    expect(screen.getByText("Event details")).toBeInTheDocument();
+    expect(screen.getByText("SQL injection attack detected")).toBeInTheDocument();
+    expect(screen.getByText("203.0.113.10")).toBeInTheDocument();
+  });
+});
