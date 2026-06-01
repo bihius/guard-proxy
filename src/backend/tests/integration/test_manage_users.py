@@ -78,7 +78,7 @@ class TestCmdCreate:
         assert user is not None
         assert user.role == UserRole.admin
 
-    def test_default_role_is_viewer(self, db: Session) -> None:
+    def test_creates_viewer_user_with_explicit_role(self, db: Session) -> None:
         cmd_create(
             db,
             email="carol@test.com",
