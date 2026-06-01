@@ -34,7 +34,7 @@ graph TB
 - React admin panel: dashboard, login, vhost management, policy editing
 - Docker Compose full-stack deployment
 
-### Milestone 2 — Config generator (in progress)
+### Milestone 2 — Config generator ✅
 - Multi-vhost HAProxy + Coraza config generation from stored policies
 - `POST /config/apply` endpoint with atomic swap and automatic rollback
 - inotify-based config reload supervisor (no Docker socket dependency)
@@ -62,11 +62,30 @@ graph TB
 |---|---|---|
 | M0 | Cleanup & scaffolding | Done |
 | M1 | Vertical slice — full stack end-to-end | Done |
-| M2 | Config generator & live apply | In progress |
-| M3 | WAF log viewer & alerting | Planned |
-| M4 | Policy hardening & per-vhost rule tuning | Planned |
-| M5 | Admin panel hardening | Planned |
-| M6 | Thesis evaluation — benchmarks, ZAP, Nuclei, CRS suite, ModSecurity/NAXSI comparison | Planned |
+| M2 | Config generator & live apply | Done |
+| M3 | WAF log ingestion, presentation, and dashboard evidence | Path A active |
+| M4 | Policy hardening and per-vhost rule tuning | Path B |
+| M5 | Panel hardening and DevEx | Path A then Path B |
+| M6 | Thesis evaluation — benchmarks, ZAP, Nuclei, CRS suite, comparison work | Path A then optional Path B |
+| Post-MVP | Product expansion outside the thesis MVP | Deferred |
+
+### Delivery order
+
+The thesis-critical path is:
+
+```text
+M3 -> M5 -> M6
+```
+
+That path should produce the demo and thesis evidence first: visible WAF logs, runtime/dashboard status, health checks, user/admin basics, benchmark harnesses, effectiveness tests, and false-positive/false-negative analysis.
+
+Path B work can run after that convergence point, or in parallel only when it does not slow the thesis path:
+
+```text
+M4 policy depth -> M3/M5 polish -> optional M6 comparisons -> Post-MVP backlog
+```
+
+Path B covers richer policy tuning, path-scoped bindings, custom rules, live log streaming, pagination, password-management polish, product analytics, GeoIP/DDoS features, TLS automation, and advanced backend routing.
 
 ---
 
@@ -86,7 +105,7 @@ cp deploy/docker/.env.example deploy/docker/.env
 make run       # normal mode or
 make dev       # HAProxy + Coraza debug logging
 
-make seed      # add admin for 
+make seed      # add the initial admin user
 ```
 
 ### Access
