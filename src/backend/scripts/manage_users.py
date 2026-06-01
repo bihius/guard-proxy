@@ -144,6 +144,9 @@ def cmd_create(
             full_name=full_name,
             role=UserRole(role),
         )
+    except ValueError as exc:
+        print(f"Error: role: {exc}", file=sys.stderr)
+        sys.exit(1)
     except ValidationError as exc:
         print(f"Error: {_format_validation_error(exc)}", file=sys.stderr)
         sys.exit(1)
@@ -190,7 +193,11 @@ def cmd_list(
     """List users with optional filters."""
     query = db.query(User)
     if role is not None:
-        query = query.filter(User.role == UserRole(role))
+        try:
+            query = query.filter(User.role == UserRole(role))
+        except ValueError as exc:
+            print(f"Error: role: {exc}", file=sys.stderr)
+            sys.exit(1)
     if active_filter is not None:
         query = query.filter(User.is_active == active_filter)
     users: list[User] = query.order_by(User.id).all()
