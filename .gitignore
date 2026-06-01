@@ -84,6 +84,8 @@ src/backend/*.db
 # ===== Logs =====
 logs/
 *.log
+# Allow source code directories named logs/
+!src/**/logs/
 
 # ===== OS =====
 .DS_Store

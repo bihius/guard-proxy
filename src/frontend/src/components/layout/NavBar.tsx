@@ -15,6 +15,7 @@ const navigation = [
   { to: appRoutes.dashboard, label: "Dashboard" },
   { to: appRoutes.vhosts, label: "VHosts" },
   { to: appRoutes.policies, label: "Policies" },
+  { to: appRoutes.logs, label: "Logs" },
 ];
 
 function navLinkClass(isActive: boolean, pill = false) {
