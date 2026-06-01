@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listPolicies, listVHosts } from "@/features/vhosts/api";
 import { fetchLogTotal } from "@/features/logs/api";
+import type { LogAction, LogSeverity } from "@/features/logs/types";
+import { listPolicies, listVHosts } from "@/features/vhosts/api";
 import { useAuth } from "@/hooks/use-auth";
 
-type StatValue = {
+export type StatValue = {
   count: number | null;
   error: boolean;
+  isLoading: boolean;
 };
 
 type DashboardStatsState = {
@@ -14,64 +16,66 @@ type DashboardStatsState = {
   policies: StatValue;
   blocked: StatValue;
   alerts: StatValue;
-  isLoading: boolean;
   refresh: () => void;
 };
 
-const INITIAL_STAT: StatValue = { count: null, error: false };
+const LOADING: StatValue = { count: null, error: false, isLoading: true };
+
+function ok(count: number): StatValue {
+  return { count, error: false, isLoading: false };
+}
+
+function failed(): StatValue {
+  return { count: null, error: true, isLoading: false };
+}
+
+function isAbortError(e: unknown): boolean {
+  return e instanceof Error && e.name === "AbortError";
+}
 
 export function useDashboardStats(): DashboardStatsState {
   const { accessToken } = useAuth();
-  const [vhosts, setVHosts] = useState<StatValue>(INITIAL_STAT);
-  const [policies, setPolicies] = useState<StatValue>(INITIAL_STAT);
-  const [blocked, setBlocked] = useState<StatValue>(INITIAL_STAT);
-  const [alerts, setAlerts] = useState<StatValue>(INITIAL_STAT);
-  const [isLoading, setIsLoading] = useState(true);
-  const refreshCountRef = useRef(0);
+  const [vhosts, setVHosts] = useState<StatValue>(LOADING);
+  const [policies, setPolicies] = useState<StatValue>(LOADING);
+  const [blocked, setBlocked] = useState<StatValue>(LOADING);
+  const [alerts, setAlerts] = useState<StatValue>(LOADING);
+  const generationRef = useRef(0);
 
   const load = useCallback(() => {
     if (!accessToken) return;
 
     const controller = new AbortController();
-    const generation = ++refreshCountRef.current;
+    const generation = ++generationRef.current;
 
-    setIsLoading(true);
+    setVHosts(LOADING);
+    setPolicies(LOADING);
+    setBlocked(LOADING);
+    setAlerts(LOADING);
 
-    Promise.allSettled([
-      listVHosts(accessToken, controller.signal),
-      listPolicies(accessToken, controller.signal),
-      fetchLogTotal(accessToken, { action: "deny" }, controller.signal),
-      fetchLogTotal(accessToken, { severity: "critical" }, controller.signal),
-    ]).then(([vhostResult, policyResult, blockedResult, alertsResult]) => {
-      if (generation !== refreshCountRef.current) return;
+    // Each card resolves independently so fast cards aren't blocked by slow ones.
+    // Aborted fetches are silently dropped (not surfaced as errors).
+    const guard =
+      (setter: (v: StatValue) => void) => (value: StatValue) => {
+        if (generation === generationRef.current) setter(value);
+      };
 
-      setVHosts(
-        vhostResult.status === "fulfilled"
-          ? { count: vhostResult.value.length, error: false }
-          : { count: null, error: true }
-      );
-      setPolicies(
-        policyResult.status === "fulfilled"
-          ? { count: policyResult.value.length, error: false }
-          : { count: null, error: true }
-      );
-      setBlocked(
-        blockedResult.status === "fulfilled"
-          ? { count: blockedResult.value, error: false }
-          : { count: null, error: true }
-      );
-      setAlerts(
-        alertsResult.status === "fulfilled"
-          ? { count: alertsResult.value, error: false }
-          : { count: null, error: true }
-      );
+    listVHosts(accessToken, controller.signal)
+      .then((list) => guard(setVHosts)(ok(list.length)))
+      .catch((e) => { if (!isAbortError(e)) guard(setVHosts)(failed()); });
 
-      setIsLoading(false);
-    });
+    listPolicies(accessToken, controller.signal)
+      .then((list) => guard(setPolicies)(ok(list.length)))
+      .catch((e) => { if (!isAbortError(e)) guard(setPolicies)(failed()); });
 
-    return () => {
-      controller.abort();
-    };
+    fetchLogTotal(accessToken, { action: "deny" as LogAction }, controller.signal)
+      .then((total) => guard(setBlocked)(ok(total)))
+      .catch((e) => { if (!isAbortError(e)) guard(setBlocked)(failed()); });
+
+    fetchLogTotal(accessToken, { severity: "critical" as LogSeverity }, controller.signal)
+      .then((total) => guard(setAlerts)(ok(total)))
+      .catch((e) => { if (!isAbortError(e)) guard(setAlerts)(failed()); });
+
+    return () => controller.abort();
   }, [accessToken]);
 
   useEffect(() => {
@@ -79,9 +83,7 @@ export function useDashboardStats(): DashboardStatsState {
     return cleanup;
   }, [load]);
 
-  const refresh = useCallback(() => {
-    load();
-  }, [load]);
+  const refresh = useCallback(() => { load(); }, [load]);
 
-  return { vhosts, policies, blocked, alerts, isLoading, refresh };
+  return { vhosts, policies, blocked, alerts, refresh };
 }
