@@ -5,6 +5,7 @@ export const appRoutes = {
   forbidden: "/forbidden",
   vhosts: "/vhosts",
   policies: "/policies",
+  logs: "/logs",
 } as const;
 
 export function getVHostDetailPath(vhostId: string | number) {

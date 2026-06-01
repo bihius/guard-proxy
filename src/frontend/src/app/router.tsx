@@ -9,6 +9,7 @@ import { LoginPage } from "@/pages/login/LoginPage";
 import { NotFoundPage } from "@/pages/not-found/NotFoundPage";
 import { PoliciesPage } from "@/pages/policies/PoliciesPage";
 import { PolicyDetailPage } from "@/pages/policies/PolicyDetailPage";
+import { LogsPage } from "@/pages/logs/LogsPage";
 import { VHostDetailPage } from "@/pages/vhosts/VHostDetailPage";
 import { VHostsPage } from "@/pages/vhosts/VHostsPage";
 
@@ -56,6 +57,10 @@ export const router = createBrowserRouter([
           {
             path: `${appRoutes.policies}/:policyId`,
             element: <PolicyDetailPage />,
+          },
+          {
+            path: appRoutes.logs,
+            element: <LogsPage />,
           },
         ],
       },
