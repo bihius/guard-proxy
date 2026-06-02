@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { getPolicy } from "@/features/policies/api";
 import type { PolicyDetail, RuleOverride } from "@/features/policies/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -69,7 +70,7 @@ export function PolicyDetailPage() {
         row.comment ? (
           <span>{row.comment}</span>
         ) : (
-          <span className="text-fg-subtle">—</span>
+          <span className="text-muted-foreground">—</span>
         ),
     },
   ];
@@ -88,13 +89,13 @@ export function PolicyDetailPage() {
           title="Failed to load policy"
           description={error}
           action={
-            <button
+            <Button
               type="button"
               onClick={load}
-              className="btn-ghost px-4 py-2 text-sm"
+              variant="outline"
             >
               Retry
-            </button>
+            </Button>
           }
         />
       ) : policy ? (
@@ -102,7 +103,7 @@ export function PolicyDetailPage() {
           <SectionCard title="Policy settings" description="Current configuration for this WAF policy.">
             <dl className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm sm:grid-cols-3">
               <div>
-                <dt className="font-medium text-fg-muted">Enforcement mode</dt>
+                <dt className="font-medium text-muted-foreground">Enforcement mode</dt>
                 <dd className="mt-1">
                   <StatusBadge
                     label={policy.enforcement_mode === "block" ? "Block" : "Detect only"}
@@ -111,7 +112,7 @@ export function PolicyDetailPage() {
                 </dd>
               </div>
               <div>
-                <dt className="font-medium text-fg-muted">Status</dt>
+                <dt className="font-medium text-muted-foreground">Status</dt>
                 <dd className="mt-1">
                   <StatusBadge
                     label={policy.is_active ? "Active" : "Inactive"}
@@ -120,12 +121,12 @@ export function PolicyDetailPage() {
                 </dd>
               </div>
               <div>
-                <dt className="font-medium text-fg-muted">Paranoia level</dt>
-                <dd className="mt-1 text-fg">{policy.paranoia_level}</dd>
+                <dt className="font-medium text-muted-foreground">Paranoia level</dt>
+                <dd className="mt-1 text-foreground">{policy.paranoia_level}</dd>
               </div>
               <div>
-                <dt className="font-medium text-fg-muted">Inbound threshold</dt>
-                <dd className="mt-1 text-fg">{policy.inbound_anomaly_threshold}</dd>
+                <dt className="font-medium text-muted-foreground">Inbound threshold</dt>
+                <dd className="mt-1 text-foreground">{policy.inbound_anomaly_threshold}</dd>
               </div>
             </dl>
           </SectionCard>

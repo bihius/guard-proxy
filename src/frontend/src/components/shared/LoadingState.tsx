@@ -1,3 +1,5 @@
+import { Card } from "@/components/ui/card";
+
 type LoadingStateProps = {
   label?: string;
 };
@@ -6,11 +8,11 @@ export function LoadingState({
   label = "Loading content...",
 }: LoadingStateProps) {
   return (
-    <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-6">
+    <Card className="p-5">
       <div className="flex items-center gap-3">
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-accent" />
-        <p className="text-sm font-medium text-fg-muted">{label}</p>
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary" />
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
       </div>
-    </div>
+    </Card>
   );
 }
