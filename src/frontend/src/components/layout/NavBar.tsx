@@ -46,7 +46,7 @@ function applyTheme(theme: Theme) {
 
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
-    meta.setAttribute("content", theme === "frost" ? "#141a2e" : "#1a2e1a");
+    meta.setAttribute("content", theme === "frost" ? "#f8f9fc" : "#1a2e1a");
   }
 
   try {

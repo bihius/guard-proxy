@@ -72,6 +72,7 @@
 }
 
 [data-theme="frost"] {
+  color-scheme: light;
   --background: oklch(0.975 0.006 250);
   --foreground: oklch(0.18 0.02 255);
   --card: oklch(1 0 0);
