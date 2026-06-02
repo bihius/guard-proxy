@@ -27,7 +27,7 @@ services:
       - .env
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
-      GUARD_PROXY_RUNTIME_DIR: /var/lib/guard-proxy/generated
+      RUNTIME_GENERATED_CONFIG_ROOT: /var/lib/guard-proxy/generated
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,7 +35,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)\"",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=2)\"",
         ]
       interval: 10s
       timeout: 5s

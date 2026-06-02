@@ -58,7 +58,7 @@ machine-readable degraded reason header.
 | **HAProxy** | Reference reverse proxy, host routing, SPOE filter, WAF enforcement, degraded-mode handling | `configs/haproxy/` |
 | **Coraza SPOA + OWASP CRS** | Request-phase WAF inspection, CRS anomaly scoring, JSON audit log | `configs/coraza/`, `deploy/docker/coraza.Dockerfile` |
 | **Log Shipper sidecar** | Tails Coraza's JSON audit file and ships each event to `POST /logs/ingest` with exponential backoff | `src/log-shipper/` |
-| **FastAPI Backend** | Control-plane API for auth, vhosts, policies, rule overrides, logs, and health checks | `src/backend/` |
+| **FastAPI Backend** | Control-plane API for auth, vhosts, policies, rule overrides, logs, and health/readiness probes | `src/backend/` |
 | **React Frontend** | Admin panel SPA built with React, TypeScript, Vite, Tailwind CSS, and pnpm | `src/frontend/` |
 | **PostgreSQL** | Docker Compose database for backend state | `deploy/docker/docker-compose.yml` |
 | **Docker Compose Stack** | Local full-stack orchestration, health checks, networks, logs, and persistent volumes | `deploy/docker/` |
@@ -107,6 +107,29 @@ machine-readable degraded reason header.
 6. `GET /logs` exposes stored events for the admin panel log viewer.
 
 ## Deployment
+
+### Health and Readiness Probes
+
+The backend exposes two probe endpoints, both unauthenticated:
+
+| Endpoint | Type | Returns | Checks |
+|----------|------|---------|--------|
+| `GET /health` | Liveness | 200 always | None — proves the process is alive |
+| `GET /ready` | Readiness | 200 / 503 | DB connectivity (`SELECT 1`), runtime config volume writable |
+
+`/ready` returns a JSON body with per-check status so operators can tell which dependency is down:
+
+```json
+// 200 — all clear
+{"status": "ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "ok"}}}
+
+// 503 — one or more dependencies unavailable
+{"status": "not ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "error", "detail": "/var/lib/guard-proxy/generated is not a writable directory"}}}
+```
+
+The Docker Compose `healthcheck` for the `backend` service targets `/ready`. Almost every other service in the stack (`frontend`, `haproxy`, `coraza`, `log-shipper`) depends on `backend` with `condition: service_healthy`, so `/ready` must pass before dependents start. This prevents dependents from launching while the database is still initialising or the config volume is unavailable.
+
+`/health` is retained as a lightweight liveness probe for orchestrators that separately track process aliveness (e.g. a future Kubernetes `livenessProbe`).
 
 ### Development (Docker Compose)
 
