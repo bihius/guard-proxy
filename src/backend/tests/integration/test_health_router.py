@@ -101,7 +101,7 @@ def test_ready_returns_503_when_db_fails(
     data = response.json()
     assert data["status"] == "not ready"
     assert data["checks"]["database"]["status"] == "error"
-    assert "detail" in data["checks"]["database"]
+    assert data["checks"]["database"]["detail"] == "database unavailable"
 
 
 # ---------------------------------------------------------------------------
