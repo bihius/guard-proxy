@@ -47,6 +47,13 @@ def test_default_docker_compose_starts_haproxy_before_coraza_is_healthy() -> Non
     assert '"${HAPROXY_HTTP_PORT:-8080}:80"' in compose
 
 
+def test_default_docker_compose_starts_log_shipper_after_coraza_is_healthy() -> None:
+    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+
+    log_shipper_block = compose.split("\n  log-shipper:")[1].split("\n  haproxy:")[0]
+    assert "coraza:\n        condition: service_healthy" in log_shipper_block
+
+
 def test_debug_coraza_spoa_config_enables_debug_logging() -> None:
     config = (REPO_ROOT / "configs/coraza/coraza-spoa.debug.yaml").read_text()
 
