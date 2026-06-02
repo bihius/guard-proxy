@@ -37,8 +37,13 @@ def test_default_docker_compose_does_not_use_debug_flag() -> None:
 def test_default_docker_compose_starts_haproxy_before_coraza_is_healthy() -> None:
     compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
 
-    assert "coraza:\n        condition: service_started" in compose
-    assert "coraza:\n        condition: service_healthy" not in compose
+    # Scope the coraza-condition check to the haproxy service block only.
+    # log-shipper intentionally uses service_healthy for coraza (also present in the
+    # file), so the assertions must not operate on the whole document.
+    haproxy_block = compose.split("\n  haproxy:")[1].split("\nnetworks:")[0]
+
+    assert "coraza:\n        condition: service_started" in haproxy_block
+    assert "coraza:\n        condition: service_healthy" not in haproxy_block
     assert '"${HAPROXY_HTTP_PORT:-8080}:80"' in compose
 
 
