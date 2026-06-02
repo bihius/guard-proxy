@@ -1,0 +1,8 @@
+# Nuclei target list for eval lab.
+# Format: one URL per line (scheme://host[:port] — no path).
+# Host headers are resolved via Docker internal DNS when the container
+# runs on the gp_internal network.
+#
+# Targets hit HAProxy on port 80 with the vhost Host: header.
+# Nuclei resolves "haproxy" as the Docker service name when run on gp_internal.
+http://haproxy:80

@@ -111,9 +111,12 @@ logs/
 *.mkv
 
 # ===== Benchmark Results =====
+# Flat files (legacy pattern)
 benchmarks/results/*.json
 benchmarks/results/*.html
 benchmarks/results/*.csv
+# Run directories (run-<RUN_ID>/) — all raw output is gitignored
+benchmarks/results/run-*/
 
 # ===== HAProxy / Coraza Runtime =====
 *.sock
@@ -121,6 +124,8 @@ benchmarks/results/*.csv
 haproxy.stats
 
 # ===== Thesis =====
+# Local thesis working copy (private, not tracked).
+# The evaluation plan (M6 methodology contract) lives in docs/evaluation-plan.md.
 thesis/
 
 # ===== Keep Empty Directories =====
