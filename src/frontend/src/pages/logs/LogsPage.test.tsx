@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -122,6 +122,40 @@ describe("LogsPage", () => {
       expect(vi.mocked(logsApi.listLogs)).toHaveBeenCalledWith(
         "test-token",
         expect.objectContaining({ vhost: "api.example.com", page: 1 }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("applies from and to date/time filters", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("From date"), {
+      target: { value: "2026-06-01" },
+    });
+    fireEvent.change(screen.getByLabelText("From time"), {
+      target: { value: "08:30" },
+    });
+    fireEvent.change(screen.getByLabelText("To date"), {
+      target: { value: "2026-06-02" },
+    });
+    fireEvent.change(screen.getByLabelText("To time"), {
+      target: { value: "17:45" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: /apply/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(logsApi.listLogs)).toHaveBeenCalledWith(
+        "test-token",
+        expect.objectContaining({
+          date_from: "2026-06-01T08:30",
+          date_to: "2026-06-02T17:45",
+          page: 1,
+        }),
         expect.anything(),
       ),
     );

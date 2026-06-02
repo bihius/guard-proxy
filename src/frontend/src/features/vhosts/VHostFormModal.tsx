@@ -1,6 +1,12 @@
 import { type FormEvent, useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
 
@@ -72,86 +78,72 @@ export function VHostFormModal(props: VHostFormModalProps) {
       onClose={onClose}
       footer={
         <>
-          <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">
+          <Button type="button" onClick={onClose} variant="outline">
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
             form="vhost-form"
             disabled={submitting}
-            className="btn-primary px-4 py-2 text-sm"
           >
             {submitting ? "Saving…" : props.mode === "create" ? "Create" : "Save"}
-          </button>
+          </Button>
         </>
       }
     >
       <form id="vhost-form" onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
         {serverError && (
-          <div
-            role="alert"
+          <Alert
+            variant="destructive"
             aria-live="assertive"
-            className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error"
           >
             {serverError}
-          </div>
+          </Alert>
         )}
 
         <div className="space-y-1.5">
-          <label htmlFor="vhost-domain" className="block text-sm font-medium text-fg-muted">
-            Domain
-          </label>
-          <input
+          <Label htmlFor="vhost-domain">Domain</Label>
+          <Input
             id="vhost-domain"
             type="text"
             required
             maxLength={255}
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
-            className="input-field"
             placeholder="example.com"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="vhost-backend-url" className="block text-sm font-medium text-fg-muted">
-            Backend URL
-          </label>
-          <input
+          <Label htmlFor="vhost-backend-url">Backend URL</Label>
+          <Input
             id="vhost-backend-url"
             type="url"
             required
             maxLength={512}
             value={backendUrl}
             onChange={(e) => setBackendUrl(e.target.value)}
-            className="input-field"
             placeholder="https://backend.internal"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="vhost-description" className="block text-sm font-medium text-fg-muted">
-            Description
-          </label>
-          <input
+          <Label htmlFor="vhost-description">Description</Label>
+          <Input
             id="vhost-description"
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="input-field"
             placeholder="Optional"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="vhost-policy" className="block text-sm font-medium text-fg-muted">
-            Policy
-          </label>
-          <select
+          <Label htmlFor="vhost-policy">Policy</Label>
+          <Select
             id="vhost-policy"
             value={policyId}
             onChange={(e) => setPolicyId(e.target.value)}
-            className="input-field"
           >
             <option value="">None (default policy)</option>
             {policies.map((p) => (
@@ -159,18 +151,16 @@ export function VHostFormModal(props: VHostFormModalProps) {
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
-          <input
-            type="checkbox"
+        <Label className="flex cursor-pointer items-center gap-2">
+          <Checkbox
             checked={isActive}
             onChange={(e) => setIsActive(e.target.checked)}
-            className="h-4 w-4 accent-accent"
           />
           Active
-        </label>
+        </Label>
       </form>
     </Modal>
   );

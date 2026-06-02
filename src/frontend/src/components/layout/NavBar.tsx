@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Leaf, LogOut, Menu, Shield, Snowflake, X } from "lucide-react";
 
 import { appRoutes } from "@/app/routes";
-import {
-  CloseIcon,
-  LeafIcon,
-  MenuIcon,
-  SnowflakeIcon,
-} from "@/components/icons";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { THEMES, type Theme, getThemeStorageKey } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 const navigation = [
   { to: appRoutes.dashboard, label: "Dashboard" },
@@ -19,15 +17,15 @@ const navigation = [
 ];
 
 function navLinkClass(isActive: boolean, pill = false) {
-  return [
+  return cn(
     pill
       ? "rounded-[var(--radius-full)] px-3 py-2"
       : "rounded-[var(--radius-md)] px-4 py-2",
     "text-sm font-medium transition-all duration-150",
     isActive
-      ? "nav-link-active bg-accent-soft text-accent"
-      : "text-fg-muted hover:bg-surface-hover hover:text-fg",
-  ].join(" ");
+      ? "nav-link-active bg-primary/10 text-primary"
+      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+  );
 }
 
 function getStoredTheme(): Theme {
@@ -104,8 +102,10 @@ export function NavBar() {
           to={appRoutes.dashboard}
           className="flex items-center gap-2 transition-opacity hover:opacity-80"
         >
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" />
-          <span className="text-base font-bold tracking-tight text-fg">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-primary">
+            <Shield className="h-4 w-4" />
+          </span>
+          <span className="text-base font-semibold tracking-normal text-foreground">
             Guard Proxy
           </span>
         </Link>
@@ -123,39 +123,41 @@ export function NavBar() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <button
+          <Button
             type="button"
             onClick={toggleTheme}
-            className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-fg-muted transition hover:bg-surface-hover hover:text-fg"
+            variant="ghost"
+            size="icon"
             aria-label={`Switch to ${theme === "emerald" ? "frost" : "emerald"} theme`}
             title={`Theme: ${theme}`}
           >
-            {theme === "emerald" ? <LeafIcon /> : <SnowflakeIcon />}
-          </button>
+            {theme === "emerald" ? <Leaf /> : <Snowflake />}
+          </Button>
 
-          <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-4 py-1.5 text-sm font-semibold text-accent">
-            Dev Mode
-          </span>
-          <span className="rounded-[var(--radius-full)] bg-surface-hover px-4 py-1.5 text-sm font-semibold text-fg-muted">
+          <Badge>Dev Mode</Badge>
+          <Badge variant="secondary">
             {user?.full_name || user?.email || "No user"}
-          </span>
-          <button
+          </Badge>
+          <Button
             type="button"
             onClick={() => void handleLogout()}
-            className="btn-ghost rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold"
+            variant="ghost"
           >
+            <LogOut />
             Logout
-          </button>
+          </Button>
         </div>
 
-        <button
+        <Button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] text-fg-muted transition hover:bg-surface-hover hover:text-fg md:hidden"
+          variant="ghost"
+          size="icon"
+          className="md:hidden"
           aria-label="Open menu"
         >
-          <MenuIcon />
-        </button>
+          <Menu />
+        </Button>
       </div>
 
       {mobileOpen && (
@@ -167,20 +169,23 @@ export function NavBar() {
             aria-label="Close menu overlay"
           />
 
-          <nav className="absolute right-0 top-0 flex h-full w-72 flex-col gap-1 border-l border-border bg-surface p-5 shadow-card-lg animate-slide-in">
+          <nav className="fixed right-0 top-0 flex h-dvh w-72 max-w-[calc(100vw-2rem)] flex-col gap-1 border-l border-border bg-card p-5 shadow-lg animate-slide-in">
             <div className="mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" />
-                <span className="text-sm font-bold text-fg">Guard Proxy</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-primary">
+                  <Shield className="h-4 w-4" />
+                </span>
+                <span className="text-sm font-semibold text-foreground">Guard Proxy</span>
               </span>
-              <button
+              <Button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-fg-muted transition hover:bg-surface-hover hover:text-fg"
+                variant="ghost"
+                size="icon"
                 aria-label="Close menu"
               >
-                <CloseIcon />
-              </button>
+                <X />
+              </Button>
             </div>
 
             {navigation.map((item) => (
@@ -196,33 +201,34 @@ export function NavBar() {
 
             <div className="my-3 h-px bg-border" />
 
-            <button
+            <Button
               type="button"
               onClick={toggleTheme}
-              className="flex items-center gap-2 rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium text-fg-muted transition hover:bg-surface-hover hover:text-fg"
+              variant="ghost"
+              className="justify-start"
             >
-              {theme === "emerald" ? <LeafIcon /> : <SnowflakeIcon />}
+              {theme === "emerald" ? <Leaf /> : <Snowflake />}
               <span>Theme: {theme}</span>
-            </button>
+            </Button>
 
             <div className="my-3 h-px bg-border" />
 
             <div className="flex flex-wrap gap-2 px-1">
-              <span className="badge-accent rounded-[var(--radius-full)] bg-accent-soft px-4 py-1.5 text-sm font-semibold text-accent">
-                Dev Mode
-              </span>
-              <span className="rounded-[var(--radius-full)] bg-surface-hover px-4 py-1.5 text-sm font-semibold text-fg-muted">
+              <Badge>Dev Mode</Badge>
+              <Badge variant="secondary">
                 {user?.full_name || user?.email || "No user"}
-              </span>
+              </Badge>
             </div>
 
-            <button
+            <Button
               type="button"
               onClick={() => void handleLogout()}
-              className="btn-ghost mt-auto rounded-[var(--radius-md)] px-5 py-2.5 text-base font-semibold"
+              variant="outline"
+              className="mt-auto"
             >
+              <LogOut />
               Logout
-            </button>
+            </Button>
           </nav>
         </div>
       )}

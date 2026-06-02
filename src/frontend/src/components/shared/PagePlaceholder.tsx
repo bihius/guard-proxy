@@ -28,7 +28,7 @@ export function PagePlaceholder({
           description="Shared placeholder so every route lives inside the same application shell."
           icon={<InfoIcon className="text-accent" />}
         >
-          <p className="text-sm leading-6 text-fg-muted">
+          <p className="text-sm leading-6 text-muted-foreground">
             Replace only the page content without rebuilding layout, navigation,
             or chrome. This helps the team work in parallel without fragmenting
             the app structure.
@@ -38,7 +38,7 @@ export function PagePlaceholder({
         <SectionCard
           title="Next step"
           description="This is the handoff point for the real feature implementation."
-          icon={<ArrowRightIcon className="text-fg-muted" />}
+          icon={<ArrowRightIcon className="text-muted-foreground" />}
         >
           <EmptyState
             title="Feature UI has not been started yet"

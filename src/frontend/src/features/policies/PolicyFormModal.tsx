@@ -1,6 +1,12 @@
 import { type FormEvent, useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
 
@@ -83,118 +89,99 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
       onClose={onClose}
       footer={
         <>
-          <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">
+          <Button type="button" onClick={onClose} variant="outline">
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
             form="policy-form"
             disabled={submitting}
-            className="btn-primary px-4 py-2 text-sm"
           >
             {submitting ? "Saving…" : props.mode === "create" ? "Create" : "Save"}
-          </button>
+          </Button>
         </>
       }
     >
       <form id="policy-form" onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
         {serverError && (
-          <div
-            role="alert"
+          <Alert
+            variant="destructive"
             aria-live="assertive"
-            className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error"
           >
             {serverError}
-          </div>
+          </Alert>
         )}
 
         <div className="space-y-1.5">
-          <label htmlFor="policy-name" className="block text-sm font-medium text-fg-muted">
-            Name
-          </label>
-          <input
+          <Label htmlFor="policy-name">Name</Label>
+          <Input
             id="policy-name"
             type="text"
             required
             maxLength={255}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="input-field"
             placeholder="My WAF policy"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="policy-description" className="block text-sm font-medium text-fg-muted">
-            Description
-          </label>
-          <input
+          <Label htmlFor="policy-description">Description</Label>
+          <Input
             id="policy-description"
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="input-field"
             placeholder="Optional"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="policy-enforcement-mode" className="block text-sm font-medium text-fg-muted">
-            Enforcement mode
-          </label>
-          <select
+          <Label htmlFor="policy-enforcement-mode">Enforcement mode</Label>
+          <Select
             id="policy-enforcement-mode"
             value={enforcementMode}
             onChange={(e) => setEnforcementMode(e.target.value as "block" | "detect_only")}
-            className="input-field"
           >
             <option value="block">Block</option>
             <option value="detect_only">Detect only</option>
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="policy-paranoia-level" className="block text-sm font-medium text-fg-muted">
-            Paranoia level
-          </label>
-          <select
+          <Label htmlFor="policy-paranoia-level">Paranoia level</Label>
+          <Select
             id="policy-paranoia-level"
             value={paranoiaLevel}
             onChange={(e) => setParanoiaLevel(e.target.value)}
-            className="input-field"
           >
             <option value="1">1 — Minimal</option>
             <option value="2">2 — Low</option>
             <option value="3">3 — High</option>
             <option value="4">4 — Maximum</option>
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="policy-inbound-threshold" className="block text-sm font-medium text-fg-muted">
-            Inbound threshold
-          </label>
-          <input
+          <Label htmlFor="policy-inbound-threshold">Inbound threshold</Label>
+          <Input
             id="policy-inbound-threshold"
             type="number"
             required
             min={1}
             value={inboundThreshold}
             onChange={(e) => setInboundThreshold(e.target.value)}
-            className="input-field"
           />
         </div>
 
         {props.mode === "edit" && (
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg-muted">
-            <input
-              type="checkbox"
+          <Label className="flex cursor-pointer items-center gap-2">
+            <Checkbox
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 accent-accent"
             />
             Active
-          </label>
+          </Label>
         )}
       </form>
     </Modal>
