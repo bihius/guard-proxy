@@ -21,6 +21,18 @@ export type RuleOverride = {
   created_at: string;
 };
 
+export type RuleOverrideCreate = {
+  rule_id: number;
+  action: "enable" | "disable";
+  comment?: string | null;
+};
+
+export type RuleOverrideUpdate = {
+  rule_id?: number;
+  action?: "enable" | "disable";
+  comment?: string | null;
+};
+
 export type PolicyDetail = Policy & {
   rule_overrides: RuleOverride[];
 };

@@ -1,9 +1,13 @@
 import { apiRequest } from "@/lib/api-client";
 
-import type { Policy, VHost, VHostCreate, VHostUpdate } from "./types";
+import type { Policy, VHost, VHostCreate, VHostDetail, VHostUpdate } from "./types";
 
 export function listVHosts(token: string, signal?: AbortSignal) {
   return apiRequest<VHost[]>("/vhosts", { token, signal });
+}
+
+export function getVHost(token: string, id: number, signal?: AbortSignal) {
+  return apiRequest<VHostDetail>(`/vhosts/${id}`, { token, signal });
 }
 
 export function createVHost(token: string, body: VHostCreate) {
