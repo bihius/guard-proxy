@@ -1,11 +1,18 @@
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.config import settings, validate_runtime_settings
+from app.database import get_db
 from app.routers import (
     auth,
     config,
@@ -24,7 +31,7 @@ class _HealthcheckAccessFilter(logging.Filter):
             isinstance(args, tuple)
             and len(args) >= 3
             and args[1] == "GET"
-            and args[2] == "/health"
+            and args[2] in ("/health", "/ready")
         ):
             return False
         return True
@@ -67,8 +74,48 @@ app.include_router(vhosts.router)
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
-    """Health check endpoint."""
+    """Liveness probe — always returns 200 if the process is running."""
     return {
         "status": "healthy",
         "version": "0.1.0",
     }
+
+
+@app.get("/ready")
+def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
+    """Readiness probe — checks DB connectivity and runtime config volume.
+
+    Returns 200 when all checks pass, 503 with a per-check breakdown when any
+    dependency is unavailable. Used as the Docker Compose healthcheck gate so
+    dependent services (frontend, HAProxy, Coraza) only start once the backend
+    can actually serve traffic.
+    """
+    checks: dict[str, dict[str, str]] = {}
+    all_ok = True
+
+    # Check 1: database connectivity
+    try:
+        db.execute(text("SELECT 1"))
+        checks["database"] = {"status": "ok"}
+    except SQLAlchemyError as exc:
+        checks["database"] = {"status": "error", "detail": str(exc)}
+        all_ok = False
+
+    # Check 2: runtime config volume present and writable
+    config_root = Path(settings.runtime_generated_config_root)
+    if config_root.is_dir() and os.access(config_root, os.W_OK):
+        checks["runtime_config"] = {"status": "ok"}
+    else:
+        checks["runtime_config"] = {
+            "status": "error",
+            "detail": f"{config_root} is not a writable directory",
+        }
+        all_ok = False
+
+    return JSONResponse(
+        content={
+            "status": "ready" if all_ok else "not ready",
+            "checks": checks,
+        },
+        status_code=200 if all_ok else 503,
+    )

@@ -25,3 +25,11 @@ def test_healthcheck_access_filter_keeps_non_get_health() -> None:
 
 def test_healthcheck_access_filter_keeps_non_health_requests() -> None:
     assert _HealthcheckAccessFilter().filter(_access_record("GET", "/api/v1/policies"))
+
+
+def test_healthcheck_access_filter_drops_get_ready() -> None:
+    assert not _HealthcheckAccessFilter().filter(_access_record("GET", "/ready"))
+
+
+def test_healthcheck_access_filter_keeps_non_get_ready() -> None:
+    assert _HealthcheckAccessFilter().filter(_access_record("POST", "/ready", 405))
