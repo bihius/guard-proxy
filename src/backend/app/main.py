@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings, validate_runtime_settings
 from app.database import get_db
+
+logger = logging.getLogger(__name__)
 from app.routers import (
     auth,
     config,
@@ -98,12 +100,14 @@ def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
         db.execute(text("SELECT 1"))
         checks["database"] = {"status": "ok"}
     except SQLAlchemyError as exc:
-        checks["database"] = {"status": "error", "detail": str(exc)}
+        logger.error("Readiness DB check failed: %s", exc)
+        checks["database"] = {"status": "error", "detail": "database unavailable"}
         all_ok = False
 
-    # Check 2: runtime config volume present and writable
+    # Check 2: runtime config volume present and writable (W_OK + X_OK required
+    # to create files inside a directory)
     config_root = Path(settings.runtime_generated_config_root)
-    if config_root.is_dir() and os.access(config_root, os.W_OK):
+    if config_root.is_dir() and os.access(config_root, os.W_OK | os.X_OK):
         checks["runtime_config"] = {"status": "ok"}
     else:
         checks["runtime_config"] = {
