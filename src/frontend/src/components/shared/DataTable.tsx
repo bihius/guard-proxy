@@ -1,5 +1,15 @@
 import type { ReactNode } from "react";
 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+
 import { EmptyState } from "./EmptyState";
 
 export type DataTableColumn<Row> = {
@@ -35,45 +45,36 @@ export function DataTable<Row>({
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface">
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse">
-          <thead className="bg-surface-hover">
-            <tr className="border-b border-border">
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted ${column.headerClassName ?? ""}`.trim()}
-                >
-                  {column.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {rows.map((row, rowIndex) => (
-              <tr
-                key={getRowKey(row)}
-                className={
-                  rowIndex === rows.length - 1
-                    ? ""
-                    : "border-b border-border-subtle"
-                }
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <Table>
+        <TableHeader className="bg-muted/70">
+          <TableRow>
+            {columns.map((column) => (
+              <TableHead
+                key={column.key}
+                className={cn(column.headerClassName)}
               >
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    className={`px-4 py-3 align-middle text-sm text-fg ${column.className ?? ""}`.trim()}
-                  >
-                    {column.cell(row)}
-                  </td>
-                ))}
-              </tr>
+                {column.header}
+              </TableHead>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableRow>
+        </TableHeader>
+
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={getRowKey(row)}>
+              {columns.map((column) => (
+                <TableCell
+                  key={column.key}
+                  className={cn("text-sm text-foreground", column.className)}
+                >
+                  {column.cell(row)}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

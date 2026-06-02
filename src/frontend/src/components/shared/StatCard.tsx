@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
 type StatCardProps = {
   label: string;
   value: string;
@@ -10,11 +13,11 @@ type StatCardProps = {
 };
 
 const toneClassMap = {
-  neutral: "bg-surface-hover text-fg-muted",
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  error: "bg-error-soft text-error",
-  info: "bg-info-soft text-info",
+  neutral: "bg-muted text-muted-foreground",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  error: "bg-destructive/10 text-destructive",
+  info: "bg-info/10 text-info",
 } as const;
 
 export function StatCard({
@@ -26,18 +29,18 @@ export function StatCard({
   isLoading = false,
 }: StatCardProps) {
   return (
-    <article className="shadow-card rounded-[var(--radius-lg)] border border-border bg-surface p-5">
+    <Card as="article" className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-2">
-          <p className="text-sm font-medium text-fg-muted">{label}</p>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
           {isLoading ? (
             <div
-              className="h-9 w-16 animate-pulse rounded-[var(--radius-sm)] bg-surface-hover"
+              className="h-9 w-16 animate-pulse rounded-md bg-muted"
               role="status"
               aria-label="Loading"
             />
           ) : (
-            <p className="font-mono text-3xl font-semibold tracking-tight text-fg">
+            <p className="font-mono text-3xl font-semibold tracking-normal text-foreground">
               {value}
             </p>
           )}
@@ -45,14 +48,17 @@ export function StatCard({
 
         {icon ? (
           <div
-            className={`flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] ${toneClassMap[tone]}`}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-md",
+              toneClassMap[tone],
+            )}
           >
             {icon}
           </div>
         ) : null}
       </div>
 
-      {hint ? <p className="mt-4 text-sm leading-6 text-fg-muted">{hint}</p> : null}
-    </article>
+      {hint ? <p className="mt-4 text-sm leading-6 text-muted-foreground">{hint}</p> : null}
+    </Card>
   );
 }
