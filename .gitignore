@@ -124,8 +124,7 @@ benchmarks/results/run-*/
 haproxy.stats
 
 # ===== Thesis =====
-# Local thesis working copy (private, not tracked).
-# The evaluation plan (M6 methodology contract) lives in docs/evaluation-plan.md.
+# Separate repository — not tracked here.
 thesis/
 
 # ===== Keep Empty Directories =====

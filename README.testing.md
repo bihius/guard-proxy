@@ -74,7 +74,7 @@ make eval-all
 make eval-results
 ```
 
-See `benchmarks/lab/` for scenario configs and `docs/evaluation-plan.md` for methodology.
+See `benchmarks/lab/` for scenario configs and `thesis/evaluation-plan.md` for methodology.
 
 ## Test Data
 
