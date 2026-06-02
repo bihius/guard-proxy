@@ -1,0 +1,32 @@
+# Nuclei configuration for guard-proxy WAF evaluation.
+#
+# Template selection: broad coverage of common CVEs and exposures that
+# the CRS ruleset is designed to detect, without noisy/dangerous templates.
+#
+# Reference: https://nuclei.projectdiscovery.io/templating-guide/
+
+# Template tags to include (comma-separated).
+# Focus on attack categories the WAF is expected to block.
+tags: sqli,xss,lfi,rfi,ssrf,injection,traversal,exposure
+
+# Template severity levels to run.
+severity: low,medium,high,critical
+
+# Exclude safe-unverified templates that generate noise without payloads.
+exclude-tags: dos,fuzz,helpers
+
+# Rate limiting — be gentle on the WAF under test to avoid saturating it
+# before the dedicated load test runs.
+rate-limit: 50
+bulk-size: 10
+concurrency: 5
+
+# Timeout per template request.
+timeout: 10
+
+# Retry on network errors.
+retries: 1
+
+# Stop after this many matches (prevents runaway runs against intentionally
+# vulnerable apps that match everything).
+max-host-error: 30

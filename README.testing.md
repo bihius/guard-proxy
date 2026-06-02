@@ -6,8 +6,8 @@
 |-------|----------|-------|---------------|
 | **Unit** (many, fast) | `src/backend/tests/unit/` | pytest, Vitest | >80% |
 | **Integration** (some) | `src/backend/tests/integration/` | pytest, Docker | Key flows |
-| **Security** | `tests/security/` | sqlmap, OWASP ZAP, custom payloads | OWASP Top 10 |
-| **Performance** | `benchmarks/` | wrk, k6, Locust | <20% WAF overhead |
+| **Security** | `benchmarks/lab/` | OWASP ZAP, Nuclei, go-ftw (CRS corpus) | OWASP Top 10 |
+| **Performance** | `benchmarks/lab/` | wrk (WAF vs direct) | <20% WAF overhead |
 
 ## WAF Testing
 
@@ -54,10 +54,32 @@ uv run pytest -m e2e tests/e2e/test_policy_apply.py
 The test uses the same prerequisites as the smoke test and is wired into the
 nightly smoke workflow. Normal backend pytest runs exclude tests marked `e2e`.
 
+## Evaluation Lab (thesis M6)
+
+Full WAF evaluation with real target apps (WordPress, Juice Shop, DVWA):
+
+```sh
+# Prerequisites
+cp deploy/demo/.env.example deploy/demo/.env
+cp benchmarks/lab/.env.example benchmarks/lab/.env
+git submodule update --init --recursive
+
+# Bring up the lab
+make eval-up
+
+# Run all scenarios (ftw → zap → nuclei → load → metrics)
+make eval-all
+
+# View results
+make eval-results
+```
+
+See `benchmarks/lab/` for scenario configs and `docs/evaluation-plan.md` for methodology.
+
 ## Test Data
 
-- Payloads: `benchmarks/payloads/` (sqli.txt, xss.txt, legitimate.txt)
-- Results: `benchmarks/results/` (timestamped JSON, gitignored)
+- Payloads: `benchmarks/payloads/` (sqli.txt, xss.txt, lfi.txt, legitimate.txt)
+- Results: `benchmarks/results/` (timestamped JSON/CSV, gitignored)
 
 ## Commands
 

@@ -1,0 +1,27 @@
+# ZAP alert filter — suppress known false positives for the eval lab.
+#
+# These alerts are expected for the lab setup (self-signed certs, dev configs)
+# and should not count toward the FPR measurement.
+#
+# Reference: https://www.zaproxy.org/docs/desktop/addons/alert-filters/
+
+alertfilters:
+  # Self-signed / untrusted TLS certificate (expected in lab)
+  - ruleId: 10038
+    newRisk: False Positive
+
+  # X-Content-Type-Options not set — cosmetic for lab targets
+  - ruleId: 10021
+    newRisk: False Positive
+
+  # Cache-Control headers — not relevant to WAF testing
+  - ruleId: 10015
+    newRisk: False Positive
+
+  # Server header leakage — lab only, not a WAF effectiveness signal
+  - ruleId: 10036
+    newRisk: False Positive
+
+  # Information disclosure: suspicious comments — lab only
+  - ruleId: 10027
+    newRisk: False Positive
