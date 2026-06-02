@@ -114,7 +114,8 @@ make seed      # add the initial admin user
 |---|---|
 | Admin panel | http://localhost:3000 |
 | API (via HAProxy) | http://localhost:8080 |
-| Health check | `curl http://localhost:8080/health` |
+| Liveness probe | `curl http://localhost:8080/health` |
+| Readiness probe | `curl http://localhost:8080/ready` |
 
 ### WAF smoke test
 
