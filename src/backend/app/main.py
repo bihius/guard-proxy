@@ -13,8 +13,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings, validate_runtime_settings
 from app.database import get_db
-
-logger = logging.getLogger(__name__)
 from app.routers import (
     auth,
     config,
@@ -24,6 +22,8 @@ from app.routers import (
     runtime_status,
     vhosts,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class _HealthcheckAccessFilter(logging.Filter):
