@@ -7,6 +7,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { DeleteVHostDialog } from "@/features/vhosts/DeleteVHostDialog";
 import { VHostFormModal } from "@/features/vhosts/VHostFormModal";
 import { useVHosts } from "@/features/vhosts/use-vhosts";
@@ -36,8 +37,8 @@ export function VHostsPage() {
       header: "Domain",
       cell: (row) => (
         <div className="space-y-1">
-          <p className="font-medium text-fg">{row.domain}</p>
-          <p className="font-mono text-xs text-fg-subtle">{row.backend_url}</p>
+          <p className="font-medium text-foreground">{row.domain}</p>
+          <p className="font-mono text-xs text-muted-foreground">{row.backend_url}</p>
         </div>
       ),
     },
@@ -47,7 +48,7 @@ export function VHostsPage() {
       cell: (row) =>
         row.policy_id != null
           ? (policyNameById[row.policy_id] ?? `#${row.policy_id}`)
-          : <span className="text-fg-subtle">None</span>,
+          : <span className="text-muted-foreground">None</span>,
     },
     {
       key: "status",
@@ -67,20 +68,22 @@ export function VHostsPage() {
             className: "w-px whitespace-nowrap",
             cell: (row: VHost) => (
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => setModal({ type: "edit", vhost: row })}
-                  className="rounded-[var(--radius-sm)] border border-border bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:text-fg"
+                  variant="outline"
+                  size="sm"
                 >
                   Edit
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => setModal({ type: "delete", vhost: row })}
-                  className="rounded-[var(--radius-sm)] border border-error/50 px-3 py-1.5 text-xs font-semibold text-error transition hover:border-error hover:bg-error-soft"
+                  variant="destructive"
+                  size="sm"
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             ),
           } satisfies DataTableColumn<VHost>,
@@ -95,13 +98,12 @@ export function VHostsPage() {
         description="Manage the domains, backend targets, and WAF policies for each virtual host."
         actions={
           isAdmin ? (
-            <button
+            <Button
               type="button"
               onClick={() => setModal({ type: "create" })}
-              className="btn-primary px-4 py-2 text-sm"
             >
               New vhost
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -114,13 +116,13 @@ export function VHostsPage() {
             title="Failed to load virtual hosts"
             description={error}
             action={
-              <button
+              <Button
                 type="button"
                 onClick={refresh}
-                className="btn-ghost px-4 py-2 text-sm"
+                variant="outline"
               >
                 Retry
-              </button>
+              </Button>
             }
           />
         ) : (

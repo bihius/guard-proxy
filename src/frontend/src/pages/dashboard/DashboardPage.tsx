@@ -6,6 +6,8 @@ import {
   ServerIcon,
   ShieldIcon,
 } from "@/components/icons";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { RoleBadge } from "@/components/shared/RoleBadge";
 import { SectionCard } from "@/components/shared/SectionCard";
@@ -42,22 +44,22 @@ export function DashboardPage() {
       />
 
       {applyResult ? (
-        <div
-          className={`flex items-start justify-between gap-4 rounded-[var(--radius-md)] border px-4 py-3 text-sm font-medium ${
-            applyResult.kind === "success"
-              ? "border-success/30 bg-success-soft text-success"
-              : "border-error/30 bg-error-soft text-error"
-          }`}
+        <Alert
+          variant={applyResult.kind === "success" ? "success" : "destructive"}
+          className="flex items-start justify-between gap-4"
         >
           <span>{applyResult.message}</span>
-          <button
+          <Button
             type="button"
             onClick={() => setApplyResult(null)}
-            className="shrink-0 text-current opacity-60 hover:opacity-100"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-current hover:bg-current/10"
+            aria-label="Dismiss apply result"
           >
-            ✕
-          </button>
-        </div>
+            Close
+          </Button>
+        </Alert>
       ) : null}
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -149,12 +151,12 @@ type ActivityRowProps = {
 
 function ActivityRow({ title, description, badge }: ActivityRowProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {badge}
       </div>
-      <p className="text-sm leading-6 text-fg-muted">{description}</p>
+      <p className="text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   );
 }

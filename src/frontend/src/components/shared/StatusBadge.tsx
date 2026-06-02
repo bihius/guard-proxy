@@ -1,3 +1,5 @@
+import { Badge } from "@/components/ui/badge";
+
 type StatusBadgeTone = "success" | "warning" | "error" | "info" | "neutral";
 
 type StatusBadgeProps = {
@@ -5,12 +7,12 @@ type StatusBadgeProps = {
   tone?: StatusBadgeTone;
 };
 
-const toneClassMap = {
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  error: "bg-error-soft text-error",
-  info: "bg-info-soft text-info",
-  neutral: "bg-surface-hover text-fg-muted",
+const toneVariantMap = {
+  success: "success",
+  warning: "warning",
+  error: "destructive",
+  info: "default",
+  neutral: "outline",
 } as const;
 
 export function StatusBadge({
@@ -18,11 +20,9 @@ export function StatusBadge({
   tone = "neutral",
 }: StatusBadgeProps) {
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-[var(--radius-full)] px-3 py-1 text-xs font-semibold ${toneClassMap[tone]}`}
-    >
+    <Badge variant={toneVariantMap[tone]}>
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
       {label}
-    </span>
+    </Badge>
   );
 }
