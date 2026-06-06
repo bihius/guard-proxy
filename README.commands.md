@@ -78,6 +78,19 @@ sqlmap -u "http://localhost:8080/test?id=1" --batch   # SQL injection
 zap-cli quick-scan -s all http://localhost:8080        # OWASP ZAP
 ```
 
+## Evaluation Lab
+
+```bash
+make eval-up       # Start demo stack + lab targets
+make eval-ftw      # CRS go-ftw conformance against ftw.local
+make eval-corpus   # Tagged labeled corpus for TP/FN/TN/FP
+make eval-zap      # Supplemental ZAP scanner report
+make eval-nuclei   # Supplemental Nuclei reached-app findings
+make eval-load     # wrk RPS/latency overhead
+make eval-all      # ftw → corpus → zap → nuclei → load → metrics
+make eval-results  # Show latest CSV summary
+```
+
 ## Performance Testing
 
 ```bash

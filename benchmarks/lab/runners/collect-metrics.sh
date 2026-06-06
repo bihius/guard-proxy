@@ -5,8 +5,8 @@
 #   benchmarks/results/run-<RUN_ID>/results.csv   — flat table for thesis tables
 #   benchmarks/results/run-<RUN_ID>/report.json   — full structured report
 #
-# Optionally cross-references the Coraza audit log to compute confirmed
-# TP/FP counts for ZAP and Nuclei scenarios.
+# Cross-references tagged Coraza audit snapshots for block counts. TP/FP counts
+# are only computed by runners that own a labeled tagged corpus.
 #
 # Usage:
 #   RUN_ID=20260602-141500 bash benchmarks/lab/runners/collect-metrics.sh
@@ -40,8 +40,10 @@ if [[ -z "${AUDIT_LOG}" ]]; then
 fi
 
 # ── Aggregate summaries ────────────────────────────────────────────────────
-python3 - <<PY
+PYTHONPATH="${SCRIPT_DIR}" python3 - <<PY
 import json, os, glob, csv, sys
+
+from eval_metrics import count_blocks, load_json_lines
 
 run_dir    = "${RUN_DIR}"
 audit_log  = "${AUDIT_LOG}"
@@ -61,27 +63,23 @@ if not summaries:
     sys.exit(1)
 
 # ── Audit log cross-reference ──────────────────────────────────────────────
-# Parse Coraza JSON audit log to count total blocked requests per vhost
-# and identify transactions by WAF rule matches.
-blocked_by_vhost = {}
+audit_paths = sorted(glob.glob(os.path.join(run_dir, "*/coraza-audit.log")))
 if audit_log and os.path.exists(audit_log):
-    with open(audit_log) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-                # Coraza audit log JSON schema: top-level keys vary by config.
-                # Standard keys: transaction.host_name, transaction.response.status
-                txn = entry.get("transaction", {})
-                vhost = txn.get("host_name", "unknown")
-                response = txn.get("response", {})
-                status = response.get("status", 200)
-                if status == 403:
-                    blocked_by_vhost[vhost] = blocked_by_vhost.get(vhost, 0) + 1
-            except (json.JSONDecodeError, AttributeError):
-                pass
+    audit_paths.append(audit_log)
+
+audit_events = []
+seen_paths = set()
+for path in audit_paths:
+    if path in seen_paths:
+        continue
+    seen_paths.add(path)
+    audit_events.extend(load_json_lines(path))
+
+block_counts = count_blocks(audit_events)
+blocked_by_vhost = block_counts["by_vhost"]
+blocked_by_scenario = block_counts["by_scenario"]
+if audit_events:
+    print(f"Audit log: found blocks per scenario: {blocked_by_scenario}")
     print(f"Audit log: found blocks per vhost: {blocked_by_vhost}")
 
 # ── Write aggregated CSV ───────────────────────────────────────────────────
@@ -99,19 +97,30 @@ for s in summaries:
     hap  = res.get("haproxy", {})
 
     vhost = s.get("target_vhost", "")
-    blocked = blocked_by_vhost.get(vhost, "")
+    scenario = s.get("scenario", "")
+    blocked = blocked_by_scenario.get(scenario, blocked_by_vhost.get(vhost, ""))
 
     row = {
         "run_id":             run_id,
-        "scenario":           s.get("scenario", ""),
+        "scenario":           scenario,
         "target_vhost":       vhost,
         "policy":             s.get("policy", {}).get("name", ""),
         "tpr":                det.get("tpr", ""),
         "fpr":                det.get("fpr", ""),
+        "crs_conformance_rate": det.get("crs_conformance_rate", ""),
+        "crs_passed":         det.get("crs_passed", ""),
+        "crs_failed":         det.get("crs_failed", ""),
+        "expected_block_tests": det.get("expected_block_tests", ""),
+        "expected_allow_tests": det.get("expected_allow_tests", ""),
         "tp":                 det.get("true_positive", ""),
         "fn":                 det.get("false_negative", ""),
         "tn":                 det.get("true_negative", ""),
         "fp":                 det.get("false_positive", ""),
+        "corpus_cases":       det.get("total_cases", ""),
+        "zap_total_alerts":    det.get("total_alerts", ""),
+        "zap_attack_alerts":   det.get("attack_severity_alerts", ""),
+        "nuclei_findings":    det.get("total_findings", ""),
+        "nuclei_waf_relevant_findings": det.get("waf_relevant_findings", ""),
         "waf_blocks_from_log":  blocked,
         "rps_waf":            perf.get("rps", ""),
         "rps_direct":         perf.get("baseline_rps", ""),
@@ -149,15 +158,16 @@ print(f"Report written to {report_path}")
 
 # Print a quick summary table.
 print()
-print(f"{'SCENARIO':<35} {'TPR':>6} {'FPR':>6} {'RPS':>8} {'DEG%':>6} {'p99ms':>7}")
+print(f"{'SCENARIO':<35} {'CRS%':>6} {'TPR':>6} {'FPR':>6} {'RPS':>8} {'DEG%':>6} {'p99ms':>7}")
 print("-" * 70)
 for row in csv_rows:
+    crs = f"{float(row['crs_conformance_rate'])*100:.1f}%" if row['crs_conformance_rate'] != '' else "—"
     tpr = f"{float(row['tpr'])*100:.1f}%" if row['tpr'] != '' else "—"
     fpr = f"{float(row['fpr'])*100:.1f}%" if row['fpr'] != '' else "—"
     rps = f"{float(row['rps_waf']):.0f}"  if row['rps_waf'] != '' else "—"
     deg = f"{row['rps_degradation_pct']}%" if row['rps_degradation_pct'] != '' else "—"
     p99 = f"{row['lat_p99_ms']}"           if row['lat_p99_ms'] != '' else "—"
-    print(f"{row['scenario']:<35} {tpr:>6} {fpr:>6} {rps:>8} {deg:>6} {p99:>7}")
+    print(f"{row['scenario']:<35} {crs:>6} {tpr:>6} {fpr:>6} {rps:>8} {deg:>6} {p99:>7}")
 PY
 
 echo ""

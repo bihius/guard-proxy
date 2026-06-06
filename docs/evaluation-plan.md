@@ -12,8 +12,8 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 
 **In scope:**
 
-- Security effectiveness: detection of SQLi, XSS, LFI/path traversal, and common CVE payloads.
-- False positive rate against legitimate CMS traffic (WordPress).
+- Security effectiveness under documented policy/vhost/corpus configurations.
+- False-positive/false-negative analysis on a labeled, tagged benign/attack corpus.
 - Performance overhead: latency (p50/p95/p99) and throughput (RPS) compared to direct access.
 - Resource consumption (CPU, RAM) of the WAF stack under load.
 
@@ -21,6 +21,7 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 
 - Authenticated multi-step attack chains.
 - DoS / rate-limiting capabilities.
+- Universal WAF detection-rate or false-positive guarantees independent of configuration.
 - Per-vhost Coraza plugin configuration (planned for a future milestone).
 
 ---
@@ -66,7 +67,7 @@ The Proxmox host runs ~20 LXC containers (media stack: Jellyfin, \*arr apps, Imm
 
 ### Software versions (recorded per run)
 
-All image tags are pinned in `benchmarks/lab/docker-compose.targets.yml` and runner scripts. The git SHA and image digests of each run are written to `manifest.json` automatically.
+Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and runner scripts. The git SHA and image references of each run are written to `manifest.json` automatically.
 
 ---
 
@@ -85,6 +86,7 @@ All image tags are pinned in `benchmarks/lab/docker-compose.targets.yml` and run
 │  Host header routes request   │    juice.local → Juice Shop :3000     │  │
 │  to the correct vhost:        │    dvwa.local  → DVWA :80             │  │
 │    Host: juice.local          │    wp.local    → WordPress :80        │  │
+│    Host: dvwa.local           │    ftw.local   → Albedo :8080         │  │
 │    Host: wp.local             └───────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -100,46 +102,56 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 | App | Purpose | Vhost |
 |---|---|---|
-| **OWASP Juice Shop** v17 | Intentionally vulnerable Node.js app — primary TPR target | `juice.local` |
+| **OWASP Juice Shop** v17 | Intentionally vulnerable Node.js app — scanner target | `juice.local` |
 | **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios | `dvwa.local` |
-| **WordPress** 6.x (php8.3) | Real-world CMS — primary **FPR target** (no CRS exclusions) | `wp.local` |
+| **WordPress** 6.x (php8.3) | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local` |
+| **Albedo** | CRS go-ftw regression backend compatible with CRS test assumptions | `ftw.local` |
 
-WordPress is run **without** CRS application exclusion plugins. This is intentional: the false positive rate against an untuned CRS+WP configuration is itself a finding, and per-vhost exclusion support is not yet implemented in the backend. The comparison will be revisited once per-vhost Coraza configuration lands.
+WordPress is run **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
 
 ---
 
 ## 5. Test Scenarios
 
-### 5.1 CRS Regression Suite (go-ftw) — TPR gold standard
+### 5.1 CRS Regression Suite (go-ftw) — CRS conformance
 
 **Tool:** `ghcr.io/coreruleset/go-ftw`  
 **Config:** `benchmarks/lab/scenarios/crs-ftw/config.yaml`  
 **Corpus:** `configs/coraza/crs/tests/regression/tests/` (OWASP CRS git submodule)
 
-The CRS submodule ships labeled test cases — each test case specifies whether the WAF **should** block or **should** pass the request. go-ftw replays all cases and reports pass/fail per rule. This is the most authoritative TPR measurement because the corpus was written by the same team that wrote the rules.
+The CRS submodule ships labeled regression tests. go-ftw replays those tests and reports pass/fail test IDs. The runner parses CRS YAML `output.status` values to split tests into expected-block (`403`) and expected-allow (non-`403`) groups, then reports CRS conformance as `passed / run`. It does **not** estimate TPR/FPR.
 
-Targets: Juice Shop (`juice.local`) as the default routing vhost.
+Target: Albedo (`ftw.local`) as the CRS-compatible backend.
 
-### 5.2 OWASP ZAP Baseline Scan — FPR measurement
+### 5.2 Tagged Labeled Corpus — FP/FN measurement
+
+**Tool:** curl container + `benchmarks/payloads/`
+**Runner:** `benchmarks/lab/runners/run-corpus.sh`
+
+The corpus runner sends known-benign paths and known-attack payloads with stable correlation headers: `X-GP-Eval-Run`, `X-GP-Eval-Scenario`, and `X-GP-Eval-Case`. The collector matches those headers in the Coraza audit log. Because Coraza uses `SecAuditEngine RelevantOnly`, a correctly allowed benign request may produce no audit event; absence of a tagged blocking event is therefore treated as **allow**.
+
+This is the only source used for TP/FN/TN/FP formulas.
+
+### 5.3 OWASP ZAP Baseline Scan — scanner-assisted coverage
 
 **Tool:** `ghcr.io/zaproxy/zaproxy` (`zap-baseline.py`)  
 **Config:** `benchmarks/lab/scenarios/zap/`
 
-ZAP performs a passive + light active scan of the target application through HAProxy. The scan uses legitimate-looking probes and crafted attack requests. ZAP alerts with Medium/High risk are WAF-relevant; the WAF's response (block or pass) per alert category provides the FPR signal on real application traffic.
+ZAP performs a passive baseline scan of the target application through HAProxy. Its traffic mixes crawler requests, passive checks, and attack-like probes, so it is **not** a clean false-positive-rate source. The evaluation preserves `zap.json` and `zap.html`, counts alerts by risk, and records WAF blocks from tagged audit events as supplemental scanner evidence.
 
-Primary target: **WordPress** (`wp.local`) — the richest source of false positive measurements because a real CMS has complex, diverse traffic patterns.
+Primary target: **WordPress** (`wp.local`).
 
-### 5.3 Nuclei CVE Templates — CVE TPR
+### 5.4 Nuclei CVE Templates — reached-app scanner evidence
 
 **Tool:** `projectdiscovery/nuclei`  
 **Config:** `benchmarks/lab/scenarios/nuclei/nuclei.yaml`  
 **Templates:** `sqli,xss,lfi,rfi,ssrf,injection,traversal,exposure` (severity: medium+)
 
-Nuclei fires known CVE and exposure payloads from its curated template library. Each finding that reaches the target app is a potential WAF false negative; cross-referenced against the Coraza audit log in `collect-metrics.sh`.
+Nuclei fires known CVE and exposure templates from its curated library. Medium/high/critical findings are treated as reached-app evidence: the template matched an application response. Nuclei is not used to compute TPR because the runner does not have a complete per-template sent-request denominator correlated to WAF decisions.
 
 Target: Juice Shop and DVWA (both known to match many templates).
 
-### 5.4 Benign Load Test — Latency and RPS overhead
+### 5.5 Benign Load Test — Latency and RPS overhead
 
 **Tool:** `williamyeh/wrk` with `benchmarks/lab/scenarios/load/benign-mix.lua`
 
@@ -166,8 +178,7 @@ Config: 4 threads, 50 connections, 60-second duration.
 | True Negative | TN | Benign request correctly allowed |
 | False Positive | FP | Benign request incorrectly blocked |
 
-For go-ftw: TP/FN/TN/FP come directly from labeled test case outcomes.  
-For ZAP/Nuclei: WAF blocks are identified from the Coraza audit log (JSON lines with `response.status == 403`); unblocked attack requests are FN candidates.
+TP/FN/TN/FP are computed only for labeled, tagged corpus requests. go-ftw reports CRS conformance (`passed / run`) and expected-block/expected-allow pass/fail counts. ZAP and Nuclei are supplemental scanner evidence and do not publish TPR/FPR.
 
 ### Performance metrics
 
@@ -186,19 +197,21 @@ Each scenario writes `benchmarks/results/run-<RUN_ID>/<scenario>/summary.json`. 
 
 ---
 
-## 7. Success Criteria
+## 7. Guardrails and Reporting
 
-> **Note:** The thresholds below are proposed defaults derived from `README.testing.md` and common WAF benchmarks. Confirm with the thesis supervisor before the final evaluation run.
+Security results are descriptive and configuration-specific. The thesis reports the exact policy, vhost, corpus, and tool for each result. Guard Proxy keeps one soft engineering guardrail for performance because HAProxy/Coraza wiring and generated configuration are project responsibilities.
 
-| Metric | Target | Source |
+| Metric | Guardrail / reporting mode | Source |
 |---|---|---|
-| TPR (go-ftw CRS corpus) | ≥ 95% | CRS project target; README.testing.md |
-| FPR on benign traffic (ZAP on WordPress) | < 10% | README.testing.md |
-| RPS degradation | < 20% | README.testing.md |
-| Latency overhead p95 | ≤ 50 ms | Common WAF SLA baseline |
+| CRS conformance (go-ftw) | Reported, no hard pass/fail threshold | CRS regression corpus |
+| Corpus TP/FN/TN/FP | Reported for the labeled corpus only | `benchmarks/payloads/` |
+| ZAP alerts | Reported as scanner evidence | ZAP baseline report |
+| Nuclei findings | Reported as reached-app scanner evidence | Nuclei JSONL |
+| RPS degradation | Soft guardrail: < 20% under this lab workload | Project engineering target |
+| Latency overhead p95 | Reported, no hard cap | Informational |
 | Memory footprint (coraza container) | Reported (no hard cap) | Informational for thesis |
 
-A run is considered **successful** if TPR ≥ 95% and FPR < 10% and RPS degradation < 20%. Latency overhead is reported regardless. Resource usage is informational.
+The run is not declared “successful” or “failed” based on security thresholds. RPS degradation above the guardrail is treated as an engineering finding to investigate, not as a universal product failure.
 
 ---
 
@@ -251,7 +264,7 @@ make eval-results
 ### 8.3 Changing target vhost
 
 ```bash
-# Run ZAP against WordPress (best FPR target):
+# Run ZAP against WordPress (scanner-assisted coverage):
 make eval-zap TARGET_VHOST=wp.local
 
 # Run load test against DVWA:
@@ -284,11 +297,11 @@ The wrk container and the WAF stack run on the same host. The load generator's C
 
 ### 9.3 WordPress false positives without CRS exclusions
 
-WordPress is tested without CRS application exclusion plugins (not yet implemented in the backend). The reported FPR against WordPress is for an **untuned** WAF+CMS combination. This is explicitly documented as a finding. The expected FPR will decrease once per-vhost Coraza configuration supports exclusion plugins.
+WordPress is tested without CRS application exclusion plugins (not yet implemented in the backend). Any false positives are for an **untuned** WAF+CMS combination under a documented policy. They are not generalized to all Guard Proxy deployments.
 
-### 9.4 go-ftw TP/FP split approximation
+### 9.4 Scanner denominators
 
-go-ftw v1.x reports aggregate pass/fail counts, not per-case attack/benign labels. The TP/FP split uses an estimated attack ratio (85%). Rerunning with go-ftw v2 `--output json-per-test` provides the exact split.
+ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/FP in the current harness. Their results are reported as scanner evidence, while labeled corpus requests provide the metric denominator.
 
 ---
 
@@ -308,12 +321,15 @@ go-ftw v1.x reports aggregate pass/fail counts, not per-case attack/benign label
     "mode": "block"
   },
   "detection": {
-    "true_positive": 312,
-    "false_negative": 18,
-    "true_negative": 140,
-    "false_positive": 4,
-    "tpr": 0.945,
-    "fpr": 0.028
+    "true_positive": 32,
+    "false_negative": 2,
+    "true_negative": 24,
+    "false_positive": 1,
+    "tpr": 0.9412,
+    "fpr": 0.04,
+    "crs_conformance_rate": 0.982,
+    "crs_passed": 5412,
+    "crs_failed": 99
   },
   "performance": {
     "rps": 4120.5,
@@ -333,4 +349,4 @@ go-ftw v1.x reports aggregate pass/fail counts, not per-case attack/benign label
 
 Flat CSV with one row per scenario run. Consumed directly by `thesis/chapters/06-testy.md` tables.
 
-Columns: `run_id`, `scenario`, `target_vhost`, `policy`, `tpr`, `fpr`, `tp`, `fn`, `tn`, `fp`, `waf_blocks_from_log`, `rps_waf`, `rps_direct`, `rps_degradation_pct`, `lat_p50_ms`, `lat_p95_ms`, `lat_p99_ms`, `lat_oh_p50_ms`, `lat_oh_p95_ms`, `lat_oh_p99_ms`, `coraza_mem_mb_peak`, `coraza_cpu_pct_avg`, `haproxy_mem_mb_peak`, `haproxy_cpu_pct_avg`.
+Columns include: `run_id`, `scenario`, `target_vhost`, `policy`, `tpr`, `fpr`, `crs_conformance_rate`, `crs_passed`, `crs_failed`, `tp`, `fn`, `tn`, `fp`, `corpus_cases`, `zap_total_alerts`, `nuclei_findings`, `waf_blocks_from_log`, `rps_waf`, `rps_direct`, `rps_degradation_pct`, latency percentiles, and resource fields.
