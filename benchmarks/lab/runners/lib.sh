@@ -13,17 +13,17 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
 LAB_DIR="${REPO_ROOT}/benchmarks/lab"
 RESULTS_BASE="${REPO_ROOT}/benchmarks/results"
 RUN_DIR="${RESULTS_BASE}/run-${RUN_ID}"
-DEMO_ENV="${REPO_ROOT}/deploy/demo/.env"
+CORE_ENV="${REPO_ROOT}/deploy/docker/.env"
 LAB_ENV="${LAB_DIR}/.env"
 
-# Docker network shared by the demo stack and targets.
-DOCKER_NETWORK="guard-proxy-demo_gp_internal"
+# Docker network shared by the real stack and lab targets.
+DOCKER_NETWORK="guard-proxy_gp_internal"
 
 # ── Environment helpers ────────────────────────────────────────────────────
 
 env_value() {
   local name="$1"; local fallback="${2:-}"; local value
-  value="$(grep -E "^${name}=" "${LAB_ENV}" "${DEMO_ENV}" 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
+  value="$(grep -E "^${name}=" "${CORE_ENV}" "${LAB_ENV}" 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
   if [[ -z "${value}" ]]; then printf '%s' "${fallback}"; else printf '%s' "${value}"; fi
 }
 
@@ -88,9 +88,9 @@ PY
 compose_container_id() {
   local service="$1"
   docker compose \
-    -f "${REPO_ROOT}/deploy/demo/docker-compose.yml" \
+    -f "${REPO_ROOT}/deploy/docker/docker-compose.yml" \
     -f "${LAB_DIR}/docker-compose.targets.yml" \
-    --env-file "${DEMO_ENV}" \
+    --env-file "${CORE_ENV}" \
     --env-file "${LAB_ENV}" \
     ps -q "${service}" 2>/dev/null || true
 }

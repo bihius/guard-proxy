@@ -1,10 +1,10 @@
 # Evaluation lab target applications.
 #
-# This is an OVERLAY on top of the demo stack. Run as:
+# This is an OVERLAY on top of the real Guard Proxy stack. Run as:
 #   docker compose \
-#     -f deploy/demo/docker-compose.yml \
+#     -f deploy/docker/docker-compose.yml \
 #     -f benchmarks/lab/docker-compose.targets.yml \
-#     --env-file deploy/demo/.env \
+#     --env-file deploy/docker/.env \
 #     --env-file benchmarks/lab/.env \
 #     up -d --build
 #
@@ -14,9 +14,12 @@
 # Pinned image digests ensure reproducible test results across runs.
 # Update pins by running: docker pull <image> && docker inspect --format '{{index .RepoDigests 0}}' <image>
 
-name: guard-proxy-demo
+name: guard-proxy
 
 services:
+  backend:
+    ports:
+      - "${BACKEND_HTTP_PORT:-8000}:8000"
 
   # ── OWASP Juice Shop ──────────────────────────────────────────────────────
   # Intentionally vulnerable Node.js app designed for security testing.
@@ -154,7 +157,7 @@ services:
 networks:
   gp_internal:
     external: true
-    name: guard-proxy-demo_gp_internal
+    name: guard-proxy_gp_internal
 
 volumes:
   dvwa_db_data:

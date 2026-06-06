@@ -85,7 +85,6 @@ All image tags are pinned in `benchmarks/lab/docker-compose.targets.yml` and run
 │  Host header routes request   │    juice.local → Juice Shop :3000     │  │
 │  to the correct vhost:        │    dvwa.local  → DVWA :80             │  │
 │    Host: juice.local          │    wp.local    → WordPress :80        │  │
-│    Host: dvwa.local           │    app.local   → demo-app :8080       │  │
 │    Host: wp.local             └───────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -104,7 +103,6 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 | **OWASP Juice Shop** v17 | Intentionally vulnerable Node.js app — primary TPR target | `juice.local` |
 | **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios | `dvwa.local` |
 | **WordPress** 6.x (php8.3) | Real-world CMS — primary **FPR target** (no CRS exclusions) | `wp.local` |
-| **demo-app** (echo server) | Existing minimal target — smoke check | `app.local` |
 
 WordPress is run **without** CRS application exclusion plugins. This is intentional: the false positive rate against an untuned CRS+WP configuration is itself a finding, and per-vhost exclusion support is not yet implemented in the backend. The comparison will be revisited once per-vhost Coraza configuration lands.
 
@@ -223,9 +221,10 @@ cd /opt/guard-proxy
 git submodule update --init --recursive
 
 # 4. Copy env files
-cp deploy/demo/.env.example deploy/demo/.env
+cp deploy/docker/.env.example deploy/docker/.env
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 # Edit both .env files if needed (passwords, ports)
+# deploy/docker/.env must include ADMIN_EMAIL and ADMIN_PASSWORD for lab seeding.
 
 # 5. Bring up the lab
 make eval-up
