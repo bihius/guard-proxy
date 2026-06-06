@@ -4,7 +4,7 @@ FROM ghcr.io/corazawaf/coraza-spoa:0.6.1 AS upstream
 
 FROM alpine:3.19
 
-RUN apk add --no-cache su-exec tini
+RUN apk add --no-cache su-exec tini netcat-openbsd
 
 COPY --from=upstream /coraza-spoa /usr/local/bin/coraza-spoa
 COPY configs/coraza/coraza-spoa.yaml /etc/coraza-spoa/coraza-spoa.yaml

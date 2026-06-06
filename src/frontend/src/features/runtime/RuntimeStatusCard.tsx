@@ -2,6 +2,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Alert } from "@/components/ui/alert";
 
 import type { DeploymentState, RuntimeStatusResponse } from "./types";
 
@@ -86,9 +87,9 @@ export function RuntimeStatusCard({ status }: RuntimeStatusCardProps) {
               value={formatTimestamp(latest_reload.created_at)}
             />
             {latest_reload.status === "failed" && latest_reload.message ? (
-              <div className="rounded-[var(--radius-md)] border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
+              <Alert variant="destructive">
                 {latest_reload.message}
-              </div>
+              </Alert>
             ) : null}
           </>
         ) : (
@@ -101,9 +102,9 @@ export function RuntimeStatusCard({ status }: RuntimeStatusCardProps) {
 
 function StatusRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
-      <span className="text-sm font-medium text-fg">{label}</span>
-      <span className="font-mono text-sm text-fg-muted">{value}</span>
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      <span className="font-mono text-sm text-muted-foreground">{value}</span>
     </div>
   );
 }

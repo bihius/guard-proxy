@@ -1,8 +1,13 @@
 import { type FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Shield } from "lucide-react";
 
 import { appRoutes } from "@/app/routes";
-import { ShieldIcon } from "@/components/icons";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 
 export function LoginPage() {
@@ -35,74 +40,64 @@ export function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-app px-6 py-10 text-fg">
+    <main className="grid min-h-screen place-items-center bg-app px-6 py-10 text-foreground">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-accent">
-            <ShieldIcon />
+          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-card text-primary shadow-sm">
+            <Shield className="h-5 w-5" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-fg">
+          <h1 className="text-2xl font-semibold tracking-normal text-foreground">
             Guard Proxy
           </h1>
-          <p className="mt-2 text-sm text-fg-muted">
+          <p className="mt-2 text-sm text-muted-foreground">
             Sign in to the admin panel
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="card-gradient shadow-card-lg rounded-[var(--radius-xl)] border border-border p-8 space-y-5"
-        >
-          {loginError && (
-            <div
-              role="alert"
-              aria-live="assertive"
-              className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error"
-            >
-              {loginError}
-            </div>
-          )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Admin access</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {loginError && (
+                <Alert variant="destructive" aria-live="assertive">
+                  {loginError}
+                </Alert>
+              )}
 
-          <div className="space-y-1.5">
-            <label htmlFor="email" className="block text-sm font-medium text-fg-muted">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input-field"
-            />
-          </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="password" className="block text-sm font-medium text-fg-muted">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input-field"
-            />
-          </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full px-4 py-2.5 text-sm"
-          >
-            {loading ? "Signing in\u2026" : "Sign in"}
-          </button>
-        </form>
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? "Signing in\u2026" : "Sign in"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
-        <p className="mt-6 text-center text-xs text-fg-subtle">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
           Protected by Guard Proxy WAF
         </p>
       </div>

@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { UploadCloud } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
 
@@ -48,21 +50,23 @@ export function ApplyConfigButton({
   }
 
   return (
-    <button
+    <Button
       type="button"
       disabled={isApplying}
       onClick={() => void handleClick()}
-      className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {isApplying ? (
         <>
-          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" />
           Applying…
         </>
       ) : (
-        "Apply config"
+        <>
+          <UploadCloud />
+          Apply config
+        </>
       )}
-    </button>
+    </Button>
   );
 }
 
