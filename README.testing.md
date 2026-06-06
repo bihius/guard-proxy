@@ -11,11 +11,36 @@
 
 ## WAF Testing
 
-### Detection Targets (draft)
-- SQL Injection: >95% detection rate
-- XSS: >95% detection rate
-- Path Traversal: >95% detection rate
-- False positive rate: <10%
+### WAF effectiveness — reported, not gated
+
+Detection and false-positive rates are properties of the **CRS ruleset, paranoia
+level, and per-application tuning** — not of Guard Proxy itself. Guard Proxy's job
+is to wire HAProxy to Coraza correctly and make that policy *manageable*. So these
+numbers are **measured and reported against a pinned baseline**, never enforced as
+pass/fail gates and never used as a project SLO.
+
+Every effectiveness measurement records its baseline so it is reproducible:
+- CRS version: the pinned `configs/coraza/crs` submodule commit (record tag/SHA)
+- Paranoia level + thresholds: PL1, default anomaly thresholds (inbound 5 / outbound 4)
+- Corpus: `benchmarks/payloads/` (sqli.txt, xss.txt, legitimate.txt)
+
+Reported per run, alongside the baseline above:
+- True-positive (detection) rate per attack class — SQLi, XSS, path traversal
+- False-positive rate on the benign corpus
+- **Tuning effect**: FP rate *before vs after* applying a rule override (and, post-MVP,
+  an app exclusion profile) on the same corpus — the delta is the result, not the absolute
+
+These are observations about a given CRS configuration, reported for transparency and
+to demonstrate the tuning workflow. Guard Proxy does not claim to improve detection
+beyond what the configured ruleset provides.
+
+### What CI actually enforces (functional, not statistical)
+
+CI gates assert behavior the project *owns*, so they stay stable as the ruleset evolves:
+- A known attack request is blocked (403) — smoke test
+- A known benign request is allowed (200) — smoke test
+- Toggling a CRS rule via the panel changes live request behavior — policy apply e2e (rule `913100`)
+- WAF overhead stays under 20% — performance benchmarks
 
 ### End-to-End Smoke
 
