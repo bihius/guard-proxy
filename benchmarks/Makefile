@@ -75,7 +75,8 @@ eval-all: eval-ftw eval-zap eval-nuclei eval-load eval-metrics
 
 ## Print a summary of the most recent run (or RUN_ID= a specific run).
 results:
-	@latest=$$(ls -1t $(REPO_ROOT)/benchmarks/results/ 2>/dev/null | head -1); \
+	@latest=$$(ls -1t $(REPO_ROOT)/benchmarks/results/ 2>/dev/null \
+	            | grep '^run-' | head -1 | sed 's/^run-//'); \
 	run=$${RUN_ID:-$$latest}; \
 	csv="$(REPO_ROOT)/benchmarks/results/run-$${run}/results.csv"; \
 	if [[ -f "$$csv" ]]; then \

@@ -27,6 +27,7 @@ TARGET_URL="http://haproxy:80"
 write_manifest
 SCENARIO="nuclei-${TARGET_VHOST}"
 OUT_DIR="$(setup_run_dir "${SCENARIO}")"
+export OUT_DIR TARGET_VHOST   # must be set before the Python heredoc reads os.environ
 
 echo "=== Nuclei CVE template scan ==="
 echo "Target vhost : ${TARGET_VHOST} → ${TARGET_URL}"
@@ -101,7 +102,6 @@ with open(os.path.join(out_dir, "detection.json"), "w") as f:
     json.dump(detection, f, indent=2)
 PY
 
-export OUT_DIR TARGET_VHOST
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
 POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
 
