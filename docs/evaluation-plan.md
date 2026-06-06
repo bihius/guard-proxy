@@ -30,14 +30,14 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 
 ### Test server
 
-| Property | Value |
-|---|---|
-| Host | Dell PowerEdge R530 (Proxmox PVE 9.1.1) |
-| CPU | 2 × Intel Xeon E5-2620 v3 @ 2.40 GHz (24 cores total) |
-| RAM | 125 GiB (32 GiB free at lab time) |
-| Storage | ZFS `fast-pool` (~810 GiB free) |
-| OS (LXC guest) | Debian 13 (Bookworm) — `debian-13-standard` template |
-| Docker | Docker Engine ≥ 27.x, Compose V2 |
+| Property       | Value                                                 |
+| -------------- | ----------------------------------------------------- |
+| Host           | Dell PowerEdge R530 (Proxmox PVE 9.1.1)               |
+| CPU            | 2 × Intel Xeon E5-2620 v3 @ 2.40 GHz (24 cores total) |
+| RAM            | 125 GiB (32 GiB free at lab time)                     |
+| Storage        | ZFS `fast-pool` (~810 GiB free)                       |
+| OS (LXC guest) | Debian 13 (Bookworm) — `debian-13-standard` template  |
+| Docker         | Docker Engine ≥ 27.x, Compose V2                      |
 
 **LXC provisioning** (see §8 for full runbook):
 
@@ -46,8 +46,8 @@ pct create <VMID> local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst \
   --hostname guard-proxy-lab \
   --memory 16384 --swap 4096 \
   --cores 6 \
-  --storage fast-pool \
-  --rootfs fast-pool:60 \
+  --storage local-zfs \
+  --rootfs local-zfs:60 \
   --net0 name=eth0,bridge=vmbr0,ip=dhcp \
   --features nesting=1,keyctl=1 \
   --unprivileged 1
@@ -74,11 +74,11 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and runne
 ## 3. Test-Bed Architecture
 
 ```
-┌─ Proxmox LXC (guard-proxy-lab) ────────────────────────────────────────┐
+┌─ Proxmox LXC (guard-proxy-lab) ──────────────────────────────────────────┐
 │                                                                          │
-│  ┌─ Attacker containers ──┐   ┌─ guard-proxy stack (gp_internal) ────┐  │
+│  ┌─ Attacker containers ──┐   ┌─ guard-proxy stack (gp_internal) ─────┐  │
 │  │  go-ftw                │   │                                       │  │
-│  │  OWASP ZAP             ├──►│  HAProxy :80  ──►  Coraza SPOA :9000 │  │
+│  │  OWASP ZAP             ├──►│  HAProxy :80  ──►  Coraza SPOA :9000  │  │
 │  │  Nuclei                │   │                        │              │  │
 │  │  wrk (load)            │   │               ┌────────┘              │  │
 │  └────────────────────────┘   │               ▼                       │  │
@@ -100,13 +100,13 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 ## 4. Test Targets
 
-| App | Purpose | Vhost |
-|---|---|---|
-| **OWASP Juice Shop** v17 | Intentionally vulnerable Node.js app — scanner target | `juice.local` |
-| **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios | `dvwa.local` |
-| **WordPress** 6.x (php8.3) | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local` |
-| **Albedo** | CRS go-ftw regression backend compatible with CRS test assumptions | `ftw.local` |
-| **demo-app** (echo server) | Existing minimal target — smoke check | `app.local` |
+| App                                | Purpose                                                             | Vhost         |
+| ---------------------------------- | ------------------------------------------------------------------- | ------------- |
+| **OWASP Juice Shop** v17           | Intentionally vulnerable Node.js app — scanner target               | `juice.local` |
+| **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios                 | `dvwa.local`  |
+| **WordPress** 6.x (php8.3)         | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local`    |
+| **Albedo**                         | CRS go-ftw regression backend compatible with CRS test assumptions  | `ftw.local`   |
+| **demo-app** (echo server)         | Existing minimal target — smoke check                               | `app.local`   |
 
 WordPress is run **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
 
@@ -170,27 +170,27 @@ Config: 4 threads, 50 connections, 60-second duration.
 
 ### Security metrics
 
-| Metric | Symbol | Formula |
-|---|---|---|
-| True Positive Rate (Recall) | TPR | TP / (TP + FN) |
-| False Positive Rate | FPR | FP / (FP + TN) |
-| True Positive | TP | Attack request correctly blocked |
-| False Negative | FN | Attack request incorrectly allowed |
-| True Negative | TN | Benign request correctly allowed |
-| False Positive | FP | Benign request incorrectly blocked |
+| Metric                      | Symbol | Formula                            |
+| --------------------------- | ------ | ---------------------------------- |
+| True Positive Rate (Recall) | TPR    | TP / (TP + FN)                     |
+| False Positive Rate         | FPR    | FP / (FP + TN)                     |
+| True Positive               | TP     | Attack request correctly blocked   |
+| False Negative              | FN     | Attack request incorrectly allowed |
+| True Negative               | TN     | Benign request correctly allowed   |
+| False Positive              | FP     | Benign request incorrectly blocked |
 
 TP/FN/TN/FP are computed only for labeled, tagged corpus requests. go-ftw reports CRS conformance (`passed / run`) and expected-block/expected-allow pass/fail counts. ZAP and Nuclei are supplemental scanner evidence and do not publish TPR/FPR.
 
 ### Performance metrics
 
-| Metric | Definition |
-|---|---|
+| Metric              | Definition                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------- |
 | p50/p95/p99 latency | 50th/95th/99th percentile of request round-trip time (ms), measured by wrk `--latency` |
-| Latency overhead | Latency(WAF) − Latency(direct) per percentile |
-| RPS | Requests per second at sustained load |
-| RPS degradation % | (RPS_direct − RPS_WAF) / RPS_direct × 100 |
-| Memory peak (MB) | Peak container memory (`docker stats` / cgroup `memory.peak`) during load |
-| CPU avg % | Average CPU utilisation during load run |
+| Latency overhead    | Latency(WAF) − Latency(direct) per percentile                                          |
+| RPS                 | Requests per second at sustained load                                                  |
+| RPS degradation %   | (RPS_direct − RPS_WAF) / RPS_direct × 100                                              |
+| Memory peak (MB)    | Peak container memory (`docker stats` / cgroup `memory.peak`) during load              |
+| CPU avg %           | Average CPU utilisation during load run                                                |
 
 ### Results schema
 
@@ -202,15 +202,15 @@ Each scenario writes `benchmarks/results/run-<RUN_ID>/<scenario>/summary.json`. 
 
 Security results are descriptive and configuration-specific. The thesis reports the exact policy, vhost, corpus, and tool for each result. Guard Proxy keeps one soft engineering guardrail for performance because HAProxy/Coraza wiring and generated configuration are project responsibilities.
 
-| Metric | Guardrail / reporting mode | Source |
-|---|---|---|
-| CRS conformance (go-ftw) | Reported, no hard pass/fail threshold | CRS regression corpus |
-| Corpus TP/FN/TN/FP | Reported for the labeled corpus only | `benchmarks/payloads/` |
-| ZAP alerts | Reported as scanner evidence | ZAP baseline report |
-| Nuclei findings | Reported as reached-app scanner evidence | Nuclei JSONL |
-| RPS degradation | Soft guardrail: < 20% under this lab workload | Project engineering target |
-| Latency overhead p95 | Reported, no hard cap | Informational |
-| Memory footprint (coraza container) | Reported (no hard cap) | Informational for thesis |
+| Metric                              | Guardrail / reporting mode                    | Source                     |
+| ----------------------------------- | --------------------------------------------- | -------------------------- |
+| CRS conformance (go-ftw)            | Reported, no hard pass/fail threshold         | CRS regression corpus      |
+| Corpus TP/FN/TN/FP                  | Reported for the labeled corpus only          | `benchmarks/payloads/`     |
+| ZAP alerts                          | Reported as scanner evidence                  | ZAP baseline report        |
+| Nuclei findings                     | Reported as reached-app scanner evidence      | Nuclei JSONL               |
+| RPS degradation                     | Soft guardrail: < 20% under this lab workload | Project engineering target |
+| Latency overhead p95                | Reported, no hard cap                         | Informational              |
+| Memory footprint (coraza container) | Reported (no hard cap)                        | Informational for thesis   |
 
 The run is not declared “successful” or “failed” based on security thresholds. RPS degradation above the guardrail is treated as an engineering finding to investigate, not as a universal product failure.
 
