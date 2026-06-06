@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 
-runtime_dir="${GUARD_PROXY_RUNTIME_DIR:-/runtime}"
+# Must match RUNTIME_GENERATED_CONFIG_ROOT so the shared volume Coraza mounts at
+# /runtime is seeded before Coraza starts.
+runtime_dir="${GUARD_PROXY_RUNTIME_DIR:-${RUNTIME_GENERATED_CONFIG_ROOT:-/runtime}}"
 
 seed_runtime_config() {
     if [ ! -f "${runtime_dir}/current/rule-overrides.conf" ]; then
