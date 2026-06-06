@@ -5,11 +5,16 @@
 *.swo
 *~
 .#*
+*.sublime-project
+*.sublime-workspace
+
+
 
 # ===== Private / Working Notes =====
 notes/implementation/
 notes/private/
 !notes/decisions/
+notes/private/
 
 .obsidian/
 
@@ -129,3 +134,14 @@ thesis/
 
 # ===== Keep Empty Directories =====
 !.gitkeep
+notes/github-issues-plan.md
+
+
+CLAUDE.md
+AGENTS.md
+CODEX.md
+.claude/
+.git/hooks/post-checkout
+.opencode/
+.opencodeignore
+opencode.json
