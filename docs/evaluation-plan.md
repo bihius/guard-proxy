@@ -100,13 +100,12 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 ## 4. Test Targets
 
-| App                                | Purpose                                                             | Vhost         |
-| ---------------------------------- | ------------------------------------------------------------------- | ------------- |
-| **OWASP Juice Shop** v17           | Intentionally vulnerable Node.js app — scanner target               | `juice.local` |
-| **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios                 | `dvwa.local`  |
-| **WordPress** 6.x (php8.3)         | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local`    |
-| **Albedo**                         | CRS go-ftw regression backend compatible with CRS test assumptions  | `ftw.local`   |
-| **demo-app** (echo server)         | Existing minimal target — smoke check                               | `app.local`   |
+| App | Purpose | Vhost |
+|---|---|---|
+| **OWASP Juice Shop** v17 | Intentionally vulnerable Node.js app — scanner target | `juice.local` |
+| **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios | `dvwa.local` |
+| **WordPress** 6.x (php8.3) | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local` |
+| **Albedo** | CRS go-ftw regression backend compatible with CRS test assumptions | `ftw.local` |
 
 WordPress is run **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
 
@@ -235,9 +234,10 @@ cd /opt/guard-proxy
 git submodule update --init --recursive
 
 # 4. Copy env files
-cp deploy/demo/.env.example deploy/demo/.env
+cp deploy/docker/.env.example deploy/docker/.env
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 # Edit both .env files if needed (passwords, ports)
+# deploy/docker/.env must include ADMIN_EMAIL and ADMIN_PASSWORD for lab seeding.
 
 # 5. Bring up the lab
 make eval-up

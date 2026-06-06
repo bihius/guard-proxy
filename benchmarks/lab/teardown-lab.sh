@@ -9,9 +9,9 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-DEMO_COMPOSE="${REPO_ROOT}/deploy/demo/docker-compose.yml"
+CORE_COMPOSE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
 TARGETS_COMPOSE="${SCRIPT_DIR}/docker-compose.targets.yml"
-DEMO_ENV="${REPO_ROOT}/deploy/demo/.env"
+CORE_ENV="${REPO_ROOT}/deploy/docker/.env"
 LAB_ENV="${SCRIPT_DIR}/.env"
 
 CLEAN=false
@@ -20,11 +20,11 @@ for arg in "$@"; do
 done
 
 if docker compose version >/dev/null 2>&1; then
-  COMPOSE=(docker compose -f "${DEMO_COMPOSE}" -f "${TARGETS_COMPOSE}")
-  [[ -f "${DEMO_ENV}" ]] && COMPOSE+=(--env-file "${DEMO_ENV}")
+  COMPOSE=(docker compose -f "${CORE_COMPOSE}" -f "${TARGETS_COMPOSE}")
+  [[ -f "${CORE_ENV}" ]] && COMPOSE+=(--env-file "${CORE_ENV}")
   [[ -f "${LAB_ENV}" ]] && COMPOSE+=(--env-file "${LAB_ENV}")
 else
-  COMPOSE=(docker-compose -f "${DEMO_COMPOSE}" -f "${TARGETS_COMPOSE}")
+  COMPOSE=(docker-compose -f "${CORE_COMPOSE}" -f "${TARGETS_COMPOSE}")
 fi
 
 if [[ "${CLEAN}" == true ]]; then

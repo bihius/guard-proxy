@@ -136,9 +136,9 @@ Authorization: Bearer jwt-token
 Content-Type: application/json
 
 {
-  "domain": "app.local",
-  "backend_url": "http://demo-app:8080",
-  "description": "Aplikacja demonstracyjna",
+  "domain": "juice.local",
+  "backend_url": "http://juiceshop:3000",
+  "description": "OWASP Juice Shop",
   "ssl_enabled": false,
   "is_active": true,
   "policy_id": 1
@@ -284,15 +284,16 @@ Najwazniejsze adresy:
 | Backend lokalny bez proxy | `http://127.0.0.1:8000` |
 | Swagger UI | `http://127.0.0.1:8000/docs` |
 
-## 11. Demo
+## 11. Demo i laboratorium ewaluacyjne
 
-Projekt zawiera osobny katalog demo w `deploy/demo`. Demo uruchamia Guard Proxy
-razem z dwiema prostymi aplikacjami HTTP echo za WAF-em. Pozwala to pokazac:
+Projekt uruchamia Guard Proxy przez glowny plik `deploy/docker/docker-compose.yml`.
+Laboratorium w `benchmarks/lab` dodaje aplikacje testowe za WAF-em. Pozwala to
+pokazac:
 
 - logowanie do panelu,
 - utworzenie polityki WAF,
-- utworzenie dwoch vhostow kierujacych na dwie rozne aplikacje demo,
-- routing po naglowku `Host` (`app.local` oraz `api.local`),
+- utworzenie vhostow kierujacych na aplikacje Juice Shop, DVWA i WordPress,
+- routing po naglowku `Host` (`juice.local`, `dvwa.local`, `wp.local`),
 - zastosowanie konfiguracji,
 - poprawne przepuszczenie zwyklego ruchu HTTP,
 - dzialanie HAProxy, Coraza i backendu jako jednego systemu.
