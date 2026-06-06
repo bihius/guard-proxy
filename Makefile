@@ -3,7 +3,7 @@ COMPOSE_DEBUG_FILE := deploy/docker/docker-compose.debug.yml
 ENV_FILE := deploy/docker/.env
 
 .PHONY: run dev down clean logs ps seed users coraza-build \
-        eval-up eval-down eval-clean eval-ftw eval-zap eval-nuclei eval-load eval-metrics eval-all eval-results
+        eval-up eval-down eval-clean eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics eval-all eval-results
 
 run:
 	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build -d
@@ -46,6 +46,11 @@ eval-clean:
 
 eval-ftw:
 	$(MAKE) -C benchmarks eval-ftw \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
+	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
+
+eval-corpus:
+	$(MAKE) -C benchmarks eval-corpus \
 	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
 	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
 

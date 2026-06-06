@@ -1,5 +1,5 @@
-# Legitimate request paths — should all produce 200 (NOT blocked by WAF).
-# Used to verify the false positive rate.
+# Legitimate request paths — expected outcome: allow.
+# Used by the tagged corpus runner to compute TN/FP for this corpus only.
 /
 /index.html
 /robots.txt

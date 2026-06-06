@@ -33,6 +33,15 @@ services:
     networks:
       - gp_internal
 
+  # ── CRS FTW backend ───────────────────────────────────────────────────────
+  # Albedo is the backend used by the CRS project for go-ftw regression tests.
+  # Vhost: ftw.local
+  ftw-backend:
+    image: ghcr.io/coreruleset/albedo:0.2.0
+    restart: unless-stopped
+    networks:
+      - gp_internal
+
   # ── DVWA (Damn Vulnerable Web Application) ────────────────────────────────
   # Classic PHP vulnerable app. Requires MariaDB sidecar.
   # Vhost: dvwa.local
@@ -77,8 +86,8 @@ services:
       - gp_internal
 
   # ── WordPress ─────────────────────────────────────────────────────────────
-  # Real-world CMS. Used to measure false positive rate of the WAF against
-  # legitimate CMS traffic (no exclusion plugins applied — intentional).
+  # Real-world CMS. Used for scanner-assisted coverage and tagged benign corpus
+  # traffic (no exclusion plugins applied — intentional).
   # Vhost: wp.local
   wp-db:
     image: mariadb:11.4

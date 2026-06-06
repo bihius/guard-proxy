@@ -70,6 +70,9 @@ docker run --rm \
   --network "${DOCKER_NETWORK}" \
   -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
   -e "LOAD_VHOST=${TARGET_VHOST}" \
+  -e "EVAL_RUN_ID=${RUN_ID}" \
+  -e "EVAL_SCENARIO=${SCENARIO}" \
+  -e "EVAL_CASE=wrk-waf" \
   "${WRK_IMAGE}" \
   -t "${THREADS}" -c "${CONNECTIONS}" -d "${DURATION}" \
   -s /benign-mix.lua \
@@ -82,6 +85,7 @@ wait "${SAMPLER_CORAZA_PID:-}" 2>/dev/null || true
 wait "${SAMPLER_HAPROXY_PID:-}" 2>/dev/null || true
 
 echo "WAF run complete. Output: ${OUT_DIR}/waf.txt"
+copy_audit_log_snapshot "${OUT_DIR}"
 
 # ── Direct (bypass WAF) ────────────────────────────────────────────────────
 
@@ -91,6 +95,9 @@ docker run --rm \
   --network "${DOCKER_NETWORK}" \
   -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
   -e "LOAD_VHOST=${TARGET_VHOST}" \
+  -e "EVAL_RUN_ID=${RUN_ID}" \
+  -e "EVAL_SCENARIO=${SCENARIO}" \
+  -e "EVAL_CASE=wrk-direct" \
   "${WRK_IMAGE}" \
   -t "${THREADS}" -c "${CONNECTIONS}" -d "${DURATION}" \
   -s /benign-mix.lua \
