@@ -1,5 +1,5 @@
-# SQL injection payloads — used in manual verification and smoke tests.
-# These should all produce a 403 response from the WAF (PL1, threshold 5, block).
+# SQL injection payloads — expected outcome in the tagged corpus: block.
+# Used in manual verification and smoke tests.
 # Source: OWASP Testing Guide, CRS test corpus.
 ' OR '1'='1
 ' OR '1'='1' --

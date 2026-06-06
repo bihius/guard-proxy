@@ -1,4 +1,4 @@
-# Local File Inclusion / Path Traversal payloads — should be blocked at PL1.
+# Local File Inclusion / Path Traversal payloads — expected corpus outcome: block.
 ../etc/passwd
 ../../etc/passwd
 ../../../etc/passwd

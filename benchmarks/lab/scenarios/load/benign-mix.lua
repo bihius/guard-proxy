@@ -12,6 +12,9 @@
 -- correct vhost. Override VHOST env var or edit the list below.
 
 local vhost = os.getenv("LOAD_VHOST") or "juice.local"
+local eval_run = os.getenv("EVAL_RUN_ID") or "manual"
+local eval_scenario = os.getenv("EVAL_SCENARIO") or "load"
+local eval_case = os.getenv("EVAL_CASE") or "wrk"
 
 -- Request pool: realistic paths for the target application.
 -- Add/remove paths to match the target's URL surface.
@@ -38,6 +41,9 @@ function request()
     ["User-Agent"]   = "Mozilla/5.0 (eval-lab/1.0)",
     ["Accept"]       = "application/json, text/html, */*",
     ["Connection"]   = "keep-alive",
+    ["X-GP-Eval-Run"] = eval_run,
+    ["X-GP-Eval-Scenario"] = eval_scenario,
+    ["X-GP-Eval-Case"] = eval_case,
   }
   if r.body then
     hdrs["Content-Type"]   = "application/json"

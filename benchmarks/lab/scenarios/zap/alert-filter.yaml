@@ -1,7 +1,7 @@
 # ZAP alert filter — suppress known false positives for the eval lab.
 #
 # These alerts are expected for the lab setup (self-signed certs, dev configs)
-# and should not count toward the FPR measurement.
+# and should not be treated as WAF scanner evidence.
 #
 # Reference: https://www.zaproxy.org/docs/desktop/addons/alert-filters/
 
