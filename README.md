@@ -63,10 +63,10 @@ graph TB
 | M0 | Cleanup & scaffolding | Done |
 | M1 | Vertical slice — full stack end-to-end | Done |
 | M2 | Config generator & live apply | Done |
-| M3 | WAF log ingestion, presentation, and dashboard evidence | Path A active |
+| M3 | WAF log ingestion, presentation, and dashboard evidence | Done |
 | M4 | Policy hardening and per-vhost rule tuning | Path B |
-| M5 | Panel hardening and DevEx | Path A then Path B |
-| M6 | Thesis evaluation — benchmarks, ZAP, Nuclei, CRS suite, comparison work | Path A then optional Path B |
+| M5 | Panel hardening and DevEx | Done |
+| M6 | Thesis evaluation — benchmarks, ZAP, Nuclei, CRS suite, comparison work | Path A active |
 | Post-MVP | Product expansion outside the thesis MVP | Deferred |
 
 ### Delivery order
