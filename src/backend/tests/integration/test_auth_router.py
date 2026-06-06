@@ -232,3 +232,110 @@ def test_me_password_not_in_response(
     body = resp.json()
     assert "password" not in body
     assert "hashed_password" not in body
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting — M0-08
+# ---------------------------------------------------------------------------
+
+
+def test_login_rate_limited_after_five_attempts(
+    client: TestClient, admin_user: User
+) -> None:
+    """Six rapid login attempts from the same IP hit 429 on the sixth.
+
+    Wrong passwords are used so the bcrypt timing cost is still incurred and
+    the test does not accidentally create valid sessions, but the rate limit
+    counts *all* attempts regardless of outcome.
+    TestClient connects directly (no HAProxy), so the key is the loopback
+    address; the autouse ``_reset_rate_limiter`` fixture ensures a clean
+    counter at the start of this test.
+    """
+    for i in range(5):
+        resp = client.post(
+            "/auth/login",
+            json={"email": admin_user.email, "password": "wrong-password"},
+        )
+        assert resp.status_code == 401, (
+            f"attempt {i + 1}: expected 401, got {resp.status_code}"
+        )
+
+    sixth = client.post(
+        "/auth/login",
+        json={"email": admin_user.email, "password": "wrong-password"},
+    )
+    assert sixth.status_code == 429
+    assert "retry-after" in sixth.headers
+    assert "detail" in sixth.json()
+
+
+def test_refresh_rate_limited_after_five_attempts(client: TestClient) -> None:
+    """Six rapid refresh attempts from the same IP hit 429 on the sixth.
+
+    The refresh endpoint is called without a valid cookie so it would return
+    401 anyway, but the rate limit is evaluated before authentication and
+    counts all requests regardless of cookie validity.
+    """
+    for i in range(5):
+        resp = client.post("/auth/refresh")
+        assert resp.status_code == 401, (
+            f"attempt {i + 1}: expected 401, got {resp.status_code}"
+        )
+
+    sixth = client.post("/auth/refresh")
+    assert sixth.status_code == 429
+    assert "retry-after" in sixth.headers
+    assert "detail" in sixth.json()
+
+
+def test_login_under_limit_is_not_rate_limited(
+    client: TestClient, admin_user: User
+) -> None:
+    """Exactly five attempts do not trigger rate limiting (boundary check)."""
+    for i in range(5):
+        resp = client.post(
+            "/auth/login",
+            json={"email": admin_user.email, "password": "wrong-password"},
+        )
+        assert resp.status_code != 429, f"attempt {i + 1} unexpectedly rate-limited"
+
+
+def test_login_rate_limit_is_per_ip(client: TestClient, admin_user: User) -> None:
+    """Rate-limit buckets are keyed per client IP via X-Forwarded-For.
+
+    Five requests from 10.0.0.1 exhaust that IP's bucket. The sixth from
+    10.0.0.1 is rate-limited, but the first request from 10.0.0.2 is not —
+    proving independent per-IP counters and that the XFF key function works.
+    """
+    ip_a = "10.0.0.1"
+    ip_b = "10.0.0.2"
+
+    for i in range(5):
+        resp = client.post(
+            "/auth/login",
+            json={"email": admin_user.email, "password": "wrong-password"},
+            headers={"X-Forwarded-For": ip_a},
+        )
+        assert resp.status_code == 401, (
+            f"attempt {i + 1} from {ip_a}: expected 401, got {resp.status_code}"
+        )
+
+    # 6th from ip_a must be blocked
+    sixth = client.post(
+        "/auth/login",
+        json={"email": admin_user.email, "password": "wrong-password"},
+        headers={"X-Forwarded-For": ip_a},
+    )
+    assert sixth.status_code == 429, (
+        f"expected 429 from {ip_a}, got {sixth.status_code}"
+    )
+
+    # 1st from ip_b must NOT be blocked
+    first_b = client.post(
+        "/auth/login",
+        json={"email": admin_user.email, "password": "wrong-password"},
+        headers={"X-Forwarded-For": ip_b},
+    )
+    assert first_b.status_code == 401, (
+        f"expected 401 from {ip_b}, got {first_b.status_code}"
+    )

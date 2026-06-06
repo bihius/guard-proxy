@@ -106,6 +106,47 @@ machine-readable degraded reason header.
 5. FastAPI validates and normalizes payloads into the persisted `Log` model.
 6. `GET /logs` exposes stored events for the admin panel log viewer.
 
+## Authentication & Rate Limiting
+
+The FastAPI backend issues short-lived **JWT access tokens** (30 min, HS256) and
+long-lived **refresh tokens** (7 days) stored in an `HttpOnly` cookie at path
+`/auth`. The refresh cookie is unavailable to JavaScript, so the frontend keeps
+no long-lived secret in memory or `localStorage`.
+
+### Brute-force protection
+
+`POST /auth/login` and `POST /auth/refresh` are rate-limited to **5 requests per
+minute per client IP** using [slowapi](https://slowapi.readthedocs.io/). Exceeding
+the limit returns:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+```
+
+The limit is enforced in-process (in-memory via `limits.MemoryStorage`), which is
+appropriate for a single-uvicorn-process deployment.
+
+### Client IP resolution
+
+HAProxy sits in front of the backend. The frontend config includes:
+
+```
+http-request set-header X-Forwarded-For %[src]
+```
+
+This overwrites any client-supplied `X-Forwarded-For` value with the real source
+IP before the request reaches the backend, preventing header-spoofing bypass of
+the rate limit. The backend's key function reads the first (and only) XFF entry
+and falls back to the socket peer when the header is absent (direct connections in
+development and test).
+
+### Timing-attack mitigation
+
+The login handler always runs `bcrypt.verify` against a precomputed dummy hash
+when the requested email does not exist, keeping response time consistent and
+preventing user-enumeration through timing.
+
 ## Deployment
 
 ### Health and Readiness Probes
@@ -203,3 +244,8 @@ See `notes/decisions/` for Architecture Decision Records:
 - [ADR-006](notes/decisions/ADR-006-sync-sqlalchemy-for-mvp.md) - Synchronous SQLAlchemy for MVP
 - [ADR-007](notes/decisions/ADR-007-coraza-spoa-integration.md) - Coraza SPOA integration approach
 - [ADR-008](notes/decisions/ADR-008-log-shipper-sidecar.md) - Log shipper: custom Python sidecar over Vector/Fluent Bit
+
+**M0-08 — Rate limiting (slowapi, in-memory):** The auth endpoints are guarded
+by a 5/minute per-IP limit via slowapi with in-memory storage. A Redis-backed
+distributed limiter was considered but is not needed for a single-process
+deployment; the simpler in-process approach avoids an external dependency.
