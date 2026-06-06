@@ -45,22 +45,34 @@ eval-clean:
 	$(MAKE) -C benchmarks lab-clean
 
 eval-ftw:
-	$(MAKE) -C benchmarks eval-ftw RUN_ID=$(RUN_ID) TARGET_VHOST=$(TARGET_VHOST)
+	$(MAKE) -C benchmarks eval-ftw \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
+	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
 
 eval-zap:
-	$(MAKE) -C benchmarks eval-zap RUN_ID=$(RUN_ID) TARGET_VHOST=$(TARGET_VHOST)
+	$(MAKE) -C benchmarks eval-zap \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
+	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
 
 eval-nuclei:
-	$(MAKE) -C benchmarks eval-nuclei RUN_ID=$(RUN_ID) TARGET_VHOST=$(TARGET_VHOST)
+	$(MAKE) -C benchmarks eval-nuclei \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
+	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
 
 eval-load:
-	$(MAKE) -C benchmarks eval-load RUN_ID=$(RUN_ID) TARGET_VHOST=$(TARGET_VHOST)
+	$(MAKE) -C benchmarks eval-load \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
+	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
 
 eval-metrics:
-	$(MAKE) -C benchmarks eval-metrics RUN_ID=$(RUN_ID)
+	$(MAKE) -C benchmarks eval-metrics \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID))
 
 eval-all:
-	$(MAKE) -C benchmarks eval-all RUN_ID=$(RUN_ID) TARGET_VHOST=$(TARGET_VHOST)
+	$(MAKE) -C benchmarks eval-all \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
+	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
 
 eval-results:
-	$(MAKE) -C benchmarks results RUN_ID=$(RUN_ID)
+	$(MAKE) -C benchmarks results \
+	  $(if $(RUN_ID),RUN_ID=$(RUN_ID))

@@ -114,9 +114,9 @@ ensure_policy() {
   if [[ -z "${response}" ]]; then
     response="$(api_json GET /policies "${token}")"
   fi
-  POLICY_NAME="${name}" python3 - <<'PY' <<< "${response}"
+  POLICY_NAME="${name}" POLICY_RESPONSE="${response}" python3 - <<'PY'
 import json, sys, os
-data = json.loads(sys.stdin.read())
+data = json.loads(os.environ["POLICY_RESPONSE"])
 name = os.environ["POLICY_NAME"]
 items = data if isinstance(data, list) else [data]
 for item in items:

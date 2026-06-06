@@ -21,7 +21,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 TARGET_VHOST="${TARGET_VHOST:-${LAB_WP_DOMAIN}}"   # default: WordPress (best FPR target)
 ZAP_IMAGE="ghcr.io/zaproxy/zaproxy:stable"
 ZAP_CONF="${REPO_ROOT}/benchmarks/lab/scenarios/zap/zap-baseline.conf"
-ZAP_ALERT_FILTER="${REPO_ROOT}/benchmarks/lab/scenarios/zap/alert-filter.yaml"
 
 # HAProxy listens on port 80 inside gp_internal; ZAP container joins that network.
 TARGET_URL="http://haproxy:80"
@@ -29,6 +28,7 @@ TARGET_URL="http://haproxy:80"
 write_manifest
 SCENARIO="zap-${TARGET_VHOST}"
 OUT_DIR="$(setup_run_dir "${SCENARIO}")"
+export OUT_DIR   # must be set before the Python heredoc reads os.environ
 
 echo "=== OWASP ZAP baseline scan ==="
 echo "Target vhost : ${TARGET_VHOST} → ${TARGET_URL}"
@@ -37,11 +37,13 @@ echo "Image        : ${ZAP_IMAGE}"
 echo ""
 
 # ZAP needs a writable /zap/wrk directory for reports.
+# The Host: header is injected via ZAP's built-in HTTP Request Header Replacer
+# so that every request ZAP sends to haproxy:80 carries the correct vhost name
+# and HAProxy routes it to the right backend.
 docker run --rm \
   --network "${DOCKER_NETWORK}" \
   -v "${OUT_DIR}:/zap/wrk:rw" \
   -v "${ZAP_CONF}:/zap/rules.conf:ro" \
-  -e "ZAP_HOST_HEADER=${TARGET_VHOST}" \
   "${ZAP_IMAGE}" \
   zap-baseline.py \
     -t "${TARGET_URL}" \
@@ -49,25 +51,13 @@ docker run --rm \
     -J zap.json \
     -r zap.html \
     -I \
-    --hook /zap/wrk/zap-hook.py 2>/dev/null \
-  || true
-
-# If no hook file exists, run without it.
-if [[ ! -f "${OUT_DIR}/zap.json" ]]; then
-  docker run --rm \
-    --network "${DOCKER_NETWORK}" \
-    -v "${OUT_DIR}:/zap/wrk:rw" \
-    -v "${ZAP_CONF}:/zap/rules.conf:ro" \
-    -e "ZAP_HOST_HEADER=${TARGET_VHOST}" \
-    "${ZAP_IMAGE}" \
-    zap-baseline.py \
-      -t "${TARGET_URL}" \
-      -c /zap/rules.conf \
-      -J zap.json \
-      -r zap.html \
-      -I \
-  || true
-fi
+    -config "replacer.full_list(0).description=host-header" \
+    -config "replacer.full_list(0).enabled=true" \
+    -config "replacer.full_list(0).matchtype=REQ_HEADER" \
+    -config "replacer.full_list(0).matchstr=Host" \
+    -config "replacer.full_list(0).replacement=${TARGET_VHOST}" \
+    -config "replacer.full_list(0).initiators=" \
+  > "${OUT_DIR}/zap-stdout.txt" 2>&1 || true
 
 echo "ZAP scan complete. Parsing results..."
 
@@ -126,7 +116,6 @@ with open(os.path.join(out_dir, "detection.json"), "w") as f:
     json.dump(detection, f, indent=2)
 PY
 
-export OUT_DIR
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
 POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
 
