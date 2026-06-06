@@ -111,9 +111,12 @@ logs/
 *.mkv
 
 # ===== Benchmark Results =====
+# Flat files (legacy pattern)
 benchmarks/results/*.json
 benchmarks/results/*.html
 benchmarks/results/*.csv
+# Run directories (run-<RUN_ID>/) — all raw output is gitignored
+benchmarks/results/run-*/
 
 # ===== HAProxy / Coraza Runtime =====
 *.sock
@@ -121,6 +124,7 @@ benchmarks/results/*.csv
 haproxy.stats
 
 # ===== Thesis =====
+# Separate repository — not tracked here.
 thesis/
 
 # ===== Keep Empty Directories =====

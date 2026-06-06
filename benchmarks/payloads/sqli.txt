@@ -1,0 +1,22 @@
+# SQL injection payloads — used in manual verification and smoke tests.
+# These should all produce a 403 response from the WAF (PL1, threshold 5, block).
+# Source: OWASP Testing Guide, CRS test corpus.
+' OR '1'='1
+' OR '1'='1' --
+' OR 1=1--
+1' ORDER BY 1--
+1' ORDER BY 2--
+1' ORDER BY 3--
+1 UNION SELECT null--
+1 UNION SELECT null,null--
+1 UNION ALL SELECT NULL,NULL,NULL--
+'; DROP TABLE users;--
+1; SELECT * FROM users--
+' AND 1=2 UNION SELECT username,password FROM users--
+admin'--
+' OR 'x'='x
+1' AND SLEEP(5)--
+1' AND (SELECT * FROM (SELECT(SLEEP(5)))a)--
+'; EXEC xp_cmdshell('whoami')--
+1; WAITFOR DELAY '0:0:5'--
+' HAVING 1=1--

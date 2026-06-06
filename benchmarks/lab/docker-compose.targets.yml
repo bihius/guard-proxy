@@ -1,0 +1,162 @@
+# Evaluation lab target applications.
+#
+# This is an OVERLAY on top of the demo stack. Run as:
+#   docker compose \
+#     -f deploy/demo/docker-compose.yml \
+#     -f benchmarks/lab/docker-compose.targets.yml \
+#     --env-file deploy/demo/.env \
+#     --env-file benchmarks/lab/.env \
+#     up -d --build
+#
+# All target containers attach to gp_internal only; they are exposed
+# to the outside world exclusively through HAProxy (via vhost routing).
+#
+# Pinned image digests ensure reproducible test results across runs.
+# Update pins by running: docker pull <image> && docker inspect --format '{{index .RepoDigests 0}}' <image>
+
+name: guard-proxy-demo
+
+services:
+
+  # ── OWASP Juice Shop ──────────────────────────────────────────────────────
+  # Intentionally vulnerable Node.js app designed for security testing.
+  # Vhost: juice.local
+  juiceshop:
+    image: bkimminich/juice-shop:v17.1.1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/rest/admin/application-version >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - gp_internal
+
+  # ── DVWA (Damn Vulnerable Web Application) ────────────────────────────────
+  # Classic PHP vulnerable app. Requires MariaDB sidecar.
+  # Vhost: dvwa.local
+  dvwa-db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DVWA_DB_ROOT_PASSWORD:-dvwa_root_pw}
+      MARIADB_DATABASE: dvwa
+      MARIADB_USER: dvwa
+      MARIADB_PASSWORD: ${DVWA_DB_PASSWORD:-dvwa_pw}
+    volumes:
+      - dvwa_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gp_internal
+
+  dvwa:
+    image: ghcr.io/digininja/dvwa:latest
+    restart: unless-stopped
+    environment:
+      DB_SERVER: dvwa-db
+      DB_DATABASE: dvwa
+      DB_USER: dvwa
+      DB_PASSWORD: ${DVWA_DB_PASSWORD:-dvwa_pw}
+      RECAPTCHA_PRIV_KEY: ""
+      RECAPTCHA_PUB_KEY: ""
+    depends_on:
+      dvwa-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/setup.php >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    networks:
+      - gp_internal
+
+  # ── WordPress ─────────────────────────────────────────────────────────────
+  # Real-world CMS. Used to measure false positive rate of the WAF against
+  # legitimate CMS traffic (no exclusion plugins applied — intentional).
+  # Vhost: wp.local
+  wp-db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${WP_DB_ROOT_PASSWORD:-wp_root_pw}
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: ${WP_DB_PASSWORD:-wp_pw}
+    volumes:
+      - wp_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gp_internal
+
+  wordpress:
+    image: wordpress:php8.3-apache
+    restart: unless-stopped
+    environment:
+      WORDPRESS_DB_HOST: wp-db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${WP_DB_PASSWORD:-wp_pw}
+      WORDPRESS_TABLE_PREFIX: wp_
+    depends_on:
+      wp-db:
+        condition: service_healthy
+    volumes:
+      - wp_data:/var/www/html
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/wp-login.php >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - gp_internal
+
+  # One-shot WP CLI container to install WordPress deterministically.
+  # Runs once (no restart), exits 0 after wp core install succeeds.
+  wp-cli:
+    image: wordpress:cli-php8.3
+    restart: "no"
+    environment:
+      WORDPRESS_DB_HOST: wp-db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${WP_DB_PASSWORD:-wp_pw}
+    volumes:
+      - wp_data:/var/www/html
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    command: >
+      sh -c "
+        sleep 5 &&
+        wp core is-installed 2>/dev/null && echo 'WordPress already installed.' ||
+        wp core install
+          --url=http://wp.local
+          --title='Guard Proxy Lab'
+          --admin_user=admin
+          --admin_password=${WP_ADMIN_PASSWORD:-LabAdmin12345!}
+          --admin_email=admin@lab.local
+          --skip-email
+      "
+    networks:
+      - gp_internal
+
+networks:
+  gp_internal:
+    external: true
+    name: guard-proxy-demo_gp_internal
+
+volumes:
+  dvwa_db_data:
+  wp_db_data:
+  wp_data:

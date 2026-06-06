@@ -1,0 +1,42 @@
+# go-ftw configuration for CRS regression suite against guard-proxy.
+#
+# The OWASP CRS test corpus lives in configs/coraza/crs/tests/regression/tests/
+# (the CRS git submodule). go-ftw replays each labeled test case against the
+# live HAProxy+Coraza stack and reports pass/fail per rule.
+#
+# Usage (from repo root):
+#   docker run --rm \
+#     --network guard-proxy-demo_gp_internal \
+#     -v "$(pwd)/configs/coraza/crs/tests/regression/tests:/tests:ro" \
+#     -v "$(pwd)/benchmarks/lab/scenarios/crs-ftw/config.yaml:/config.yaml:ro" \
+#     ghcr.io/coreruleset/go-ftw:latest \
+#     run --config /config.yaml --dir /tests --output json \
+#     > benchmarks/results/run-<RUN_ID>/crs-ftw/raw.json
+
+# The proxy address as seen from inside the Docker network.
+# go-ftw sends requests to this host; Host: headers come from the test yamls
+# but we override the destination to route through HAProxy.
+override_destination:
+  address: haproxy
+  port: 80
+  protocol: http
+
+# Expect the WAF to return 403 on blocked requests (as configured in haproxy.cfg).
+# go-ftw uses this to determine whether a "deny" expectation was met.
+#
+# Default expected status for blocked requests:
+#   200 = pass-through (WAF allowed)
+#   403 = blocked by WAF
+#   others = treated as unexpected
+
+# Log file to inspect for WAF audit entries during test runs.
+# Mounted read-only from the coraza_audit volume in the runner script.
+# go-ftw tail-reads this to correlate rule firings with test outcomes.
+logfile: /var/log/coraza/audit.log
+
+# Maximum time to wait for a response per test case.
+timeout: 10s
+
+# Number of consecutive connection errors before aborting the run.
+max_marker_retries: 3
+max_marker_log_lines: 500
