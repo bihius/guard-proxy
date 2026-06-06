@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 
 import type { Log, LogAction, LogSeverity } from "./types";
 
@@ -24,15 +25,15 @@ function severityTone(severity: LogSeverity) {
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[10rem_1fr] gap-2 py-1.5">
-      <dt className="text-sm font-medium text-fg-muted">{label}</dt>
-      <dd className="text-sm text-fg">{children}</dd>
+    <div className="grid gap-1 py-2 sm:grid-cols-[10rem_1fr] sm:gap-2">
+      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
+      <dd className="text-sm text-foreground">{children}</dd>
     </div>
   );
 }
 
 function Nullable({ value }: { value: string | number | null | undefined }) {
-  return value !== null && value !== undefined ? <>{value}</> : <span className="text-fg-subtle">—</span>;
+  return value !== null && value !== undefined ? <>{value}</> : <span className="text-muted-foreground">—</span>;
 }
 
 export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
@@ -41,9 +42,9 @@ export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
       title="Event details"
       onClose={onClose}
       footer={
-        <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">
+        <Button type="button" onClick={onClose} variant="outline">
           Close
-        </button>
+        </Button>
       }
     >
       <div className="max-h-[60vh] overflow-y-auto">
@@ -92,7 +93,7 @@ export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
           </Field>
           {log.raw_context !== null && (
             <Field label="Raw context">
-              <pre className="overflow-auto rounded-[var(--radius-md)] bg-surface-hover p-2 text-xs">
+              <pre className="overflow-auto rounded-md bg-muted p-3 text-xs text-foreground">
                 {JSON.stringify(log.raw_context, null, 2)}
               </pre>
             </Field>

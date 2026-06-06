@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { Card } from "@/components/ui/card";
+
 type EmptyStateProps = {
   title: string;
   description: string;
@@ -12,12 +14,12 @@ export function EmptyState({
   action,
 }: EmptyStateProps) {
   return (
-    <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface p-8 text-center">
+    <Card className="border-dashed p-8 text-center">
       <div className="mx-auto max-w-xl space-y-3">
-        <h3 className="text-lg font-semibold text-fg">{title}</h3>
-        <p className="text-sm leading-6 text-fg-muted">{description}</p>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
         {action ? <div className="pt-2">{action}</div> : null}
       </div>
-    </div>
+    </Card>
   );
 }

@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { DeletePolicyDialog } from "@/features/policies/DeletePolicyDialog";
 import { PolicyFormModal } from "@/features/policies/PolicyFormModal";
 import type { Policy } from "@/features/policies/types";
@@ -64,7 +65,7 @@ export function PoliciesPage() {
       key: "thresholds",
       header: "Inbound threshold",
       cell: (row) => (
-        <span className="tabular-nums text-fg-muted">
+        <span className="tabular-nums text-muted-foreground">
           {row.inbound_anomaly_threshold}
         </span>
       ),
@@ -89,22 +90,24 @@ export function PoliciesPage() {
               const assigned = assignedPolicyIds.has(row.id);
               return (
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setModal({ type: "edit", policy: row })}
-                    className="rounded-[var(--radius-sm)] border border-border bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:text-fg"
+                    variant="outline"
+                    size="sm"
                   >
                     Edit
-                  </button>
+                  </Button>
                   <span title={assigned ? "Assigned to a virtual host" : undefined}>
-                    <button
+                    <Button
                       type="button"
                       disabled={assigned}
                       onClick={() => setModal({ type: "delete", policy: row })}
-                      className="rounded-[var(--radius-sm)] border border-error/50 px-3 py-1.5 text-xs font-semibold text-error transition hover:border-error hover:bg-error-soft disabled:cursor-not-allowed disabled:opacity-40"
+                      variant="destructive"
+                      size="sm"
                     >
                       Delete
-                    </button>
+                    </Button>
                   </span>
                 </div>
               );
@@ -121,13 +124,12 @@ export function PoliciesPage() {
         description="Manage CRS-based WAF policies and assign them to virtual hosts."
         actions={
           isAdmin ? (
-            <button
+            <Button
               type="button"
               onClick={() => setModal({ type: "create" })}
-              className="btn-primary px-4 py-2 text-sm"
             >
               New policy
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -140,13 +142,13 @@ export function PoliciesPage() {
             title="Failed to load policies"
             description={error}
             action={
-              <button
+              <Button
                 type="button"
                 onClick={refresh}
-                className="btn-ghost px-4 py-2 text-sm"
+                variant="outline"
               >
                 Retry
-              </button>
+              </Button>
             }
           />
         ) : (

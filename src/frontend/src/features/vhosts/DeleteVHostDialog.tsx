@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
 
@@ -39,32 +41,31 @@ export function DeleteVHostDialog({ vhost, onSuccess, onClose }: DeleteVHostDial
       onClose={onClose}
       footer={
         <>
-          <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">
+          <Button type="button" onClick={onClose} variant="outline">
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             disabled={submitting}
             onClick={() => void handleDelete()}
-            className="rounded-[var(--radius-md)] bg-error px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            variant="destructive"
           >
             {submitting ? "Deleting…" : "Delete"}
-          </button>
+          </Button>
         </>
       }
     >
       {serverError && (
-        <div
-          role="alert"
+        <Alert
+          variant="destructive"
           aria-live="assertive"
-          className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error"
         >
           {serverError}
-        </div>
+        </Alert>
       )}
-      <p className="text-sm text-fg">
+      <p className="text-sm text-foreground">
         Are you sure you want to delete{" "}
-        <span className="font-semibold text-fg">{vhost.domain}</span>?
+        <span className="font-semibold text-foreground">{vhost.domain}</span>?
         This action cannot be undone.
       </p>
     </Modal>

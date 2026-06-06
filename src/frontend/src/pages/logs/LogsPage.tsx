@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CalendarClock } from "lucide-react";
 
 import type { DataTableColumn } from "@/components/shared/DataTable";
 import { DataTable } from "@/components/shared/DataTable";
@@ -7,10 +8,15 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { LogDetailModal } from "@/features/logs/LogDetailModal";
 import { useLogs } from "@/features/logs/use-logs";
 import type { Log, LogAction, LogFilters } from "@/features/logs/types";
 import { EMPTY_FILTERS } from "@/features/logs/types";
+import { cn } from "@/lib/utils";
 
 function actionTone(action: LogAction) {
   if (action === "deny") return "error" as const;
@@ -23,7 +29,7 @@ const columns: DataTableColumn<Log>[] = [
     key: "timestamp",
     header: "Timestamp",
     cell: (row) => (
-      <span className="whitespace-nowrap text-xs text-fg-muted">
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
         {new Date(row.event_at).toLocaleString()}
       </span>
     ),
@@ -65,7 +71,7 @@ const columns: DataTableColumn<Log>[] = [
     key: "rules",
     header: "Top matched rules",
     cell: (row) => {
-      if (row.rule_id === null) return <span className="text-fg-subtle">—</span>;
+      if (row.rule_id === null) return <span className="text-muted-foreground">—</span>;
       const label = row.rule_message
         ? `#${row.rule_id} — ${row.rule_message}`
         : `#${row.rule_id}`;
@@ -77,6 +83,208 @@ const columns: DataTableColumn<Log>[] = [
     },
   },
 ];
+
+type DateRangePreset = {
+  label: string;
+  getRange: (now: Date) => Pick<LogFilters, "date_from" | "date_to">;
+};
+
+const dateRangePresets: DateRangePreset[] = [
+  {
+    label: "1 hour",
+    getRange: (now) => ({
+      date_from: toDateTimeLocal(new Date(now.getTime() - 60 * 60 * 1000)),
+      date_to: toDateTimeLocal(now),
+    }),
+  },
+  {
+    label: "24 hours",
+    getRange: (now) => ({
+      date_from: toDateTimeLocal(new Date(now.getTime() - 24 * 60 * 60 * 1000)),
+      date_to: toDateTimeLocal(now),
+    }),
+  },
+  {
+    label: "7 days",
+    getRange: (now) => ({
+      date_from: toDateTimeLocal(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)),
+      date_to: toDateTimeLocal(now),
+    }),
+  },
+  {
+    label: "Today",
+    getRange: (now) => {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      return {
+        date_from: toDateTimeLocal(start),
+        date_to: toDateTimeLocal(now),
+      };
+    },
+  },
+];
+
+function pad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function toDateTimeLocal(date: Date) {
+  return [
+    date.getFullYear(),
+    "-",
+    pad(date.getMonth() + 1),
+    "-",
+    pad(date.getDate()),
+    "T",
+    pad(date.getHours()),
+    ":",
+    pad(date.getMinutes()),
+  ].join("");
+}
+
+function splitDateTime(value: string) {
+  const [date = "", time = ""] = value.split("T");
+  return {
+    date,
+    time,
+  };
+}
+
+function combineDateTime(date: string, time: string) {
+  if (!date) return "";
+  return `${date}T${time || "00:00"}`;
+}
+
+type DateTimeRangePickerProps = {
+  value: Pick<LogFilters, "date_from" | "date_to">;
+  onChange: (next: Pick<LogFilters, "date_from" | "date_to">) => void;
+};
+
+function DateTimeRangePicker({ value, onChange }: DateTimeRangePickerProps) {
+  const from = splitDateTime(value.date_from);
+  const to = splitDateTime(value.date_to);
+
+  function update(partial: Partial<Pick<LogFilters, "date_from" | "date_to">>) {
+    onChange({
+      date_from: partial.date_from ?? value.date_from,
+      date_to: partial.date_to ?? value.date_to,
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <CalendarClock className="h-4 w-4" />
+          </span>
+          Time range
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {dateRangePresets.map((preset) => (
+            <Button
+              key={preset.label}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onChange(preset.getRange(new Date()))}
+            >
+              {preset.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <DateTimeEndpoint
+          label="From"
+          dateId="filter-date-from"
+          timeId="filter-time-from"
+          date={from.date}
+          time={from.time}
+          onDateChange={(date) =>
+            update({ date_from: combineDateTime(date, from.time) })
+          }
+          onTimeChange={(time) =>
+            update({ date_from: combineDateTime(from.date, time) })
+          }
+        />
+
+        <DateTimeEndpoint
+          label="To"
+          dateId="filter-date-to"
+          timeId="filter-time-to"
+          date={to.date}
+          time={to.time}
+          onDateChange={(date) =>
+            update({ date_to: combineDateTime(date, to.time) })
+          }
+          onTimeChange={(time) =>
+            update({ date_to: combineDateTime(to.date, time) })
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+type DateTimeEndpointProps = {
+  label: "From" | "To";
+  dateId: string;
+  timeId: string;
+  date: string;
+  time: string;
+  onDateChange: (value: string) => void;
+  onTimeChange: (value: string) => void;
+};
+
+function DateTimeEndpoint({
+  label,
+  dateId,
+  timeId,
+  date,
+  time,
+  onDateChange,
+  onTimeChange,
+}: DateTimeEndpointProps) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium text-muted-foreground">
+        {label}
+      </legend>
+      <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={dateId} className="sr-only">
+            {label} date
+          </Label>
+          <Input
+            id={dateId}
+            type="date"
+            value={date}
+            onChange={(event) => onDateChange(event.target.value)}
+            aria-label={`${label} date`}
+            className={cn(!date && "text-muted-foreground")}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor={timeId} className="sr-only">
+            {label} time
+          </Label>
+          <Input
+            id={timeId}
+            type="time"
+            value={time}
+            onChange={(event) => onTimeChange(event.target.value)}
+            aria-label={`${label} time`}
+            className={cn(!time && "text-muted-foreground")}
+          />
+        </div>
+      </div>
+    </fieldset>
+  );
+}
 
 export function LogsPage() {
   const { logs, total, page, pageSize, policies, isLoading, error, setPage, applyFilters, refresh } =
@@ -102,13 +310,14 @@ export function LogsPage() {
       header: "",
       className: "w-px whitespace-nowrap",
       cell: (row) => (
-        <button
+        <Button
           type="button"
           onClick={() => setSelected(row)}
-          className="rounded-[var(--radius-sm)] border border-border bg-surface-hover px-3 py-1.5 text-xs font-semibold text-fg-muted transition hover:text-fg"
+          variant="outline"
+          size="sm"
         >
           View
-        </button>
+        </Button>
       ),
     },
   ];
@@ -123,41 +332,38 @@ export function LogsPage() {
       <SectionCard title="Filters">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
-            <label htmlFor="filter-vhost" className="block text-sm font-medium text-fg-muted">VHost</label>
-            <input
+            <Label htmlFor="filter-vhost">VHost</Label>
+            <Input
               id="filter-vhost"
               type="text"
               value={draft.vhost}
               onChange={(e) => setDraft({ ...draft, vhost: e.target.value })}
-              className="input-field"
               placeholder="example.com (exact match)"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="filter-action" className="block text-sm font-medium text-fg-muted">Action</label>
-            <select
+            <Label htmlFor="filter-action">Action</Label>
+            <Select
               id="filter-action"
               value={draft.action}
               onChange={(e) => setDraft({ ...draft, action: e.target.value as LogFilters["action"] })}
-              className="input-field"
             >
               <option value="">All actions</option>
               <option value="allow">Allow</option>
               <option value="deny">Deny</option>
               <option value="monitor">Monitor</option>
-            </select>
+            </Select>
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="filter-policy" className="block text-sm font-medium text-fg-muted">Policy</label>
-            <select
+            <Label htmlFor="filter-policy">Policy</Label>
+            <Select
               id="filter-policy"
               value={draft.policy_id ?? ""}
               onChange={(e) =>
                 setDraft({ ...draft, policy_id: e.target.value ? Number(e.target.value) : null })
               }
-              className="input-field"
             >
               <option value="">All policies</option>
               {policies.map((p) => (
@@ -165,39 +371,27 @@ export function LogsPage() {
                   {p.name}
                 </option>
               ))}
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="filter-date-from" className="block text-sm font-medium text-fg-muted">From</label>
-            <input
-              id="filter-date-from"
-              type="datetime-local"
-              value={draft.date_from}
-              onChange={(e) => setDraft({ ...draft, date_from: e.target.value })}
-              className="input-field"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="filter-date-to" className="block text-sm font-medium text-fg-muted">To</label>
-            <input
-              id="filter-date-to"
-              type="datetime-local"
-              value={draft.date_to}
-              onChange={(e) => setDraft({ ...draft, date_to: e.target.value })}
-              className="input-field"
-            />
+            </Select>
           </div>
         </div>
 
+        <div className="mt-4">
+          <DateTimeRangePicker
+            value={{
+              date_from: draft.date_from,
+              date_to: draft.date_to,
+            }}
+            onChange={(range) => setDraft({ ...draft, ...range })}
+          />
+        </div>
+
         <div className="mt-4 flex gap-3">
-          <button type="button" onClick={handleApply} className="btn-primary px-4 py-2 text-sm">
+          <Button type="button" onClick={handleApply}>
             Apply
-          </button>
-          <button type="button" onClick={handleClear} className="btn-ghost px-4 py-2 text-sm">
+          </Button>
+          <Button type="button" onClick={handleClear} variant="outline">
             Clear
-          </button>
+          </Button>
         </div>
       </SectionCard>
 
@@ -209,9 +403,9 @@ export function LogsPage() {
             title="Failed to load logs"
             description={error}
             action={
-              <button type="button" onClick={refresh} className="btn-ghost px-4 py-2 text-sm">
+              <Button type="button" onClick={refresh} variant="outline">
                 Retry
-              </button>
+              </Button>
             }
           />
         ) : (
@@ -226,26 +420,26 @@ export function LogsPage() {
 
             {total > 0 && (
               <div className="mt-4 flex items-center justify-between gap-4">
-                <span className="text-sm text-fg-muted">
+                <span className="text-sm text-muted-foreground">
                   Page {page} of {totalPages} · {total} events
                 </span>
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setPage(page - 1)}
                     disabled={page <= 1}
-                    className="btn-ghost px-4 py-2 text-sm disabled:opacity-40"
+                    variant="outline"
                   >
                     Prev
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setPage(page + 1)}
                     disabled={page >= totalPages}
-                    className="btn-ghost px-4 py-2 text-sm disabled:opacity-40"
+                    variant="outline"
                   >
                     Next
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
