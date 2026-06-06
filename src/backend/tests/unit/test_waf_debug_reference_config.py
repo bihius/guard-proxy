@@ -42,6 +42,28 @@ def test_default_docker_compose_starts_haproxy_before_coraza_is_healthy() -> Non
     assert '"${HAPROXY_HTTP_PORT:-8080}:80"' in compose
 
 
+def test_backend_runtime_config_env_matches_readiness_probe() -> None:
+    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+
+    assert "RUNTIME_GENERATED_CONFIG_ROOT: /var/lib/guard-proxy/generated" in compose
+
+
+def test_backend_entrypoint_seeds_runtime_generated_config_root() -> None:
+    entrypoint = (REPO_ROOT / "src/backend/docker-entrypoint.sh").read_text()
+
+    assert (
+        'runtime_dir="${GUARD_PROXY_RUNTIME_DIR:-'
+        '${RUNTIME_GENERATED_CONFIG_ROOT:-/runtime}}"'
+    ) in entrypoint
+
+
+def test_haproxy_master_socket_is_accessible_to_backend_container() -> None:
+    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+
+    assert "/var/run/haproxy/master.sock,mode,666,level,operator" in compose
+    assert "/var/run/haproxy/master.sock,mode,660" not in compose
+
+
 def test_debug_coraza_spoa_config_enables_debug_logging() -> None:
     config = (REPO_ROOT / "configs/coraza/coraza-spoa.debug.yaml").read_text()
 
@@ -52,7 +74,10 @@ def test_debug_coraza_spoa_config_enables_debug_logging() -> None:
 def test_debug_compose_override_enables_haproxy_debug_flag() -> None:
     compose = (REPO_ROOT / "deploy/docker/docker-compose.debug.yml").read_text()
 
-    assert "exec haproxy -d -W -S /var/run/haproxy/master.sock" in compose
+    assert (
+        "exec haproxy -d -W -S "
+        "/var/run/haproxy/master.sock,mode,666,level,operator"
+    ) in compose
     assert "-f /etc/haproxy/generated/current/haproxy.cfg" in compose
 
 
