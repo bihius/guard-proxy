@@ -51,6 +51,10 @@ frontend fe_http
     http-request deny deny_status 421
 {% endif %}
 
+    # Overwrite any client-supplied X-Forwarded-For with the real source IP
+    # so the backend rate limiter cannot be bypassed by header spoofing.
+    http-request set-header X-Forwarded-For %[src]
+
     # Fail closed before SPOE when HAProxy has no usable Coraza SPOA
     # server. This covers startup and unhealthy-container windows.
     http-request set-var(txn.waf_degraded_reason) str(coraza-unavailable) if !is_health { nbsrv(coraza-spoa) eq 0 }
@@ -89,7 +93,6 @@ frontend fe_http
 # --- Application backends ----------------------------------------
 {% for route in routes %}
 backend {{ route.backend.name }}
-    option forwardfor
     option httpchk GET /health
     http-check expect status 200
     # init-addr none lets `haproxy -c` succeed even when the

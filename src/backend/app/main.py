@@ -7,12 +7,14 @@ from pathlib import Path
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings, validate_runtime_settings
 from app.database import get_db
+from app.rate_limit import limiter, rate_limit_exceeded_handler
 from app.routers import (
     auth,
     config,
@@ -57,6 +59,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --- Rate limiting -----------------------------------------------------------
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+# --- CORS --------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

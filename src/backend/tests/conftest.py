@@ -205,3 +205,24 @@ INACTIVE_PASSWORD = _INACTIVE_PASSWORD
 def log_ingest_headers() -> dict[str, str]:
     """Header used by the log producer ingest endpoint."""
     return {"X-Guard-Proxy-Ingest-Secret": os.environ["LOG_INGEST_SHARED_SECRET"]}
+
+
+# ---------------------------------------------------------------------------
+# Rate-limiter reset — prevents counter leakage between tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter() -> Iterator[None]:
+    """Reset slowapi in-memory counters before and after every test.
+
+    The limiter is attached to the shared FastAPI ``app`` instance which
+    survives across the entire test session.  Without this fixture, rapid
+    sequences of login/refresh calls in earlier tests would exhaust the
+    per-IP bucket and cause unrelated tests to see unexpected 429 responses.
+    """
+    from app.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
