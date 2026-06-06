@@ -16,6 +16,21 @@ Glownym celem projektu jest zarzadzanie konfiguracja WAF z poziomu panelu:
 - odbieranie i przegladanie logow zdarzen WAF,
 - zabezpieczenie panelu przez logowanie i role uzytkownikow.
 
+Cele dodatkowe (mierzalne i raportowane, nie gwarantowane):
+
+- wykazanie, ze integracja HAProxy–Coraza przez SPOE nie degraduje skutecznosci
+  regul CRS w stosunku do ich referencyjnego dzialania (fidelity),
+- zmierzenie narzutu czasowego warstwy WAF wzgledem ruchu bez inspekcji i wykazanie,
+  ze pozostaje on ponizej akceptowalnego progu,
+- zademonstrowanie, ze wylaczenie lub modyfikacja reguly przez panel zmienia
+  obserwowalne zachowanie WAF na ustalonym korpusie testowym.
+
+Poziom wykrywalnosci atakow oraz wspolczynnik false positive nie sa celami
+projektowymi — sa wlasciwoscia zestawu reguł CRS i wybranego poziomu paranoi,
+nie systemu Guard Proxy. Odpowiednie wartosci sa mierzone i raportowane
+wzgledem okreslonego punktu odniesienia (wersja CRS, poziom paranoi, korpus
+testowy), nie egzekwowane jako proby zaliczenia.
+
 ## 2. Zastosowane technologie
 
 | Warstwa | Technologie |
@@ -285,14 +300,32 @@ razem z dwiema prostymi aplikacjami HTTP echo za WAF-em. Pozwala to pokazac:
 ## 12. Testy
 
 Backend ma testy jednostkowe i integracyjne w `src/backend/tests`. Frontend ma
-testy komponentow i klienta API w `src/frontend/src`. Dodatkowo istnieje smoke
-test end-to-end dla stacka Docker Compose.
+testy komponentow i klienta API w `src/frontend/src`. Dodatkowo istnieja testy
+end-to-end dla stacka Docker Compose.
+
+Testy dziel sie na dwie kategorie:
+
+**Bramy zaliczenia (pass/fail, egzekwowane w CI):**
+- Znany payload ataku jest blokowany (403) — smoke test,
+- Znany benign request przechodzi (200) — smoke test,
+- Wylaczenie i ponowne wlaczenie reguly przez panel zmienia zachowanie WAF na
+  zywo (e2e test `test_policy_apply.py`, regula `913100`),
+- Narzut WAF ponizej 20% — testy wydajnosciowe.
+
+**Pomiary raportowane (nie egzekwowane):**
+- Wspolczynnik wykrycia (TP) per klasa ataku (SQLi, XSS, path traversal),
+- Wspolczynnik false positive na korpusie benign,
+- Delta FP przed i po zastosowaniu override reguly na ustalonym korpusie.
+
+Kazdy pomiar raportowany jest zapisywany razem z punktem odniesienia: commit
+submodulu CRS, poziom paranoi, progi anomalii.
 
 Przykladowe komendy:
 
 ```bash
 cd src/backend
 uv run pytest
+uv run pytest -m e2e tests/e2e/test_policy_apply.py
 ```
 
 ```bash
@@ -302,7 +335,35 @@ pnpm run type-check
 pnpm run lint
 ```
 
-## 13. Screenshoty
+```bash
+bash benchmarks/smoke/e2e.sh
+```
+
+## 13. Plan ewaluacji
+
+Ewaluacja projektu obejmuje dwie klasy pomiarow: bramy zaliczenia (egzekwowane w CI)
+oraz obserwacje raportowane (mierzone na ustalonym korpusie i zapisywane z punktem
+odniesienia, nie uzywane jako kryterium zdania).
+
+| ID | Co mierzymy | Jak | Typ |
+|----|-------------|-----|-----|
+| E1 | Poprawnosc funkcjonalna zarzadzania | e2e: utworzenie vhosta → polityki → zastosowanie → rollback; toggle reguly widoczny w zachowaniu live | **Brama (pass/fail)** |
+| E2 | Fidelity integracji | Replay korpusu atakow i benign przez proxy; raport TP per klasa + FP z zapisanym SHA submodulu CRS, PL i progami | **Raportowane** |
+| E3 | Narzut wydajnosciowy | wrk/k6: latencja p50/p95/p99 + przepustowosc, WAF-on vs WAF-bypass | **Brama (<20% narzutu)** |
+| E4 | Skutecznosc tuningu | FP na korpusie WordPress przed i po overridzie reguly; wynik to delta, nie wartosc bezwzgledna | **Raportowane (delta)** |
+| E5 | Porownanie referencyjne (M6, opcjonalne) | Ten sam korpus przez Guard Proxy vs raw Coraza/standalone — brak degradacji fidelity | **Raportowane** |
+
+### Punkt odniesienia dla E2, E4, E5
+
+Kazdy raport zapisuje:
+
+- SHA commitu submodulu `configs/coraza/crs` (wersja CRS),
+- poziom paranoi i progi anomalii (domyslnie PL1, inbound 5, outbound 4),
+- korpus testowy (`benchmarks/payloads/`: sqli.txt, xss.txt, legitimate.txt).
+
+Bez tych danych wyniki nie sa porownywalne miedzyokresowo.
+
+## 15. Screenshoty
 
 Do uzupelnienia przed oddaniem projektu:
 
