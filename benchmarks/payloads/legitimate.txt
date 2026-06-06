@@ -1,0 +1,28 @@
+# Legitimate request paths — should all produce 200 (NOT blocked by WAF).
+# Used to verify the false positive rate.
+/
+/index.html
+/robots.txt
+/favicon.ico
+/about
+/contact
+/login
+/search?q=hello+world
+/search?q=buy+laptop
+/search?q=how+to+cook+pasta
+/api/v1/status
+/api/v1/products
+/api/v1/products?page=1&per_page=20
+/api/v1/products?sort=price&order=asc
+/api/v1/users/me
+/wp-login.php
+/wp-admin/
+/wp-content/themes/twentytwentyfour/style.css
+/wp-json/wp/v2/posts
+/?p=1
+/?page_id=2
+/category/news/
+/tag/technology/
+/?s=wordpress+tutorial
+/feed/
+/sitemap.xml

