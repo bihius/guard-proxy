@@ -34,8 +34,8 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 | -------------- | ----------------------------------------------------- |
 | Host           | Dell PowerEdge R530 (Proxmox PVE 9.1.1)               |
 | CPU            | 2 × Intel Xeon E5-2620 v3 @ 2.40 GHz (24 cores total) |
-| RAM            | 125 GiB (32 GiB free at lab time)                     |
-| Storage        | ZFS `fast-pool` (~810 GiB free)                       |
+| RAM            | 128 GiB (32 GiB free at lab time)                     |
+| Storage        | ZFS `local-zfs`                                       |
 | OS (LXC guest) | Debian 13 (Bookworm) — `debian-13-standard` template  |
 | Docker         | Docker Engine ≥ 27.x, Compose V2                      |
 
@@ -100,12 +100,12 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 ## 4. Test Targets
 
-| App | Purpose | Vhost |
-|---|---|---|
-| **OWASP Juice Shop** v17 | Intentionally vulnerable Node.js app — scanner target | `juice.local` |
-| **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios | `dvwa.local` |
-| **WordPress** 6.x (php8.3) | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local` |
-| **Albedo** | CRS go-ftw regression backend compatible with CRS test assumptions | `ftw.local` |
+| App                                | Purpose                                                             | Vhost         |
+| ---------------------------------- | ------------------------------------------------------------------- | ------------- |
+| **OWASP Juice Shop** v17           | Intentionally vulnerable Node.js app — scanner target               | `juice.local` |
+| **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios                 | `dvwa.local`  |
+| **WordPress** 6.x (php8.3)         | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local`    |
+| **Albedo**                         | CRS go-ftw regression backend compatible with CRS test assumptions  | `ftw.local`   |
 
 WordPress is run **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
 
