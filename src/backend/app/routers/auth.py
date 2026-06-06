@@ -8,6 +8,7 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.schemas.auth import AccessTokenResponse, LoginRequest
 from app.schemas.user import UserResponse
 from app.services import auth_service
@@ -49,7 +50,9 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 
 @router.post("/login", response_model=AccessTokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 def login(
+    request: Request,
     body: LoginRequest,
     response: Response,
     db: Session = Depends(get_db),
@@ -87,6 +90,7 @@ def login(
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 def refresh(
     request: Request,
     response: Response,
