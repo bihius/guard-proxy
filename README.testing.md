@@ -6,16 +6,18 @@
 |-------|----------|-------|---------------|
 | **Unit** (many, fast) | `src/backend/tests/unit/` | pytest, Vitest | >80% |
 | **Integration** (some) | `src/backend/tests/integration/` | pytest, Docker | Key flows |
-| **Security** | `benchmarks/lab/` | OWASP ZAP, Nuclei, go-ftw (CRS corpus) | OWASP Top 10 |
-| **Performance** | `benchmarks/lab/` | wrk (WAF vs direct) | <20% WAF overhead |
+| **Security** | `benchmarks/lab/` | tagged corpus, go-ftw, OWASP ZAP, Nuclei | Configuration-specific WAF evidence |
+| **Performance** | `benchmarks/lab/` | wrk (WAF vs direct) | RPS guardrail: <20% degradation |
 
 ## WAF Testing
 
-### Detection Targets (draft)
-- SQL Injection: >95% detection rate
-- XSS: >95% detection rate
-- Path Traversal: >95% detection rate
-- False positive rate: <10%
+### Evaluation Metrics
+
+Security metrics are descriptive and configuration-specific. TP/FN/TN/FP are
+computed only for the tagged labeled corpus in `benchmarks/payloads/`. go-ftw
+reports CRS conformance, while ZAP and Nuclei provide supplemental scanner
+evidence. The only soft lab guardrail is RPS degradation under the documented
+wrk workload.
 
 ### End-to-End Smoke
 
@@ -56,7 +58,7 @@ nightly smoke workflow. Normal backend pytest runs exclude tests marked `e2e`.
 
 ## Evaluation Lab (thesis M6)
 
-Full WAF evaluation with real target apps (WordPress, Juice Shop, DVWA):
+Full WAF evaluation with real target apps plus the CRS Albedo backend:
 
 ```sh
 # Prerequisites
@@ -67,7 +69,7 @@ git submodule update --init --recursive
 # Bring up the lab
 make eval-up
 
-# Run all scenarios (ftw → zap → nuclei → load → metrics)
+# Run all scenarios (ftw → corpus → zap → nuclei → load → metrics)
 make eval-all
 
 # View results

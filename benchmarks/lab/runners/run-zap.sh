@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# run-zap.sh — OWASP ZAP baseline scan for false positive measurement.
+# run-zap.sh — OWASP ZAP baseline scan for scanner-assisted coverage.
 #
-# Runs a ZAP baseline (passive + active) scan against each lab target through
-# HAProxy and classifies WAF alerts as FPs (WAF blocked a legitimate scan
-# request) vs TPs (WAF blocked a genuine attack found by ZAP).
+# Runs a ZAP baseline scan through HAProxy. ZAP is supplemental evidence, not a
+# clean false-positive-rate source, because its traffic mixes crawler requests,
+# passive checks, and attack-like probes.
 #
 # Output:
 #   benchmarks/results/run-<RUN_ID>/zap-<vhost>/zap.json
@@ -18,7 +18,7 @@ set -Eeuo pipefail
 : "${RUN_ID:=$(date +%Y%m%d-%H%M%S)}"
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-TARGET_VHOST="${TARGET_VHOST:-${LAB_WP_DOMAIN}}"   # default: WordPress (best FPR target)
+TARGET_VHOST="${TARGET_VHOST:-${LAB_WP_DOMAIN}}"   # default: WordPress scanner target
 ZAP_IMAGE="ghcr.io/zaproxy/zaproxy:stable"
 ZAP_CONF="${REPO_ROOT}/benchmarks/lab/scenarios/zap/zap-baseline.conf"
 
@@ -39,7 +39,7 @@ echo ""
 # ZAP needs a writable /zap/wrk directory for reports.
 # The Host: header is injected via ZAP's built-in HTTP Request Header Replacer
 # so that every request ZAP sends to haproxy:80 carries the correct vhost name
-# and HAProxy routes it to the right backend.
+# and benchmark correlation tags.
 docker run --rm \
   --network "${DOCKER_NETWORK}" \
   -v "${OUT_DIR}:/zap/wrk:rw" \
@@ -57,15 +57,31 @@ docker run --rm \
     -config "replacer.full_list(0).matchstr=Host" \
     -config "replacer.full_list(0).replacement=${TARGET_VHOST}" \
     -config "replacer.full_list(0).initiators=" \
+    -config "replacer.full_list(1).description=eval-run" \
+    -config "replacer.full_list(1).enabled=true" \
+    -config "replacer.full_list(1).matchtype=REQ_HEADER" \
+    -config "replacer.full_list(1).matchstr=X-GP-Eval-Run" \
+    -config "replacer.full_list(1).replacement=${RUN_ID}" \
+    -config "replacer.full_list(1).initiators=" \
+    -config "replacer.full_list(2).description=eval-scenario" \
+    -config "replacer.full_list(2).enabled=true" \
+    -config "replacer.full_list(2).matchtype=REQ_HEADER" \
+    -config "replacer.full_list(2).matchstr=X-GP-Eval-Scenario" \
+    -config "replacer.full_list(2).replacement=${SCENARIO}" \
+    -config "replacer.full_list(2).initiators=" \
+    -config "replacer.full_list(3).description=eval-case" \
+    -config "replacer.full_list(3).enabled=true" \
+    -config "replacer.full_list(3).matchtype=REQ_HEADER" \
+    -config "replacer.full_list(3).matchstr=X-GP-Eval-Case" \
+    -config "replacer.full_list(3).replacement=zap" \
+    -config "replacer.full_list(3).initiators=" \
   > "${OUT_DIR}/zap-stdout.txt" 2>&1 || true
 
 echo "ZAP scan complete. Parsing results..."
+copy_audit_log_snapshot "${OUT_DIR}"
 
-# Parse ZAP JSON output and compute a detection summary.
-# ZAP alerts with risk >= Medium against the WAF-proxied target are WAF-visible
-# attacks. The WAF's job on ZAP traffic:
-#   - Block high-risk attacks (SQLi, XSS, ...) → TP if blocked, FN if passed
-#   - Allow legitimate ZAP probes (header checks, info gathering) → TN if allowed, FP if blocked
+# Parse ZAP JSON output and compute a scanner summary. Do not derive FPR/TPR
+# from ZAP; the labeled corpus runner is the clean source for those formulas.
 
 python3 - <<'PY'
 import json, sys, os
@@ -85,8 +101,8 @@ alerts = []
 for site in report.get("site", []):
     alerts.extend(site.get("alerts", []))
 
-# Classify alerts: risk 2 (Medium) or 3 (High) are WAF-relevant attack signals.
-# Risk 0 (Informational) / 1 (Low) are cosmetic — not WAF signals.
+# Classify alerts: risk 2 (Medium) or 3 (High) are WAF-relevant scanner signals.
+# Risk 0 (Informational) / 1 (Low) are retained as context only.
 ATTACK_RISKS = {2, 3}  # Medium, High
 attack_alerts = [a for a in alerts if int(a.get("riskcode", 0)) in ATTACK_RISKS]
 info_alerts   = [a for a in alerts if int(a.get("riskcode", 0)) not in ATTACK_RISKS]
@@ -94,9 +110,6 @@ info_alerts   = [a for a in alerts if int(a.get("riskcode", 0)) not in ATTACK_RI
 total_attack_instances = sum(int(a.get("count", 1)) for a in attack_alerts)
 total_info_instances   = sum(int(a.get("count", 1)) for a in info_alerts)
 
-# We cannot directly observe WAF blocks from ZAP output alone (ZAP sees the
-# app's response, not the WAF block). A separate audit-log cross-reference is
-# done in collect-metrics.sh. Here we report ZAP findings as-is.
 detection = {
     "total_alerts": len(alerts),
     "attack_severity_alerts": len(attack_alerts),
@@ -107,7 +120,7 @@ detection = {
         {"risk": a.get("riskdesc"), "name": a.get("alert"), "count": a.get("count")}
         for a in sorted(attack_alerts, key=lambda x: -int(x.get("riskcode", 0)))[:10]
     ],
-    "note": "TP/FP counts require audit-log cross-reference — run collect-metrics.sh after all scenarios."
+    "note": "Supplemental scanner evidence only. Do not derive FPR/TPR from ZAP; use the tagged corpus runner for labeled FP/FN counts."
 }
 
 print(json.dumps(detection, indent=2))

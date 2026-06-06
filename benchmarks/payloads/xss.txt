@@ -1,4 +1,4 @@
-# XSS payloads — should all be blocked by the WAF at PL1.
+# XSS payloads — expected outcome in the tagged corpus: block.
 <script>alert(1)</script>
 <script>alert('XSS')</script>
 "><script>alert(document.cookie)</script>

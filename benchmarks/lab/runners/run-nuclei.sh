@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # run-nuclei.sh — CVE / exposure template scan via Nuclei.
 #
-# Fires Nuclei's curated attack templates (sqli, xss, lfi, etc.) against
-# the lab targets through HAProxy+Coraza and records how many are blocked
-# vs passed (WAF TPR against CVE-template payloads).
+# Fires Nuclei's curated attack templates (sqli, xss, lfi, etc.) against the
+# lab targets through HAProxy+Coraza. Nuclei is supplemental reached-app/bypass
+# evidence, not a clean TPR source.
 #
 # Output:
 #   benchmarks/results/run-<RUN_ID>/nuclei-<vhost>/raw.jsonl
@@ -35,8 +35,8 @@ echo "Output dir   : ${OUT_DIR}"
 echo "Image        : ${NUCLEI_IMAGE}"
 echo ""
 
-# Pull nuclei-templates inside the container on first run (cached on next run
-# by mounting a local volume). The -header flag injects the Host: vhost.
+# Pull nuclei-templates inside the container on first run. Header flags inject
+# the vhost and benchmark correlation tags.
 docker run --rm \
   --network "${DOCKER_NETWORK}" \
   -v "${OUT_DIR}:/output:rw" \
@@ -45,11 +45,15 @@ docker run --rm \
   -config /nuclei.yaml \
   -u "${TARGET_URL}" \
   -header "Host: ${TARGET_VHOST}" \
+  -header "X-GP-Eval-Run: ${RUN_ID}" \
+  -header "X-GP-Eval-Scenario: ${SCENARIO}" \
+  -header "X-GP-Eval-Case: nuclei" \
   -jsonl -output /output/raw.jsonl \
   -update-templates \
   2>/dev/null || true
 
 echo "Nuclei scan complete. Parsing results..."
+copy_audit_log_snapshot "${OUT_DIR}"
 
 python3 - <<'PY'
 import json, os
@@ -69,12 +73,9 @@ if os.path.exists(raw_file):
                 except json.JSONDecodeError:
                     pass
 
-# Severity classification for WAF TPR estimation.
-# Nuclei findings with severity critical/high/medium are WAF-relevant attacks.
-# Each finding represents a template match — the request was NOT blocked by the WAF
-# (nuclei receives a response), so these are False Negatives from the WAF's perspective.
-# Requests that were blocked (WAF returned 403) produce connection errors / 403 responses
-# in Nuclei and typically don't generate a finding for the underlying vulnerability.
+# Severity classification for supplemental scanner reporting. A medium/high/
+# critical finding means a template matched the application response and is
+# reached-app evidence. It is not a TPR denominator.
 
 WAF_RELEVANT = {"critical", "high", "medium"}
 fn_findings = [f for f in findings if f.get("info", {}).get("severity", "").lower() in WAF_RELEVANT]
@@ -84,7 +85,7 @@ detection = {
     "total_findings": len(findings),
     "waf_relevant_findings": len(fn_findings),
     "info_findings": len(info_findings),
-    "note": "Each waf_relevant_finding is a potential WAF false-negative (attack payload reached the app). Run collect-metrics.sh to cross-reference with audit log for confirmed TP/FN split.",
+    "note": "Supplemental scanner evidence only. Medium/high/critical findings are reached-app findings, not a complete TPR/FN measurement.",
     "top_findings": [
         {
             "template_id": f.get("template-id"),
