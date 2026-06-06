@@ -13,26 +13,22 @@
 #     run --config /config.yaml --dir /tests --output json \
 #     > benchmarks/results/run-<RUN_ID>/crs-ftw/raw.json
 
-# The proxy address as seen from inside the Docker network.
-# go-ftw sends requests to this host; Host: headers come from the test yamls
-# but we override the destination to route through HAProxy.
-override_destination:
-  address: haproxy
-  port: 80
-  protocol: http
+# Cloud mode bases pass/fail on response status instead of direct log-file
+# access. That fits this lab because Coraza audit logs live in a Docker volume
+# copied by the runner after execution, not inside the go-ftw container.
+mode: cloud
 
-# Expect the WAF to return 403 on blocked requests (as configured in haproxy.cfg).
-# go-ftw uses this to determine whether a "deny" expectation was met.
-#
-# Default expected status for blocked requests:
-#   200 = pass-through (WAF allowed)
-#   403 = blocked by WAF
-#   others = treated as unexpected
-
-# Log file to inspect for WAF audit entries during test runs.
-# Mounted read-only from the coraza_audit volume in the runner script.
-# go-ftw tail-reads this to correlate rule firings with test outcomes.
-logfile: /var/log/coraza/audit.log
+# Route every CRS test through HAProxy and the registered FTW vhost. Albedo is
+# the backend for ftw.local; it mirrors the CRS project's own test setup.
+testoverride:
+  input:
+    dest_addr: haproxy
+    port: 80
+    protocol: http
+    headers:
+      Host: '{{ env "TARGET_VHOST" }}'
+      X-GP-Eval-Run: '{{ env "RUN_ID" }}'
+      X-GP-Eval-Scenario: ftw
 
 # Maximum time to wait for a response per test case.
 timeout: 10s

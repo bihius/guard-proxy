@@ -32,6 +32,7 @@ BACKEND_HTTP_PORT="$(env_value BACKEND_HTTP_PORT 8000)"
 LAB_JUICESHOP_DOMAIN="$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
 LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
+LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
 
 # ── Directory setup ────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ manifest = {
         "lab_env": "${LAB_ENV}",
         "vhosts": {
             "juiceshop": "${LAB_JUICESHOP_DOMAIN}",
+            "ftw": "${LAB_FTW_DOMAIN}",
             "dvwa": "${LAB_DVWA_DOMAIN}",
             "wordpress": "${LAB_WP_DOMAIN}"
         }
@@ -132,6 +134,21 @@ sample_container_resources() {
 import json
 print(json.dumps({"mem_mb_peak": ${mem_peak}, "cpu_pct_avg": ${cpu_avg}, "samples": ${samples}}))
 PY
+}
+
+copy_audit_log_snapshot() {
+  local out_dir="$1"
+  local out_file="${2:-${out_dir}/coraza-audit.log}"
+  local coraza_id
+  coraza_id="$(docker ps --filter "name=coraza" --format "{{.ID}}" | head -1 || true)"
+  if [[ -z "${coraza_id}" ]]; then
+    echo "Note: coraza container not found; audit snapshot skipped." >&2
+    return 0
+  fi
+  docker cp "${coraza_id}:/var/log/coraza/audit.log" "${out_file}" 2>/dev/null || {
+    echo "Note: could not copy Coraza audit log to ${out_file}." >&2
+    return 0
+  }
 }
 
 # ── Output helpers ─────────────────────────────────────────────────────────

@@ -200,12 +200,15 @@ pl2_policy_id="$(ensure_policy "${LAB_PL2_POLICY_NAME}" "${pl2_body}")"
 
 LAB_JUICESHOP_DOMAIN="$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
 LAB_JUICESHOP_BACKEND_URL="$(env_value LAB_JUICESHOP_BACKEND_URL http://juiceshop:3000)"
+LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
+LAB_FTW_BACKEND_URL="$(env_value LAB_FTW_BACKEND_URL http://ftw-backend:8080)"
 LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
 LAB_DVWA_BACKEND_URL="$(env_value LAB_DVWA_BACKEND_URL http://dvwa:80)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_WP_BACKEND_URL="$(env_value LAB_WP_BACKEND_URL http://wordpress:80)"
 
 ensure_vhost "${LAB_JUICESHOP_DOMAIN}" "${LAB_JUICESHOP_BACKEND_URL}" "OWASP Juice Shop — intentionally vulnerable app" "${baseline_policy_id}"
+ensure_vhost "${LAB_FTW_DOMAIN}" "${LAB_FTW_BACKEND_URL}" "Albedo — CRS go-ftw regression backend" "${baseline_policy_id}"
 ensure_vhost "${LAB_DVWA_DOMAIN}" "${LAB_DVWA_BACKEND_URL}" "DVWA — Damn Vulnerable Web Application" "${baseline_policy_id}"
 ensure_vhost "${LAB_WP_DOMAIN}" "${LAB_WP_BACKEND_URL}" "WordPress — real CMS for FP measurement (no CRS exclusions)" "${baseline_policy_id}"
 
@@ -224,6 +227,7 @@ curl -sf --max-time 30 \
 echo
 echo "Eval lab is ready."
 echo "  Juice Shop:  curl -H 'Host: ${LAB_JUICESHOP_DOMAIN}' ${WAF_BASE_URL}/"
+echo "  FTW backend: curl -H 'Host: ${LAB_FTW_DOMAIN}' ${WAF_BASE_URL}/"
 echo "  DVWA:        curl -H 'Host: ${LAB_DVWA_DOMAIN}' ${WAF_BASE_URL}/"
 echo "  WordPress:   curl -H 'Host: ${LAB_WP_DOMAIN}' ${WAF_BASE_URL}/"
 echo
