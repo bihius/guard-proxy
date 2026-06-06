@@ -183,21 +183,19 @@ token="$(api_json POST /auth/login "" "${login_body}" | python3 -c 'import json,
 LAB_POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
 LAB_POLICY_PARANOIA="$(env_value LAB_POLICY_PARANOIA 1)"
 LAB_POLICY_INBOUND_THRESHOLD="$(env_value LAB_POLICY_INBOUND_THRESHOLD 5)"
-LAB_POLICY_OUTBOUND_THRESHOLD="$(env_value LAB_POLICY_OUTBOUND_THRESHOLD 4)"
 
-baseline_body="$(printf '{"name":%s,"description":"Lab evaluation baseline — PL%s anomaly threshold %s block","paranoia_level":%s,"inbound_anomaly_threshold":%s,"outbound_anomaly_threshold":%s,"enforcement_mode":"block"}' \
+baseline_body="$(printf '{"name":%s,"description":"Lab evaluation baseline — PL%s anomaly threshold %s block","paranoia_level":%s,"inbound_anomaly_threshold":%s,"enforcement_mode":"block"}' \
   "$(json_string "${LAB_POLICY_NAME}")" "${LAB_POLICY_PARANOIA}" "${LAB_POLICY_INBOUND_THRESHOLD}" \
-  "${LAB_POLICY_PARANOIA}" "${LAB_POLICY_INBOUND_THRESHOLD}" "${LAB_POLICY_OUTBOUND_THRESHOLD}")"
+  "${LAB_POLICY_PARANOIA}" "${LAB_POLICY_INBOUND_THRESHOLD}")"
 baseline_policy_id="$(ensure_policy "${LAB_POLICY_NAME}" "${baseline_body}")"
 
 LAB_PL2_POLICY_NAME="$(env_value LAB_PL2_POLICY_NAME 'Lab PL2')"
 LAB_PL2_POLICY_PARANOIA="$(env_value LAB_PL2_POLICY_PARANOIA 2)"
 LAB_PL2_POLICY_INBOUND_THRESHOLD="$(env_value LAB_PL2_POLICY_INBOUND_THRESHOLD 3)"
-LAB_PL2_POLICY_OUTBOUND_THRESHOLD="$(env_value LAB_PL2_POLICY_OUTBOUND_THRESHOLD 3)"
 
-pl2_body="$(printf '{"name":%s,"description":"Lab evaluation high-paranoia — PL%s anomaly threshold %s block","paranoia_level":%s,"inbound_anomaly_threshold":%s,"outbound_anomaly_threshold":%s,"enforcement_mode":"block"}' \
+pl2_body="$(printf '{"name":%s,"description":"Lab evaluation high-paranoia — PL%s anomaly threshold %s block","paranoia_level":%s,"inbound_anomaly_threshold":%s,"enforcement_mode":"block"}' \
   "$(json_string "${LAB_PL2_POLICY_NAME}")" "${LAB_PL2_POLICY_PARANOIA}" "${LAB_PL2_POLICY_INBOUND_THRESHOLD}" \
-  "${LAB_PL2_POLICY_PARANOIA}" "${LAB_PL2_POLICY_INBOUND_THRESHOLD}" "${LAB_PL2_POLICY_OUTBOUND_THRESHOLD}")"
+  "${LAB_PL2_POLICY_PARANOIA}" "${LAB_PL2_POLICY_INBOUND_THRESHOLD}")"
 pl2_policy_id="$(ensure_policy "${LAB_PL2_POLICY_NAME}" "${pl2_body}")"
 
 # ── Vhosts ─────────────────────────────────────────────────────────────────
