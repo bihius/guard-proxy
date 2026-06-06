@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # setup-lab.sh — Bring up the evaluation lab and register all target vhosts.
 #
-# Extends the demo stack with WordPress/Juice Shop/DVWA targets, seeds two
+# Extends the real Guard Proxy stack with WordPress/Juice Shop/DVWA targets, seeds two
 # WAF policies (baseline PL1 and high-paranoia PL2), and wires each target
 # domain through HAProxy via the guard-proxy backend API.
 #
 # Prerequisites:
-#   - deploy/demo/.env   (copy from deploy/demo/.env.example)
+#   - deploy/docker/.env (copy from deploy/docker/.env.example)
 #   - benchmarks/lab/.env (copy from benchmarks/lab/.env.example)
 #   - CRS submodule initialised: git submodule update --init --recursive
 #   - Docker with Docker Compose v2
@@ -17,9 +17,9 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-DEMO_COMPOSE="${REPO_ROOT}/deploy/demo/docker-compose.yml"
+CORE_COMPOSE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
 TARGETS_COMPOSE="${SCRIPT_DIR}/docker-compose.targets.yml"
-DEMO_ENV="${REPO_ROOT}/deploy/demo/.env"
+CORE_ENV="${REPO_ROOT}/deploy/docker/.env"
 LAB_ENV="${SCRIPT_DIR}/.env"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-240}"
 SKIP_COMPOSE=false
@@ -30,7 +30,7 @@ for arg in "$@"; do
   esac
 done
 
-for f in "${DEMO_ENV}" "${LAB_ENV}"; do
+for f in "${CORE_ENV}" "${LAB_ENV}"; do
   if [[ ! -f "${f}" ]]; then
     echo "Missing ${f}. Copy the matching .env.example first." >&2
     exit 1
@@ -38,21 +38,21 @@ for f in "${DEMO_ENV}" "${LAB_ENV}"; do
 done
 
 if docker compose version >/dev/null 2>&1; then
-  COMPOSE=(docker compose -f "${DEMO_COMPOSE}" -f "${TARGETS_COMPOSE}" --env-file "${DEMO_ENV}" --env-file "${LAB_ENV}")
+  COMPOSE=(docker compose -f "${CORE_COMPOSE}" -f "${TARGETS_COMPOSE}" --env-file "${CORE_ENV}" --env-file "${LAB_ENV}")
 elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE=(docker-compose -f "${DEMO_COMPOSE}" -f "${TARGETS_COMPOSE}" --env-file "${DEMO_ENV}" --env-file "${LAB_ENV}")
+  COMPOSE=(docker-compose -f "${CORE_COMPOSE}" -f "${TARGETS_COMPOSE}" --env-file "${CORE_ENV}" --env-file "${LAB_ENV}")
 else
   echo "Docker Compose is required." >&2
   exit 1
 fi
 
-# ── Helpers (mirrored from deploy/demo/setup-demo.sh) ──────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────
 
 env_value() {
   local name="$1"
   local fallback="${2:-}"
   local value
-  value="$(grep -E "^${name}=" "${LAB_ENV}" "${DEMO_ENV}" 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
+  value="$(grep -E "^${name}=" "${CORE_ENV}" "${LAB_ENV}" 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
   if [[ -z "${value}" ]]; then printf '%s' "${fallback}"; else printf '%s' "${value}"; fi
 }
 
@@ -154,14 +154,12 @@ PY
 ensure_crs_bundle
 
 if [[ "${SKIP_COMPOSE}" == false ]]; then
-  echo "Starting demo + lab target stack..."
+  echo "Starting Guard Proxy + lab target stack..."
   "${COMPOSE[@]}" up -d --build
 
   wait_for_healthy backend
   wait_for_healthy coraza
   wait_for_healthy haproxy
-  wait_for_healthy demo-app
-  wait_for_healthy demo-api
   wait_for_healthy juiceshop
   wait_for_healthy dvwa
   wait_for_healthy wordpress

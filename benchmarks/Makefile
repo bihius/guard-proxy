@@ -1,9 +1,10 @@
 REPO_ROOT    := $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
-DEMO_COMPOSE := $(REPO_ROOT)/deploy/demo/docker-compose.yml
+CORE_COMPOSE := $(REPO_ROOT)/deploy/docker/docker-compose.yml
 LAB_COMPOSE  := $(REPO_ROOT)/benchmarks/lab/docker-compose.targets.yml
-DEMO_ENV     := $(REPO_ROOT)/deploy/demo/.env
+CORE_ENV     := $(REPO_ROOT)/deploy/docker/.env
 LAB_ENV      := $(REPO_ROOT)/benchmarks/lab/.env
 RUNNERS      := $(REPO_ROOT)/benchmarks/lab/runners
+COMPOSE      := docker compose -f $(CORE_COMPOSE) -f $(LAB_COMPOSE) --env-file $(CORE_ENV) --env-file $(LAB_ENV)
 
 RUN_ID       ?= $(shell date +%Y%m%d-%H%M%S)
 TARGET_VHOST ?= juice.local
@@ -16,17 +17,13 @@ DIRECT_PORT  ?= 3000
 
 # ── Lab lifecycle ──────────────────────────────────────────────────────────
 
-## Bring up the demo + all lab targets and register vhosts.
+## Bring up the real stack + all lab targets and register vhosts.
 lab-up:
-	@echo "==> Starting guard-proxy demo + lab targets..."
-	docker compose \
-	  -f $(DEMO_COMPOSE) \
-	  -f $(LAB_COMPOSE) \
-	  --env-file $(DEMO_ENV) \
-	  --env-file $(LAB_ENV) \
-	  up -d --build
+	@echo "==> Starting guard-proxy stack + lab targets..."
+	$(COMPOSE) up -d --build
+	@echo "==> Seeding admin user..."
+	$(COMPOSE) exec -T backend /app/.venv/bin/python scripts/seed_admin.py
 	@echo "==> Seeding vhosts..."
-	bash $(REPO_ROOT)/deploy/demo/setup-demo.sh
 	bash $(REPO_ROOT)/benchmarks/lab/setup-lab.sh --skip-compose
 
 ## Stop the lab (preserve volumes).
@@ -91,7 +88,7 @@ help:
 	@echo "Guard Proxy Evaluation Lab"
 	@echo ""
 	@echo "Setup:"
-	@echo "  cp deploy/demo/.env.example deploy/demo/.env"
+	@echo "  cp deploy/docker/.env.example deploy/docker/.env"
 	@echo "  cp benchmarks/lab/.env.example benchmarks/lab/.env"
 	@echo "  git submodule update --init --recursive"
 	@echo ""

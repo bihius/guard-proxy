@@ -6,7 +6,7 @@
 #
 # Usage (from repo root):
 #   docker run --rm \
-#     --network guard-proxy-demo_gp_internal \
+#     --network guard-proxy_gp_internal \
 #     -v "$(pwd)/configs/coraza/crs/tests/regression/tests:/tests:ro" \
 #     -v "$(pwd)/benchmarks/lab/scenarios/crs-ftw/config.yaml:/config.yaml:ro" \
 #     ghcr.io/coreruleset/go-ftw:latest \

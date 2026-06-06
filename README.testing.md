@@ -85,9 +85,11 @@ Full WAF evaluation with real target apps (WordPress, Juice Shop, DVWA):
 
 ```sh
 # Prerequisites
-cp deploy/demo/.env.example deploy/demo/.env
+cp deploy/docker/.env.example deploy/docker/.env
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 git submodule update --init --recursive
+
+# Ensure deploy/docker/.env has ADMIN_EMAIL and ADMIN_PASSWORD set.
 
 # Bring up the lab
 make eval-up
