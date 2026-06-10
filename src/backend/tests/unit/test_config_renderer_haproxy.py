@@ -267,8 +267,18 @@ def test_haproxy_backend_rejects_empty_values(kwargs: dict) -> None:
 
 @pytest.mark.skipif(shutil.which("haproxy") is None, reason="haproxy is not installed")
 def test_rendered_haproxy_template_validates_with_haproxy(tmp_path: Path) -> None:
+    rendered = render_haproxy_cfg(_m1_reference_context())
+
+    # In production this path is provided by the container image (see
+    # deploy/docker/docker-compose.yml). For local validation, point it at
+    # the repo's reference coraza.cfg so `haproxy -c` can resolve it.
+    coraza_cfg = REPO_ROOT / "configs/haproxy/coraza.cfg"
+    rendered = rendered.replace(
+        "/usr/local/etc/haproxy/coraza.cfg", str(coraza_cfg)
+    )
+
     rendered_path = tmp_path / "haproxy.cfg"
-    rendered_path.write_text(render_haproxy_cfg(_m1_reference_context()))
+    rendered_path.write_text(rendered)
 
     result = subprocess.run(
         ["haproxy", "-c", "-f", str(rendered_path)],
