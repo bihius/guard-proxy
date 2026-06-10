@@ -130,9 +130,9 @@ with open(os.path.join(out_dir, "detection.json"), "w") as f:
 PY
 
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
-POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
+resolve_policy
 
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}"
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}" "${POLICY_PARANOIA}"
 
 echo ""
 echo "ZAP alerts: $(python3 -c "import json; d=json.load(open('${OUT_DIR}/detection.json')); print(d.get('total_alerts', 'n/a'))")"
