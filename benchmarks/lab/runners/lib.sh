@@ -159,7 +159,8 @@ write_summary() {
   local policy_name="$3"
   local detection_json="$4"      # {"true_positive":...,"false_negative":...,"tpr":...,"fpr":...}
   local performance_json="$5"    # {"rps":...,"latency_ms":...} or {}
-  local resources_json="${6:-{}}"
+  local resources_json="${6:-}"
+  if [[ -z "${resources_json}" ]]; then resources_json='{}'; fi
 
   RUN_ID="${RUN_ID}" RUN_DIR="${RUN_DIR}" SCENARIO="${scenario}" \
   TARGET_VHOST="${target_vhost}" POLICY_NAME="${policy_name}" \
