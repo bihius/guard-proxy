@@ -240,7 +240,7 @@ cp benchmarks/lab/.env.example benchmarks/lab/.env
 # deploy/docker/.env must include ADMIN_EMAIL and ADMIN_PASSWORD for lab seeding.
 
 # 5. Bring up the lab
-make eval-up
+make lab-up
 ```
 
 ### 8.2 Running the evaluation
@@ -258,7 +258,7 @@ for i in 1 2 3; do
 done
 
 # View results summary:
-make eval-results
+make results
 ```
 
 ### 8.3 Changing target vhost
@@ -281,6 +281,47 @@ RUN_ID=<id> make eval-metrics
 
 # Copy curated results to thesis:
 cp benchmarks/results/run-<id>/results.csv thesis/assets/figures/eval-results-<id>.csv
+```
+
+### 8.5 Paranoia level sweep (PL1 vs PL2)
+
+`make lab-up` (via `setup-lab.sh`) seeds two policies — `Lab Baseline` (PL1, anomaly
+threshold 5) and `Lab PL2` (PL2, anomaly threshold 3, see `benchmarks/lab/.env.example`
+`LAB_PL2_POLICY_*`) — and binds all lab vhosts to PL1 by default.
+
+`POLICY=pl1|pl2` selects which of these policies is active for an `eval-*` target
+(default `pl1`). Each policy pass writes to its own results directory,
+`benchmarks/results/run-<RUN_ID>-pl1/` or `run-<RUN_ID>-pl2/`, and every `summary.json` /
+`results.csv` row is tagged with the active `paranoia_level` (1 or 2) so the two passes
+can be compared side-by-side.
+
+Run both passes for every tool/target with one command:
+
+```bash
+# Runs eval-all at PL1, switches the lab vhosts to PL2, then runs eval-all again.
+# Produces benchmarks/results/run-<id>-pl1/ and run-<id>-pl2/.
+make eval-sweep
+```
+
+Equivalent manual steps (e.g. to re-run just one tool at PL2):
+
+```bash
+# Switch all lab vhosts to PL2 and reload HAProxy/Coraza config:
+make set-policy POLICY=pl2
+
+# Run (or re-run) any eval target at PL2:
+make eval-nuclei POLICY=pl2
+
+# Switch back to PL1 when done:
+make set-policy POLICY=pl1
+```
+
+For the thesis, copy both CSVs (or concatenate them — they share the same column set
+plus `paranoia_level`):
+
+```bash
+cp benchmarks/results/run-<id>-pl1/results.csv thesis/assets/figures/eval-results-<id>-pl1.csv
+cp benchmarks/results/run-<id>-pl2/results.csv thesis/assets/figures/eval-results-<id>-pl2.csv
 ```
 
 ---
@@ -349,4 +390,7 @@ ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/
 
 Flat CSV with one row per scenario run. Consumed directly by `thesis/chapters/06-testy.md` tables.
 
-Columns include: `run_id`, `scenario`, `target_vhost`, `policy`, `tpr`, `fpr`, `crs_conformance_rate`, `crs_passed`, `crs_failed`, `tp`, `fn`, `tn`, `fp`, `corpus_cases`, `zap_total_alerts`, `nuclei_findings`, `waf_blocks_from_log`, `rps_waf`, `rps_direct`, `rps_degradation_pct`, latency percentiles, and resource fields.
+Columns include: `run_id`, `scenario`, `target_vhost`, `policy`, `paranoia_level`, `tpr`, `fpr`, `crs_conformance_rate`, `crs_passed`, `crs_failed`, `tp`, `fn`, `tn`, `fp`, `corpus_cases`, `zap_total_alerts`, `nuclei_findings`, `waf_blocks_from_log`, `rps_waf`, `rps_direct`, `rps_degradation_pct`, latency percentiles, and resource fields.
+
+`paranoia_level` is `1` for the baseline (`Lab Baseline`) policy and `2` for the high-paranoia
+(`Lab PL2`) policy — see §8.5 for running both passes.

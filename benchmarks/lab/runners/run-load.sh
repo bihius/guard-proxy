@@ -199,9 +199,9 @@ c = json.loads('''${RESOURCES_CORAZA}''')
 h = json.loads('''${RESOURCES_HAPROXY}''')
 print(json.dumps({'coraza': c, 'haproxy': h}))
 ")"
-POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
+resolve_policy
 
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "{}" "${PERFORMANCE}" "${RESOURCES_JSON}"
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "{}" "${PERFORMANCE}" "${RESOURCES_JSON}" "${POLICY_PARANOIA}"
 
 echo ""
 python3 - <<PY
