@@ -222,6 +222,9 @@ The run is not declared “successful” or “failed” based on security thres
 On the Proxmox LXC (after provisioning per §2):
 
 ```bash
+# 0. Install dependencies
+apt update && apt install -y git curl
+
 # 1. Install Docker
 curl -fsSL https://get.docker.com | sh
 usermod -aG docker root
