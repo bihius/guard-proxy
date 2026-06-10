@@ -40,6 +40,36 @@ echo ""
 # The Host: header is injected via ZAP's built-in HTTP Request Header Replacer
 # so that every request ZAP sends to haproxy:80 carries the correct vhost name
 # and benchmark correlation tags.
+# NOTE: zap-baseline.py does NOT accept top-level "-config key=value" args — its
+# argument parser treats any "-c..." flag as "-c" (config_file), so "-config"
+# gets parsed as "-c" with value "onfig", causing a FileNotFoundError. ZAP-side
+# -config overrides must instead be passed bundled inside a single -z argument,
+# per `-z zap_options` ("-z \"-config aaa=bbb -config ccc=ddd\"").
+ZAP_CONFIG_OPTS="-config replacer.full_list(0).description=host-header \
+-config replacer.full_list(0).enabled=true \
+-config replacer.full_list(0).matchtype=REQ_HEADER \
+-config replacer.full_list(0).matchstr=Host \
+-config replacer.full_list(0).replacement=${TARGET_VHOST} \
+-config replacer.full_list(0).initiators= \
+-config replacer.full_list(1).description=eval-run \
+-config replacer.full_list(1).enabled=true \
+-config replacer.full_list(1).matchtype=REQ_HEADER \
+-config replacer.full_list(1).matchstr=X-GP-Eval-Run \
+-config replacer.full_list(1).replacement=${RUN_ID} \
+-config replacer.full_list(1).initiators= \
+-config replacer.full_list(2).description=eval-scenario \
+-config replacer.full_list(2).enabled=true \
+-config replacer.full_list(2).matchtype=REQ_HEADER \
+-config replacer.full_list(2).matchstr=X-GP-Eval-Scenario \
+-config replacer.full_list(2).replacement=${SCENARIO} \
+-config replacer.full_list(2).initiators= \
+-config replacer.full_list(3).description=eval-case \
+-config replacer.full_list(3).enabled=true \
+-config replacer.full_list(3).matchtype=REQ_HEADER \
+-config replacer.full_list(3).matchstr=X-GP-Eval-Case \
+-config replacer.full_list(3).replacement=zap \
+-config replacer.full_list(3).initiators="
+
 docker run --rm \
   --network "${DOCKER_NETWORK}" \
   -v "${OUT_DIR}:/zap/wrk:rw" \
@@ -51,30 +81,7 @@ docker run --rm \
     -J zap.json \
     -r zap.html \
     -I \
-    -config "replacer.full_list(0).description=host-header" \
-    -config "replacer.full_list(0).enabled=true" \
-    -config "replacer.full_list(0).matchtype=REQ_HEADER" \
-    -config "replacer.full_list(0).matchstr=Host" \
-    -config "replacer.full_list(0).replacement=${TARGET_VHOST}" \
-    -config "replacer.full_list(0).initiators=" \
-    -config "replacer.full_list(1).description=eval-run" \
-    -config "replacer.full_list(1).enabled=true" \
-    -config "replacer.full_list(1).matchtype=REQ_HEADER" \
-    -config "replacer.full_list(1).matchstr=X-GP-Eval-Run" \
-    -config "replacer.full_list(1).replacement=${RUN_ID}" \
-    -config "replacer.full_list(1).initiators=" \
-    -config "replacer.full_list(2).description=eval-scenario" \
-    -config "replacer.full_list(2).enabled=true" \
-    -config "replacer.full_list(2).matchtype=REQ_HEADER" \
-    -config "replacer.full_list(2).matchstr=X-GP-Eval-Scenario" \
-    -config "replacer.full_list(2).replacement=${SCENARIO}" \
-    -config "replacer.full_list(2).initiators=" \
-    -config "replacer.full_list(3).description=eval-case" \
-    -config "replacer.full_list(3).enabled=true" \
-    -config "replacer.full_list(3).matchtype=REQ_HEADER" \
-    -config "replacer.full_list(3).matchstr=X-GP-Eval-Case" \
-    -config "replacer.full_list(3).replacement=zap" \
-    -config "replacer.full_list(3).initiators=" \
+    -z "${ZAP_CONFIG_OPTS}" \
   > "${OUT_DIR}/zap-stdout.txt" 2>&1 || true
 
 echo "ZAP scan complete. Parsing results..."
@@ -90,7 +97,10 @@ out_dir = os.environ.get("OUT_DIR", ".")
 zap_json = os.path.join(out_dir, "zap.json")
 
 if not os.path.exists(zap_json):
-    print(json.dumps({"error": "zap.json not found — scan may have failed or produced no output"}))
+    detection = {"error": "zap.json not found — scan may have failed or produced no output"}
+    print(json.dumps(detection))
+    with open(os.path.join(out_dir, "detection.json"), "w") as f:
+        json.dump(detection, f, indent=2)
     sys.exit(0)
 
 with open(zap_json) as f:

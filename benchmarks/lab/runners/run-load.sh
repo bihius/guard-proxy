@@ -28,7 +28,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 TARGET_VHOST="${TARGET_VHOST:-${LAB_JUICESHOP_DOMAIN}}"
 DIRECT_HOST="${DIRECT_HOST:-juiceshop}"    # Docker service name for direct access
 DIRECT_PORT="${DIRECT_PORT:-3000}"         # Target app port (no HAProxy)
-WRK_IMAGE="ghcr.io/williamyeh/wrk:4.2.0"
+# NOTE: ghcr.io/williamyeh/wrk:4.2.0 is not pullable (registry denies access).
+# williamyeh/wrk (Docker Hub, no ghcr.io prefix, "latest" tag) is the same
+# wrk 4.2.0 build and is publicly pullable.
+WRK_IMAGE="williamyeh/wrk:latest"
 LUA_SCRIPT="${REPO_ROOT}/benchmarks/lab/scenarios/load/benign-mix.lua"
 
 THREADS="${LOAD_THREADS:-4}"
