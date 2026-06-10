@@ -161,24 +161,27 @@ write_summary() {
   local performance_json="$5"    # {"rps":...,"latency_ms":...} or {}
   local resources_json="${6:-{}}"
 
-  python3 - <<PY
+  RUN_ID="${RUN_ID}" RUN_DIR="${RUN_DIR}" SCENARIO="${scenario}" \
+  TARGET_VHOST="${target_vhost}" POLICY_NAME="${policy_name}" \
+  DETECTION_JSON="${detection_json}" PERFORMANCE_JSON="${performance_json}" \
+  RESOURCES_JSON="${resources_json}" python3 - <<'PY'
 import json, os
 
-detection = json.loads('''${detection_json}''')
-performance = json.loads('''${performance_json}''')
-resources = json.loads('''${resources_json}''')
+detection = json.loads(os.environ["DETECTION_JSON"])
+performance = json.loads(os.environ["PERFORMANCE_JSON"])
+resources = json.loads(os.environ["RESOURCES_JSON"])
 
 summary = {
-    "run_id": "${RUN_ID}",
-    "scenario": "${scenario}",
-    "target_vhost": "${target_vhost}",
-    "policy": {"name": "${policy_name}"},
+    "run_id": os.environ["RUN_ID"],
+    "scenario": os.environ["SCENARIO"],
+    "target_vhost": os.environ["TARGET_VHOST"],
+    "policy": {"name": os.environ["POLICY_NAME"]},
     "detection": detection,
     "performance": performance,
-    "resources": resources
+    "resources": resources,
 }
 
-out = "${RUN_DIR}/${scenario}/summary.json"
+out = os.path.join(os.environ["RUN_DIR"], os.environ["SCENARIO"], "summary.json")
 os.makedirs(os.path.dirname(out), exist_ok=True)
 with open(out, "w") as f:
     json.dump(summary, f, indent=2)
