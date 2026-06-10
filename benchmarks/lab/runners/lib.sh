@@ -34,6 +34,29 @@ LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
 
+# ── Policy selection ───────────────────────────────────────────────────────
+
+# Resolve the active policy for this run based on POLICY (pl1|pl2, default pl1).
+# Exports POLICY_NAME and POLICY_PARANOIA from the matching LAB_POLICY_* /
+# LAB_PL2_POLICY_* env vars.
+resolve_policy() {
+  local policy="${POLICY:-pl1}"
+  case "${policy}" in
+    pl1)
+      POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
+      POLICY_PARANOIA="$(env_value LAB_POLICY_PARANOIA 1)"
+      ;;
+    pl2)
+      POLICY_NAME="$(env_value LAB_PL2_POLICY_NAME 'Lab PL2')"
+      POLICY_PARANOIA="$(env_value LAB_PL2_POLICY_PARANOIA 2)"
+      ;;
+    *)
+      echo "Unknown POLICY '${policy}' (expected pl1 or pl2)." >&2
+      exit 1
+      ;;
+  esac
+}
+
 # ── Directory setup ────────────────────────────────────────────────────────
 
 setup_run_dir() {
@@ -160,6 +183,7 @@ write_summary() {
   local detection_json="$4"      # {"true_positive":...,"false_negative":...,"tpr":...,"fpr":...}
   local performance_json="$5"    # {"rps":...,"latency_ms":...} or {}
   local resources_json="${6:-{}}"
+  local policy_paranoia="${7:-}"
 
   python3 - <<PY
 import json, os
@@ -168,11 +192,19 @@ detection = json.loads('''${detection_json}''')
 performance = json.loads('''${performance_json}''')
 resources = json.loads('''${resources_json}''')
 
+policy = {"name": "${policy_name}"}
+paranoia_raw = "${policy_paranoia}"
+if paranoia_raw != "":
+    try:
+        policy["paranoia"] = int(paranoia_raw)
+    except ValueError:
+        policy["paranoia"] = paranoia_raw
+
 summary = {
     "run_id": "${RUN_ID}",
     "scenario": "${scenario}",
     "target_vhost": "${target_vhost}",
-    "policy": {"name": "${policy_name}"},
+    "policy": policy,
     "detection": detection,
     "performance": performance,
     "resources": resources
