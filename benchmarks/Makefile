@@ -139,7 +139,7 @@ help:
 	@echo "  DIRECT_HOST=<name>  Direct-access Docker service name"
 	@echo "  DIRECT_PORT=<port>  Direct-access port (bypasses HAProxy)"
 	@echo ""
-	@echo "Example (3 runs for thesis median):"
+	@echo "Example (3 runs for median):"
 	@echo "  for i in 1 2 3; do make eval-all; done"
 	@echo ""
 	@echo "Example (PL1 vs PL2 sweep across all tools/targets):"
