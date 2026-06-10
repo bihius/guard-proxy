@@ -12,8 +12,8 @@ pnpm run type-check # TypeScript compiler check
 pnpm run lint       # ESLint
 ```
 
-Backend must be running at `http://127.0.0.1:8000` (or set `VITE_API_BASE_URL` in `.env`).
-Copy `.env.example` to `.env` if you need to change the backend URL.
+Backend must be running at `http://127.0.0.1:8000` (requests to `/api/v1` are proxied to this target).
+Copy `.env.example` to `.env` if you need to change the proxy target via `VITE_DEV_SERVER_PROXY_TARGET`.
 
 ## Stack
 
