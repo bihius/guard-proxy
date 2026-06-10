@@ -119,8 +119,8 @@ with open(os.path.join(os.path.dirname(os.environ["CASES_JSONL"]), "detection.js
 PY
 
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
-POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}"
+resolve_policy
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}" "${POLICY_PARANOIA}"
 
 echo ""
 python3 - <<PY
