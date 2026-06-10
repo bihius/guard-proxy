@@ -48,7 +48,7 @@ describe("VHostFormModal (create)", () => {
       domain: "new.example.com",
       backend_url: "https://new.internal",
       description: null,
-      ssl_enabled: false,
+      ssl_enabled: false, ssl_provider: "none" as const, ssl_expires_at: null,
       is_active: true,
       policy_id: null,
       created_by: 1,

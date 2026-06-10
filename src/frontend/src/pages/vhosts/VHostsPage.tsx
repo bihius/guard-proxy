@@ -51,6 +51,23 @@ export function VHostsPage() {
           : <span className="text-muted-foreground">None</span>,
     },
     {
+      key: "ssl",
+      header: "SSL",
+      cell: (row) => (
+        <div className="space-y-1">
+          <StatusBadge
+            label={row.ssl_enabled ? "Enabled" : "Disabled"}
+            tone={row.ssl_enabled ? "success" : "warning"}
+          />
+          {row.ssl_enabled && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {row.ssl_provider === "letsencrypt" ? "Let's Encrypt" : row.ssl_provider === "upload" ? "Custom" : "None"}
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
       key: "status",
       header: "Status",
       cell: (row) => (

@@ -35,6 +35,7 @@ def _m1_reference_context() -> HaproxyRenderContext:
             HaproxyRoute(
                 vhost_acl_name="host_app",
                 vhost_hosts=("app.local", "localhost", "127.0.0.1"),
+                ssl_provider="none",
                 backend=HaproxyBackend(
                     name="be_app",
                     server_name="app",
@@ -59,6 +60,7 @@ def test_haproxy_template_parameterises_vhost_and_backend() -> None:
                 HaproxyRoute(
                     vhost_acl_name="host_api",
                     vhost_hosts=("api.example.com",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be_api",
                         server_name="api",
@@ -83,6 +85,7 @@ def test_haproxy_template_renders_multiple_vhost_routes() -> None:
                 HaproxyRoute(
                     vhost_acl_name="host_vhost_1",
                     vhost_hosts=("foo-bar.com",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be_vhost_1",
                         server_name="srv_vhost_1",
@@ -92,6 +95,7 @@ def test_haproxy_template_renders_multiple_vhost_routes() -> None:
                 HaproxyRoute(
                     vhost_acl_name="host_vhost_2",
                     vhost_hosts=("foo.bar.com",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be_vhost_2",
                         server_name="srv_vhost_2",
@@ -132,6 +136,7 @@ def test_haproxy_render_context_rejects_unsafe_acl_name(vhost_acl_name: str) -> 
                 HaproxyRoute(
                     vhost_acl_name=vhost_acl_name,
                     vhost_hosts=("safe.host",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be",
                         server_name="srv",
@@ -160,6 +165,7 @@ def test_haproxy_render_context_rejects_unsafe_host(host: str) -> None:
                 HaproxyRoute(
                     vhost_acl_name="safe_acl",
                     vhost_hosts=(host,),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be",
                         server_name="srv",
@@ -199,6 +205,7 @@ def test_haproxy_render_context_rejects_empty_acl_name() -> None:
                 HaproxyRoute(
                     vhost_acl_name="",
                     vhost_hosts=("safe.host",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be",
                         server_name="srv",
@@ -216,6 +223,7 @@ def test_haproxy_render_context_rejects_empty_host() -> None:
                 HaproxyRoute(
                     vhost_acl_name="safe_acl",
                     vhost_hosts=("",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be",
                         server_name="srv",
@@ -233,6 +241,7 @@ def test_haproxy_render_context_rejects_duplicate_identifiers() -> None:
                 HaproxyRoute(
                     vhost_acl_name="host_duplicate",
                     vhost_hosts=("one.example.com",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be_one",
                         server_name="srv_one",
@@ -242,6 +251,7 @@ def test_haproxy_render_context_rejects_duplicate_identifiers() -> None:
                 HaproxyRoute(
                     vhost_acl_name="host_duplicate",
                     vhost_hosts=("two.example.com",),
+                ssl_provider="none",
                     backend=HaproxyBackend(
                         name="be_two",
                         server_name="srv_two",
