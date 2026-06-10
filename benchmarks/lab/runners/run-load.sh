@@ -28,7 +28,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 TARGET_VHOST="${TARGET_VHOST:-${LAB_JUICESHOP_DOMAIN}}"
 DIRECT_HOST="${DIRECT_HOST:-juiceshop}"    # Docker service name for direct access
 DIRECT_PORT="${DIRECT_PORT:-3000}"         # Target app port (no HAProxy)
-WRK_IMAGE="ghcr.io/williamyeh/wrk:4.2.0"
+# NOTE: ghcr.io/williamyeh/wrk:4.2.0 is not pullable (registry denies access).
+# williamyeh/wrk (Docker Hub, no ghcr.io prefix, "latest" tag) is the same
+# wrk 4.2.0 build and is publicly pullable.
+WRK_IMAGE="williamyeh/wrk:latest"
 LUA_SCRIPT="${REPO_ROOT}/benchmarks/lab/scenarios/load/benign-mix.lua"
 
 THREADS="${LOAD_THREADS:-4}"
@@ -199,9 +202,9 @@ c = json.loads('''${RESOURCES_CORAZA}''')
 h = json.loads('''${RESOURCES_HAPROXY}''')
 print(json.dumps({'coraza': c, 'haproxy': h}))
 ")"
-POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
+resolve_policy
 
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "{}" "${PERFORMANCE}" "${RESOURCES_JSON}"
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "{}" "${PERFORMANCE}" "${RESOURCES_JSON}" "${POLICY_PARANOIA}"
 
 echo ""
 python3 - <<PY
