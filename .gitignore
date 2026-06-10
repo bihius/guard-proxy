@@ -145,3 +145,6 @@ CODEX.md
 .opencode/
 .opencodeignore
 opencode.json
+
+scripts/setup-worktree.sh
+

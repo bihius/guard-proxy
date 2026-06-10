@@ -251,8 +251,8 @@ make lab-up
 ```bash
 cd /opt/guard-proxy
 
-# Single pass (for smoke check):
-make eval-all
+# Single pass (for smoke check with PL1):
+make eval-all RUN_ID=$(date +%Y%m%d-%H%M%S) POLICY=pl1
 
 # Three passes for thesis (median of three):
 for i in 1 2 3; do
