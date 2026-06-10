@@ -11,8 +11,15 @@ TARGET_VHOST ?=
 DIRECT_HOST  ?= juiceshop
 DIRECT_PORT  ?= 3000
 
+# POLICY selects which WAF policy is active for the run: pl1 (baseline, default)
+# or pl2 (high-paranoia sweep, see benchmarks/lab/.env.example LAB_PL2_POLICY_*).
+POLICY       ?= pl1
+# Each policy pass gets its own results directory: run-<RUN_ID>-pl1 / run-<RUN_ID>-pl2.
+EFFECTIVE_RUN_ID := $(RUN_ID)-$(POLICY)
+
 .PHONY: lab-up lab-down lab-clean \
         eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics eval-all \
+        set-policy eval-sweep \
         results help
 
 # ── Lab lifecycle ──────────────────────────────────────────────────────────
@@ -38,41 +45,61 @@ lab-clean:
 
 ## CRS regression suite. Reports go-ftw CRS conformance, not TPR/FPR.
 eval-ftw:
-	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(RUN_ID)/ftw
-	RUN_ID=$(RUN_ID) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),ftw.local) \
+	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(EFFECTIVE_RUN_ID)/ftw
+	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),ftw.local) \
 	  bash $(RUNNERS)/run-ftw.sh
 
 ## Tagged labeled benign/attack corpus (the only clean TP/FN/TN/FP source).
 eval-corpus:
-	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(RUN_ID)/corpus-$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local)
-	RUN_ID=$(RUN_ID) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local) \
+	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(EFFECTIVE_RUN_ID)/corpus-$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local)
+	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local) \
 	  bash $(RUNNERS)/run-corpus.sh
 
 ## ZAP baseline scan (supplemental scanner-assisted WordPress coverage).
 eval-zap:
-	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(RUN_ID)/zap-$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local)
-	RUN_ID=$(RUN_ID) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local) \
+	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(EFFECTIVE_RUN_ID)/zap-$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local)
+	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local) \
 	  bash $(RUNNERS)/run-zap.sh
 
 ## Nuclei CVE templates (supplemental reached-app/bypass evidence).
 eval-nuclei:
-	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(RUN_ID)/nuclei-$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local)
-	RUN_ID=$(RUN_ID) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local) \
+	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(EFFECTIVE_RUN_ID)/nuclei-$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local)
+	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local) \
 	  bash $(RUNNERS)/run-nuclei.sh
 
 ## Latency + RPS load test (WAF vs direct). Measures overhead.
 eval-load:
-	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(RUN_ID)/load-$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local)
-	RUN_ID=$(RUN_ID) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local) \
+	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(EFFECTIVE_RUN_ID)/load-$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local)
+	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),juice.local) \
 	  DIRECT_HOST=$(DIRECT_HOST) DIRECT_PORT=$(DIRECT_PORT) \
 	  bash $(RUNNERS)/run-load.sh
 
 ## Aggregate all scenario outputs into results.csv + report.json.
 eval-metrics:
-	RUN_ID=$(RUN_ID) bash $(RUNNERS)/collect-metrics.sh
+	RUN_ID=$(EFFECTIVE_RUN_ID) bash $(RUNNERS)/collect-metrics.sh
 
 ## Run all scenarios (ftw → corpus → zap → nuclei → load → metrics) in one pass.
+## POLICY=pl1 (default) or POLICY=pl2 selects the active WAF policy; results land
+## in benchmarks/results/run-<RUN_ID>-<POLICY>/.
 eval-all: eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics
+
+# ── Paranoia level sweep ────────────────────────────────────────────────────
+
+## Switch all lab vhosts to the given POLICY (pl1|pl2) and reload HAProxy/Coraza config.
+set-policy:
+	POLICY=$(POLICY) bash $(REPO_ROOT)/benchmarks/lab/set-policy.sh
+
+## Run the full eval suite at PL1, then switch to PL2 and run it again, sharing
+## one base RUN_ID. Produces run-<id>-pl1/ and run-<id>-pl2/ for side-by-side comparison.
+eval-sweep:
+	@base_run_id=$(RUN_ID); \
+	echo "==> PL1 pass (run-$${base_run_id}-pl1)"; \
+	$(MAKE) set-policy POLICY=pl1; \
+	$(MAKE) eval-all RUN_ID=$${base_run_id} POLICY=pl1; \
+	echo "==> PL2 pass (run-$${base_run_id}-pl2)"; \
+	$(MAKE) set-policy POLICY=pl2; \
+	$(MAKE) eval-all RUN_ID=$${base_run_id} POLICY=pl2; \
+	echo "==> Done. Compare benchmarks/results/run-$${base_run_id}-pl1/results.csv and run-$${base_run_id}-pl2/results.csv"
 
 # ── Results summary ────────────────────────────────────────────────────────
 
@@ -103,9 +130,14 @@ help:
 	@echo ""
 	@echo "Variables:"
 	@echo "  RUN_ID=<id>         Override run ID (default: timestamp)"
+	@echo "  POLICY=pl1|pl2      Active WAF policy (default: pl1). Results go to"
+	@echo "                      benchmarks/results/run-<RUN_ID>-<POLICY>/."
 	@echo "  TARGET_VHOST=<host> Override scenario vhost (defaults: ftw.local/wp.local/juice.local)"
 	@echo "  DIRECT_HOST=<name>  Direct-access Docker service name"
 	@echo "  DIRECT_PORT=<port>  Direct-access port (bypasses HAProxy)"
 	@echo ""
 	@echo "Example (3 runs for thesis median):"
 	@echo "  for i in 1 2 3; do make eval-all; done"
+	@echo ""
+	@echo "Example (PL1 vs PL2 sweep across all tools/targets):"
+	@echo "  make eval-sweep"

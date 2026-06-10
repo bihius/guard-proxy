@@ -105,6 +105,7 @@ for s in summaries:
         "scenario":           scenario,
         "target_vhost":       vhost,
         "policy":             s.get("policy", {}).get("name", ""),
+        "paranoia_level":     s.get("policy", {}).get("paranoia", ""),
         "tpr":                det.get("tpr", ""),
         "fpr":                det.get("fpr", ""),
         "crs_conformance_rate": det.get("crs_conformance_rate", ""),
