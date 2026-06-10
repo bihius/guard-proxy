@@ -99,7 +99,12 @@ export async function apiRequest<T>(
     }
   }
 
-  const response = await fetch(new URL(path, getApiBaseUrl()).toString(), {
+  const base = getApiBaseUrl();
+  const cleanBase = base.endsWith("/") ? base.slice(0, -1) : base;
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${cleanBase}${cleanPath}`;
+
+  const response = await fetch(url, {
     method: options.method ?? "GET",
     headers,
     body: buildBody(options.body),
