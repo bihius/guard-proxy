@@ -50,7 +50,7 @@ send_case() {
   local case_id="$1" expected="$2" category="$3" method="$4" path="$5"
   local status
   status="$(
-    docker run --rm --network "${DOCKER_NETWORK}" curlimages/curl:8.11.1 \
+    docker run --rm --cpuset-cpus="21-23" --network "${DOCKER_NETWORK}" curlimages/curl:8.11.1 \
       --silent --show-error --output /dev/null --write-out '%{http_code}' \
       --max-time 10 \
       -X "${method}" \
