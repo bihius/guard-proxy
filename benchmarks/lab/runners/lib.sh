@@ -42,13 +42,17 @@ LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
 resolve_policy() {
   local policy="${POLICY:-pl1}"
   case "${policy}" in
+    pl1)
+      POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
+      POLICY_PARANOIA="$(env_value LAB_POLICY_PARANOIA 1)"
+      ;;
     pl2)
       POLICY_NAME="$(env_value LAB_PL2_POLICY_NAME 'Lab PL2')"
       POLICY_PARANOIA="$(env_value LAB_PL2_POLICY_PARANOIA 2)"
       ;;
-    pl1|*)
-      POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
-      POLICY_PARANOIA="$(env_value LAB_POLICY_PARANOIA 1)"
+    *)
+      echo "Unknown POLICY '${policy}' (expected pl1 or pl2)." >&2
+      exit 1
       ;;
   esac
 }
