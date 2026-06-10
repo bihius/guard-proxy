@@ -96,7 +96,7 @@ token="$(api_json POST /auth/login "" "${login_body}" | python3 -c 'import json,
 
 echo "Looking up policy '${TARGET_POLICY_NAME}'..."
 policies_response="$(api_json GET /policies "${token}")"
-read -r policy_id policy_paranoia <<<"$(POLICIES="${policies_response}" POLICY_NAME="${TARGET_POLICY_NAME}" python3 - <<'PY'
+policy_lookup="$(POLICIES="${policies_response}" POLICY_NAME="${TARGET_POLICY_NAME}" python3 - <<'PY'
 import json, os, sys
 data = json.loads(os.environ["POLICIES"])
 name = os.environ["POLICY_NAME"]
@@ -108,6 +108,7 @@ for item in items:
 sys.exit(f"Policy '{name}' not found. Run `make lab-up` (setup-lab.sh) first.")
 PY
 )"
+read -r policy_id policy_paranoia <<<"${policy_lookup}"
 
 echo "Fetching vhosts..."
 vhosts_response="$(api_json GET /vhosts "${token}")"

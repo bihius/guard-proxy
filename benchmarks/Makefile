@@ -103,16 +103,19 @@ eval-sweep:
 
 # ── Results summary ────────────────────────────────────────────────────────
 
-## Print a summary of the most recent run (or RUN_ID= a specific run).
+## Print a summary of the most recent run (or RUN_ID=<id> [POLICY=pl1|pl2] for a specific run).
 results:
-	@latest=$$(ls -1t $(REPO_ROOT)/benchmarks/results/ 2>/dev/null \
-	            | grep '^run-' | head -1 | sed 's/^run-//'); \
-	run=$${RUN_ID:-$$latest}; \
+	@if [[ "$(origin RUN_ID)" == "command line" ]]; then \
+	  run="$(EFFECTIVE_RUN_ID)"; \
+	else \
+	  run=$$(ls -1t $(REPO_ROOT)/benchmarks/results/ 2>/dev/null \
+	          | grep '^run-' | head -1 | sed 's/^run-//'); \
+	fi; \
 	csv="$(REPO_ROOT)/benchmarks/results/run-$${run}/results.csv"; \
 	if [[ -f "$$csv" ]]; then \
 	  echo "Run: $${run}"; column -t -s, "$$csv"; \
 	else \
-	  echo "No results found. Run 'make eval-all RUN_ID=<id>' first."; \
+	  echo "No results found for run-$${run}. Run 'make eval-all RUN_ID=<id> [POLICY=pl1|pl2]' first."; \
 	fi
 
 # ── Help ───────────────────────────────────────────────────────────────────
