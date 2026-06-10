@@ -182,18 +182,22 @@ write_summary() {
   local policy_name="$3"
   local detection_json="$4"      # {"true_positive":...,"false_negative":...,"tpr":...,"fpr":...}
   local performance_json="$5"    # {"rps":...,"latency_ms":...} or {}
-  local resources_json="${6:-{}}"
+  local resources_json="${6:-}"
+  if [[ -z "${resources_json}" ]]; then resources_json='{}'; fi
   local policy_paranoia="${7:-}"
 
-  python3 - <<PY
+  RUN_ID="${RUN_ID}" RUN_DIR="${RUN_DIR}" SCENARIO="${scenario}" \
+  TARGET_VHOST="${target_vhost}" POLICY_NAME="${policy_name}" \
+  DETECTION_JSON="${detection_json}" PERFORMANCE_JSON="${performance_json}" \
+  RESOURCES_JSON="${resources_json}" POLICY_PARANOIA="${policy_paranoia}" python3 - <<'PY'
 import json, os
 
-detection = json.loads('''${detection_json}''')
-performance = json.loads('''${performance_json}''')
-resources = json.loads('''${resources_json}''')
+detection = json.loads(os.environ["DETECTION_JSON"])
+performance = json.loads(os.environ["PERFORMANCE_JSON"])
+resources = json.loads(os.environ["RESOURCES_JSON"])
 
-policy = {"name": "${policy_name}"}
-paranoia_raw = "${policy_paranoia}"
+policy = {"name": os.environ["POLICY_NAME"]}
+paranoia_raw = os.environ.get("POLICY_PARANOIA", "")
 if paranoia_raw != "":
     try:
         policy["paranoia"] = int(paranoia_raw)
@@ -201,16 +205,16 @@ if paranoia_raw != "":
         policy["paranoia"] = paranoia_raw
 
 summary = {
-    "run_id": "${RUN_ID}",
-    "scenario": "${scenario}",
-    "target_vhost": "${target_vhost}",
+    "run_id": os.environ["RUN_ID"],
+    "scenario": os.environ["SCENARIO"],
+    "target_vhost": os.environ["TARGET_VHOST"],
     "policy": policy,
     "detection": detection,
     "performance": performance,
-    "resources": resources
+    "resources": resources,
 }
 
-out = "${RUN_DIR}/${scenario}/summary.json"
+out = os.path.join(os.environ["RUN_DIR"], os.environ["SCENARIO"], "summary.json")
 os.makedirs(os.path.dirname(out), exist_ok=True)
 with open(out, "w") as f:
     json.dump(summary, f, indent=2)

@@ -108,7 +108,7 @@ ensure_crs_bundle() {
 
 ensure_policy() {
   local name="$1"; local body="$2"
-  echo "Ensuring WAF policy '${name}' exists..."
+  echo "Ensuring WAF policy '${name}' exists..." >&2
   local response
   response="$(api_json POST /policies "${token}" "${body}" || true)"
   if [[ -z "${response}" ]]; then

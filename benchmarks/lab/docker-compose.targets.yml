@@ -165,8 +165,6 @@ services:
 
 networks:
   gp_internal:
-    external: true
-    name: guard-proxy_gp_internal
 
 volumes:
   dvwa_db_data:
