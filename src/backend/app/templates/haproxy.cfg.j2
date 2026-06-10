@@ -93,8 +93,8 @@ frontend fe_http
 # --- Application backends ----------------------------------------
 {% for route in routes %}
 backend {{ route.backend.name }}
-    option httpchk GET /health
-    http-check expect status 200
+    option httpchk GET /
+    http-check expect status 200-499
     # init-addr none lets `haproxy -c` succeed even when the
     # `backend` DNS name is not resolvable (e.g. outside compose).
     server {{ route.backend.server_name }} {{ route.backend.address }} check inter 5s fall 3 rise 2 init-addr last,libc,none
