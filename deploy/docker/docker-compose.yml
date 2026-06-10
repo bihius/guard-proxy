@@ -54,7 +54,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      # Explicit base URL is optional. If unset, frontend uses relative paths
+      # and the dev server proxies /api/v1 to the proxy target below.
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+      VITE_DEV_SERVER_PROXY_TARGET: "http://backend:8000"
     depends_on:
       backend:
         condition: service_healthy
@@ -67,6 +70,7 @@ services:
       retries: 10
     networks:
       - gp_edge
+      - gp_internal
 
   coraza:
     build:
