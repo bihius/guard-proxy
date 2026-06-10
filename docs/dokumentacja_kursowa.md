@@ -1,6 +1,6 @@
 # Dokumentacja projektu kursowego
 
-## 1. Ogolne zalozenia projektu
+## 1. Ogólne zalozenia projektu
 
 Guard Proxy to self-hosted Web Application Firewall, czyli system ochrony ruchu
 HTTP uruchamiany przed aplikacja webowa. System laczy HAProxy jako reverse proxy,
@@ -11,7 +11,7 @@ Glownym celem projektu jest zarzadzanie konfiguracja WAF z poziomu panelu:
 
 - tworzenie i edycja wirtualnych hostow,
 - tworzenie i edycja polityk WAF,
-- przypisywanie polityk do domen,
+- przypisywanie polityk do domen (soon),
 - stosowanie wygenerowanej konfiguracji HAProxy/Coraza,
 - odbieranie i przegladanie logow zdarzen WAF,
 - zabezpieczenie panelu przez logowanie i role uzytkownikow.
@@ -25,11 +25,7 @@ Cele dodatkowe (mierzalne i raportowane, nie gwarantowane):
 - zademonstrowanie, ze wylaczenie lub modyfikacja reguly przez panel zmienia
   obserwowalne zachowanie WAF na ustalonym korpusie testowym.
 
-Poziom wykrywalnosci atakow oraz wspolczynnik false positive nie sa celami
-projektowymi — sa wlasciwoscia zestawu reguł CRS i wybranego poziomu paranoi,
-nie systemu Guard Proxy. Odpowiednie wartosci sa mierzone i raportowane
-wzgledem okreslonego punktu odniesienia (wersja CRS, poziom paranoi, korpus
-testowy), nie egzekwowane jako proby zaliczenia.
+
 
 ## 2. Zastosowane technologie
 
@@ -175,7 +171,7 @@ Najwazniejsze tabele:
 
 | Tabela | Przeznaczenie |
 | --- | --- |
-| `users` | Konta uzytkownikow panelu, role i status aktywnosci |
+| `users` | Konta uzytkownikow panelu, rola |
 | `vhosts` | Domeny obslugiwane przez HAProxy i ich backendy |
 | `policies` | Polityki WAF: poziom paranoi, progi anomalii, tryb pracy |
 | `rule_overrides` | Wlaczenia/wylaczenia konkretnych reguł OWASP CRS dla polityki |
@@ -188,6 +184,96 @@ Glowne relacje:
 - `rule_overrides.policy_id` wskazuje na `policies.id`.
 - `vhosts.created_by` i `policies.created_by` wskazuja na `users.id`.
 - `logs.vhost_id` i `logs.policy_id` moga wskazywac na powiazany vhost i polityke.
+
+### Wizualny schemat relacji 
+
+```mermaid
+erDiagram
+    users {
+        int id PK
+        string email UK
+        string hashed_password
+        string full_name
+        UserRole role
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+    
+    vhosts {
+        int id PK
+        string domain UK
+        string backend_url
+        string description
+        boolean is_active
+        boolean ssl_enabled
+        int policy_id FK
+        int created_by FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    policies {
+        int id PK
+        string name UK
+        string description
+        int paranoia_level
+        int inbound_anomaly_threshold
+        int outbound_anomaly_threshold
+        PolicyEnforcementMode enforcement_mode
+        boolean is_active
+        int created_by FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    rule_overrides {
+        int id PK
+        int policy_id FK
+        int rule_id
+        RuleAction action
+        string comment
+        datetime created_at
+    }
+
+    logs {
+        int id PK
+        string producer_event_id UK
+        datetime event_at
+        string vhost
+        LogAction action
+        string source_ip
+        string method
+        string request_uri
+        int status_code
+        int rule_id
+        string rule_message
+        int anomaly_score
+        int paranoia_level
+        LogSeverity severity
+        string message
+        dict raw_context
+        int vhost_id FK
+        int policy_id FK
+    }
+
+    runtime_operations {
+        int id PK
+        RuntimeOperationType operation_type
+        RuntimeOperationStatus status
+        string config_checksum
+        string message
+        dict metadata_json
+        datetime created_at
+    }
+
+    users ||--o{ vhosts : "created_by"
+    users ||--o{ policies : "created_by"
+    policies ||--o{ vhosts : "policy_id"
+    policies ||--o{ rule_overrides : "policy_id"
+    vhosts ||--o{ logs : "vhost_id"
+    policies ||--o{ logs : "policy_id"
+```
 
 Migracje bazy sa zarzadzane przez Alembic. W Docker Compose system uzywa
 PostgreSQL. W trybie lokalnym i testowym mozliwe jest uzycie SQLite, bo warstwa
@@ -247,7 +333,7 @@ Panel administracyjny jest aplikacja webowa React. Aktualnie obejmuje:
 - przycisk zastosowania konfiguracji,
 - wspolne komponenty UI: tabele, status badges, modale, stany ladowania i bledow.
 
-Aplikacja jest responsywna i korzysta z backendowego REST API przez `fetch`.
+Aplikacja jest (prawie) responsywna i korzysta z backendowego REST API przez `fetch`.
 
 ## 10. Uruchomienie projektu
 
@@ -281,7 +367,6 @@ Najwazniejsze adresy:
 | --- | --- |
 | Panel administracyjny | `http://localhost:3000` |
 | API przez HAProxy | `http://localhost:8080` |
-| Backend lokalny bez proxy | `http://127.0.0.1:8000` |
 | Swagger UI | `http://127.0.0.1:8000/docs` |
 
 ## 11. Demo i laboratorium ewaluacyjne
