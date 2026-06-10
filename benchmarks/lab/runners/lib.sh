@@ -34,6 +34,29 @@ LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
 
+# ── Policy selection ───────────────────────────────────────────────────────
+
+# Resolve the active policy for this run based on POLICY (pl1|pl2, default pl1).
+# Exports POLICY_NAME and POLICY_PARANOIA from the matching LAB_POLICY_* /
+# LAB_PL2_POLICY_* env vars.
+resolve_policy() {
+  local policy="${POLICY:-pl1}"
+  case "${policy}" in
+    pl1)
+      POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
+      POLICY_PARANOIA="$(env_value LAB_POLICY_PARANOIA 1)"
+      ;;
+    pl2)
+      POLICY_NAME="$(env_value LAB_PL2_POLICY_NAME 'Lab PL2')"
+      POLICY_PARANOIA="$(env_value LAB_PL2_POLICY_PARANOIA 2)"
+      ;;
+    *)
+      echo "Unknown POLICY '${policy}' (expected pl1 or pl2)." >&2
+      exit 1
+      ;;
+  esac
+}
+
 # ── Directory setup ────────────────────────────────────────────────────────
 
 setup_run_dir() {
@@ -161,22 +184,31 @@ write_summary() {
   local performance_json="$5"    # {"rps":...,"latency_ms":...} or {}
   local resources_json="${6:-}"
   if [[ -z "${resources_json}" ]]; then resources_json='{}'; fi
+  local policy_paranoia="${7:-}"
 
   RUN_ID="${RUN_ID}" RUN_DIR="${RUN_DIR}" SCENARIO="${scenario}" \
   TARGET_VHOST="${target_vhost}" POLICY_NAME="${policy_name}" \
   DETECTION_JSON="${detection_json}" PERFORMANCE_JSON="${performance_json}" \
-  RESOURCES_JSON="${resources_json}" python3 - <<'PY'
+  RESOURCES_JSON="${resources_json}" POLICY_PARANOIA="${policy_paranoia}" python3 - <<'PY'
 import json, os
 
 detection = json.loads(os.environ["DETECTION_JSON"])
 performance = json.loads(os.environ["PERFORMANCE_JSON"])
 resources = json.loads(os.environ["RESOURCES_JSON"])
 
+policy = {"name": os.environ["POLICY_NAME"]}
+paranoia_raw = os.environ.get("POLICY_PARANOIA", "")
+if paranoia_raw != "":
+    try:
+        policy["paranoia"] = int(paranoia_raw)
+    except ValueError:
+        policy["paranoia"] = paranoia_raw
+
 summary = {
     "run_id": os.environ["RUN_ID"],
     "scenario": os.environ["SCENARIO"],
     "target_vhost": os.environ["TARGET_VHOST"],
-    "policy": {"name": os.environ["POLICY_NAME"]},
+    "policy": policy,
     "detection": detection,
     "performance": performance,
     "resources": resources,
