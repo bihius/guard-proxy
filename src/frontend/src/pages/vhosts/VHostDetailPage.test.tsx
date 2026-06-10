@@ -43,7 +43,7 @@ const mockVHost: VHostDetail = {
   domain: "app.example.com",
   backend_url: "https://backend.internal",
   description: "Primary app",
-  ssl_enabled: true,
+  ssl_enabled: true, ssl_provider: "none" as const, ssl_expires_at: null,
   is_active: true,
   policy_id: 1,
   created_by: 1,

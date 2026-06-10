@@ -27,6 +27,7 @@ class GeneratedConfig:
     haproxy_cfg: str
     crs_setup_conf: str
     rule_overrides_conf: str
+    certs: dict[str, str]
 
 
 def generate(
@@ -48,10 +49,16 @@ def generate(
     crs_setup_conf = render_crs_setup(active_policy)
     rule_overrides_conf = render_rule_overrides(active_overrides)
 
+    certs = {}
+    for vhost in active_vhosts:
+        if vhost.ssl_provider != "none" and vhost.ssl_cert and vhost.ssl_key:
+            certs[vhost.domain] = f"{vhost.ssl_cert}\n{vhost.ssl_key}"
+
     return GeneratedConfig(
         haproxy_cfg=haproxy_cfg,
         crs_setup_conf=crs_setup_conf,
         rule_overrides_conf=rule_overrides_conf,
+        certs=certs,
     )
 
 
@@ -99,8 +106,9 @@ def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
     return HaproxyRenderContext(
         routes=(
             HaproxyRoute(
-                vhost_acl_name=f"host_{suffix}",
+        vhost_acl_name=f"host_{suffix}",
                 vhost_hosts=(vhost.domain,),
+                ssl_provider=vhost.ssl_provider,
                 backend=HaproxyBackend(
                     name=f"be_{suffix}",
                     server_name=f"srv_{suffix}",

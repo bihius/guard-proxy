@@ -57,6 +57,12 @@ class VHost(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     ssl_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ssl_provider: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="none"
+    )
+    ssl_cert: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ssl_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ssl_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Relationship to Policy — each vhost can have one WAF policy
     # nullable=True — vhost can operate without a policy (no WAF filtering)

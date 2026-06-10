@@ -51,6 +51,16 @@ frontend fe_http
     http-request deny deny_status 421
 {% endif %}
 
+    # Let's Encrypt HTTP-01 challenge routing
+    acl is_acme path_beg /.well-known/acme-challenge/
+
+    # HTTP to HTTPS redirection for domains with SSL enabled
+{% for route in routes %}
+{% if route.ssl_provider != "none" %}
+    http-request redirect scheme https code 301 if {{ route.vhost_acl_name }} !is_acme
+{% endif %}
+{% endfor %}
+
     # Overwrite any client-supplied X-Forwarded-For with the real source IP
     # so the backend rate limiter cannot be bypassed by header spoofing.
     http-request set-header X-Forwarded-For %[src]
@@ -83,11 +93,65 @@ frontend fe_http
     # shows up in the access log for debugging.
     http-request set-header X-WAF-Score %[var(txn.coraza.anomaly_score)] if { var(txn.coraza.anomaly_score) -m found }
 
+    use_backend backend_acme if is_acme
 {% for route in routes %}
     use_backend {{ route.backend.name }} if {{ route.vhost_acl_name }}
 {% endfor %}
 {% if default_backend is not none %}
     default_backend {{ default_backend.name }}
+{% endif %}
+
+{% set has_ssl = routes | selectattr("ssl_provider", "ne", "none") | list | length > 0 %}
+{% if has_ssl %}
+# --- Public HTTPS frontend ----------------------------------------
+frontend fe_https
+    bind *:443 ssl crt /etc/haproxy/generated/certs/
+    unique-id-format %[uuid()]
+    unique-id-header X-Request-ID
+    acl is_health path /health
+    http-request set-log-level silent if is_health
+
+    # Known vhosts validation
+{% for route in routes %}
+    acl {{ route.vhost_acl_name }} hdr(host),field(1,:) -i {{ route.vhost_hosts | join(" ") }}
+{% endfor %}
+{% if routes %}
+    http-request deny deny_status 421 if{% for route in routes %} !{{ route.vhost_acl_name }}{% endfor %}
+{% else %}
+    http-request deny deny_status 421
+{% endif %}
+
+    # Let's Encrypt HTTP-01 challenge routing (failsafe)
+    acl is_acme path_beg /.well-known/acme-challenge/
+
+    http-request set-header X-Forwarded-For %[src]
+    http-request set-header X-Forwarded-Proto https
+
+    # SPOA WAF inspection (same as HTTP)
+    http-request set-var(txn.waf_degraded_reason) str(coraza-unavailable) if !is_health { nbsrv(coraza-spoa) eq 0 }
+    http-request set-log-level err if { var(txn.waf_degraded_reason) -m found }
+    http-request capture var(txn.waf_degraded_reason) len 32 if { var(txn.waf_degraded_reason) -m found }
+    http-request return status 503 content-type text/plain string "WAF inspection unavailable" hdr X-WAF-Status degraded hdr X-WAF-Degraded-Reason coraza-unavailable if { var(txn.waf_degraded_reason) -m str coraza-unavailable }
+
+    filter spoe engine coraza config /usr/local/etc/haproxy/coraza.cfg
+    http-request send-spoe-group coraza coraza-req unless is_health
+
+    http-request set-var(txn.waf_degraded_reason) str(spoe-processing-error) if { var(txn.coraza.error) -m found }
+    http-request set-log-level err if { var(txn.waf_degraded_reason) -m found }
+    http-request capture var(txn.waf_degraded_reason) len 32 if { var(txn.waf_degraded_reason) -m found }
+    http-request return status 503 content-type text/plain string "WAF inspection unavailable" hdr X-WAF-Status degraded hdr X-WAF-Degraded-Reason spoe-processing-error hdr X-WAF-Error-Code %[var(txn.coraza.error)] if { var(txn.coraza.error) -m found }
+
+    http-request deny deny_status 403 if { var(txn.coraza.action) -m str deny }
+    http-request set-header X-WAF-Score %[var(txn.coraza.anomaly_score)] if { var(txn.coraza.anomaly_score) -m found }
+
+    use_backend backend_acme if is_acme
+{% for route in routes %}
+    use_backend {{ route.backend.name }} if {{ route.vhost_acl_name }}
+{% endfor %}
+{% if default_backend is not none %}
+    default_backend {{ default_backend.name }}
+{% endif %}
+
 {% endif %}
 
 # --- Application backends ----------------------------------------
@@ -110,6 +174,10 @@ backend coraza-spoa
     timeout connect 5s
     timeout server  3m
     server coraza coraza:9000 check inter 2s fall 3 rise 2 init-addr last,libc,none
+
+# --- Certbot backend for ACME challenge --------------------------
+backend backend_acme
+    server certbot backend:8888 init-addr last,libc,none
 
 # --- Local stats endpoint (dev convenience, not exposed publicly) -
 listen stats

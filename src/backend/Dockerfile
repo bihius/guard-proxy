@@ -31,7 +31,7 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg certbot \
     && curl -fsSL https://haproxy.debian.net/bernat.debian.org.gpg \
        | gpg --dearmor > /etc/apt/trusted.gpg.d/haproxy.gpg \
     && printf "deb [signed-by=/etc/apt/trusted.gpg.d/haproxy.gpg] http://haproxy.debian.net bookworm-backports-3.0 main\n" \

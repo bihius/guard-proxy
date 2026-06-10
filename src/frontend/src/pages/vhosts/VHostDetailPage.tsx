@@ -485,6 +485,18 @@ export function VHostDetailPage() {
                 </dd>
               </div>
               <div>
+                <dt className="font-medium text-fg-muted">SSL Provider</dt>
+                <dd className="mt-1 font-medium text-fg">
+                  {vhost.ssl_provider === "letsencrypt" ? "Let's Encrypt" : vhost.ssl_provider === "upload" ? "Custom Certificate" : "None"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-fg-muted">SSL Expires</dt>
+                <dd className="mt-1 font-medium text-fg">
+                  {vhost.ssl_expires_at ? formatDate(vhost.ssl_expires_at) : "N/A"}
+                </dd>
+              </div>
+              <div>
                 <dt className="font-medium text-fg-muted">Created</dt>
                 <dd className="mt-1 text-fg">{formatDate(vhost.created_at)}</dd>
               </div>
