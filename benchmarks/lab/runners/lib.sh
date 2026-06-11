@@ -33,6 +33,7 @@ LAB_JUICESHOP_DOMAIN="$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
 LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
+ATTACKER_CPUSET="$(env_value LAB_ATTACKER_CPUSET '')"
 
 # ── Policy selection ───────────────────────────────────────────────────────
 

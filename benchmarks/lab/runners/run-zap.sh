@@ -70,7 +70,7 @@ ZAP_CONFIG_OPTS="-config replacer.full_list(0).description=host-header \
 -config replacer.full_list(3).replacement=zap \
 -config replacer.full_list(3).initiators="
 
-docker run --rm --cpuset-cpus="21-23" \
+docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
   -v "${OUT_DIR}:/zap/wrk:rw" \
   -v "${ZAP_CONF}:/zap/rules.conf:ro" \

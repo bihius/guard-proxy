@@ -5,6 +5,40 @@ import { InvalidResponseError, apiRequest } from "./api-client";
 describe("apiRequest", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("requests a relative /api/v1 path when VITE_API_BASE_URL is unset", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } }));
+
+    await apiRequest("/health");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/health");
+  });
+
+  it("joins paths without a leading slash onto the base URL", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } }));
+
+    await apiRequest("health");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/health");
+  });
+
+  it("uses VITE_API_BASE_URL when set, stripping a trailing slash", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "http://example.com/");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } }));
+
+    await apiRequest("/health");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://example.com/health");
   });
 
   it("passes ReadableStream bodies through without JSON serialization", async () => {
