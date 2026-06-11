@@ -137,8 +137,7 @@ mode uses `info` logging.
 
    - the request should pass through `fe_http`;
    - non-`/health` requests should trigger `send-spoe-group coraza coraza-req`;
-   - denied requests should show a `403` generated before `be_app`;
-   - allowed requests with a score should include the `X-WAF-Score` header.
+   - denied requests should show a `403` generated before `be_app`.
 
 4. Check Coraza output next:
 

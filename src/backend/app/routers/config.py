@@ -10,10 +10,15 @@ from app.database import get_db
 from app.dependencies import require_admin
 from app.models.policy import Policy
 from app.models.rule_override import RuleOverride
+from app.models.runtime_operation import (
+    RuntimeOperation,
+    RuntimeOperationStatus,
+    RuntimeOperationType,
+)
 from app.models.user import User
 from app.models.vhost import VHost
 from app.schemas.config import ConfigApplyResponse, GeneratedConfigOut
-from app.services.config_apply import ApplyStatus
+from app.services.config_apply import ApplyResult, ApplyStatus
 from app.services.config_apply import apply as _apply
 from app.services.config_generator import generate
 
@@ -30,6 +35,45 @@ _HTTP_STATUS: dict[ApplyStatus, int] = {
     ApplyStatus.reload_failed_rolled_back: status.HTTP_500_INTERNAL_SERVER_ERROR,
     ApplyStatus.rollback_failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
 }
+
+
+def _record_runtime_operations(db: Session, result: ApplyResult) -> None:
+    """Persist validation/reload snapshots so /runtime/status reflects deploys."""
+    # When writing the candidate already failed, validation never ran.
+    if result.status in (ApplyStatus.write_failed, ApplyStatus.state_invalid):
+        return
+
+    validation_ok = result.status != ApplyStatus.validation_failed
+    db.add(
+        RuntimeOperation(
+            operation_type=RuntimeOperationType.validation,
+            status=(
+                RuntimeOperationStatus.success
+                if validation_ok
+                else RuntimeOperationStatus.failed
+            ),
+            config_checksum=result.checksum,
+            message=result.validation_output,
+            metadata_json={"correlation_id": result.correlation_id},
+        )
+    )
+
+    if validation_ok:
+        db.add(
+            RuntimeOperation(
+                operation_type=RuntimeOperationType.reload,
+                status=(
+                    RuntimeOperationStatus.success
+                    if result.status == ApplyStatus.success
+                    else RuntimeOperationStatus.failed
+                ),
+                config_checksum=result.checksum,
+                message=result.reload_output,
+                metadata_json={"correlation_id": result.correlation_id},
+            )
+        )
+
+    db.commit()
 
 
 @router.post("/apply", response_model=ConfigApplyResponse)
@@ -50,6 +94,7 @@ def apply_config(
 
         generated = generate(vhosts, policies, rule_overrides)
         result = _apply(generated)
+        _record_runtime_operations(db, result)
 
         response = ConfigApplyResponse(
             generated_config=GeneratedConfigOut(

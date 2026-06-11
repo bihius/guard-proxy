@@ -9,7 +9,14 @@ seed_runtime_config() {
     if [ ! -f "${runtime_dir}/current/rule-overrides.conf" ]; then
         mkdir -p "${runtime_dir}/releases/seed"
         if [ ! -f "${runtime_dir}/releases/seed/crs-setup.conf" ]; then
-            printf "SecRuleEngine On\n" > "${runtime_dir}/releases/seed/crs-setup.conf"
+            # Rule 900990 marks crs-setup.conf as loaded; without it CRS rule
+            # 901001 reports "CRS is deployed without configuration!" on every
+            # request until the first apply. The app replaces this stub with
+            # the full template-rendered config during backend startup.
+            {
+                printf "SecRuleEngine On\n"
+                printf "SecAction \"id:900990,phase:1,pass,nolog,tag:'OWASP_CRS',ver:'OWASP_CRS/4.25.0',setvar:tx.crs_setup_version=4250\"\n"
+            } > "${runtime_dir}/releases/seed/crs-setup.conf"
         fi
         if [ ! -f "${runtime_dir}/releases/seed/rule-overrides.conf" ]; then
             printf "# No generated CRS rule overrides yet.\n" > "${runtime_dir}/releases/seed/rule-overrides.conf"
