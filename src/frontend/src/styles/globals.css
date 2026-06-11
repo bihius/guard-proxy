@@ -117,6 +117,8 @@
   }
 
   html {
+    /* Bump the rem base so the UI reads comfortably at 100% browser zoom. */
+    font-size: 110%;
     transition:
       background-color 0.3s ease,
       color 0.3s ease;
