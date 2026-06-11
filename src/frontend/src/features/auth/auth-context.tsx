@@ -7,7 +7,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
-import { ApiError } from "@/lib/api-client";
+import { ApiError, setUnauthorizedHandler } from "@/lib/api-client";
 import type { CurrentUser, LoginRequest, UserRole } from "@/types/api";
 
 import { getCurrentUser, login, logout, refreshSession } from "./api";
@@ -104,6 +104,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
       currentAbortControllerRef.current = null;
     };
   }, [beginOperation, finishOperation, isCurrentOperation]);
+
+  // When an API call hits a 401 (expired access token), try the refresh
+  // cookie once; on failure clear auth state so ProtectedRoute redirects
+  // to the login page instead of pages surfacing raw errors.
+  useEffect(() => {
+    setUnauthorizedHandler(async () => {
+      try {
+        const tokens = await refreshSession();
+
+        if (isMountedRef.current) {
+          setAccessToken(tokens.access_token);
+        }
+
+        return tokens.access_token;
+      } catch {
+        if (isMountedRef.current) {
+          setAccessToken(null);
+          setUser(null);
+          setLoginError(null);
+        }
+
+        return null;
+      }
+    });
+
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   const signIn = useCallback(async (credentials: LoginRequest) => {
     const { operationId, signal } = beginOperation();
