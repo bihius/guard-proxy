@@ -141,17 +141,20 @@ export function NavBar() {
             {theme === "emerald" ? <Leaf /> : <Snowflake />}
           </Button>
 
-          <Badge>Dev Mode</Badge>
-          <Badge variant="secondary">
+          <div className="mx-1 h-6 w-px bg-border" aria-hidden="true" />
+
+          <span className="max-w-48 truncate text-sm text-muted-foreground">
             {user?.full_name || user?.email || "No user"}
-          </Badge>
+          </span>
           <Button
             type="button"
             onClick={() => void handleLogout()}
             variant="ghost"
+            size="icon"
+            aria-label="Log out"
+            title="Log out"
           >
             <LogOut />
-            Logout
           </Button>
         </div>
 
@@ -223,7 +226,6 @@ export function NavBar() {
             <div className="my-3 h-px bg-border" />
 
             <div className="flex flex-wrap gap-2 px-1">
-              <Badge>Dev Mode</Badge>
               <Badge variant="secondary">
                 {user?.full_name || user?.email || "No user"}
               </Badge>
