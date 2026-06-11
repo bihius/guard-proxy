@@ -56,7 +56,7 @@ class CertbotService:
             "--config-dir", "/tmp/certbot/config",
             "--work-dir", "/tmp/certbot/work",
             "--logs-dir", "/tmp/certbot/logs",
-        ]
+        ])
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
