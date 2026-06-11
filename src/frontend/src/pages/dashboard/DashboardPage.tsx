@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import {
   AlertTriangleIcon,
@@ -6,15 +6,11 @@ import {
   ServerIcon,
   ShieldIcon,
 } from "@/components/icons";
-import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { RoleBadge } from "@/components/shared/RoleBadge";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatCard } from "@/components/shared/StatCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { ApplyConfigButton } from "@/features/runtime/ApplyConfigButton";
-import type { ApplyResult } from "@/features/runtime/ApplyConfigButton";
 import { RuntimeStatusCard } from "@/features/runtime/RuntimeStatusCard";
 import { useRuntimeStatus } from "@/features/runtime/use-runtime-status";
 import { useDashboardStats } from "@/features/dashboard/use-dashboard-stats";
@@ -24,7 +20,6 @@ export function DashboardPage() {
   const { role } = useAuth();
   const runtimeStatus = useRuntimeStatus();
   const stats = useDashboardStats();
-  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
 
   return (
     <section className="space-y-8">
@@ -35,32 +30,9 @@ export function DashboardPage() {
           <>
             {role ? <RoleBadge role={role} /> : null}
             <StatusBadge label="Development" tone="info" />
-            <ApplyConfigButton
-              runtimeStatus={runtimeStatus}
-              onResult={(result) => setApplyResult(result)}
-            />
           </>
         }
       />
-
-      {applyResult ? (
-        <Alert
-          variant={applyResult.kind === "success" ? "success" : "destructive"}
-          className="flex items-start justify-between gap-4"
-        >
-          <span>{applyResult.message}</span>
-          <Button
-            type="button"
-            onClick={() => setApplyResult(null)}
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-current hover:bg-current/10"
-            aria-label="Dismiss apply result"
-          >
-            Close
-          </Button>
-        </Alert>
-      ) : null}
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <StatCard

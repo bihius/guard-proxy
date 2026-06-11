@@ -5,6 +5,9 @@ import { Leaf, LogOut, Menu, Shield, Snowflake, X } from "lucide-react";
 import { appRoutes } from "@/app/routes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ApplyConfigButton } from "@/features/runtime/ApplyConfigButton";
+import { useApplyNotice } from "@/features/runtime/use-apply-notice";
+import { useRuntimeStatus } from "@/features/runtime/use-runtime-status";
 import { useAuth } from "@/hooks/use-auth";
 import { THEMES, type Theme, getThemeStorageKey } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -59,6 +62,8 @@ function applyTheme(theme: Theme) {
 export function NavBar() {
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
+  const runtimeStatus = useRuntimeStatus();
+  const { showNotice } = useApplyNotice();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
 
@@ -123,6 +128,8 @@ export function NavBar() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          <ApplyConfigButton runtimeStatus={runtimeStatus} onResult={showNotice} />
+
           <Button
             type="button"
             onClick={toggleTheme}
@@ -200,6 +207,8 @@ export function NavBar() {
             ))}
 
             <div className="my-3 h-px bg-border" />
+
+            <ApplyConfigButton runtimeStatus={runtimeStatus} onResult={showNotice} />
 
             <Button
               type="button"

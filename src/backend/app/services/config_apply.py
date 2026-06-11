@@ -137,7 +137,10 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
             status=ApplyStatus.success,
             correlation_id=correlation_id,
             checksum=checksum,
-            message="Configuration applied and HAProxy reloaded successfully.",
+            message=(
+                "Configuration applied. HAProxy reloaded; Coraza is reloading "
+                "the updated WAF ruleset (within ~1s)."
+            ),
             candidate_path=str(candidate_dir),
             active_path=str(_resolve_current(current_link)),
             validation_output=validation.output,
@@ -240,6 +243,53 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
         validation_output=validation.output,
         reload_output=reload_result.output,
         rollback_output=rollback_reload.output,
+    )
+
+
+def seed_runtime_config(generated: GeneratedConfig) -> None:
+    """Write an initial runtime release if none exists yet.
+
+    HAProxy and Coraza both read their config from
+    `<runtime_root>/current` on startup. Until the first admin "Apply
+    config" runs, that symlink does not exist, so Coraza's
+    `Include /runtime/current/crs-setup.conf` resolves to nothing and CRS
+    fails to load. Called once during backend startup to seed `current`
+    from the database state, without reloading anything (no service has
+    started yet, so there is nothing to reload).
+    """
+    runtime_root = Path(settings.runtime_generated_config_root).resolve()
+    current_link = runtime_root / "current"
+
+    if (current_link / "crs-setup.conf").exists():
+        return
+
+    correlation_id = uuid.uuid4().hex
+    candidate_dir = runtime_root / "releases" / correlation_id
+
+    try:
+        _sweep_orphaned_temp_links(runtime_root)
+        _write_candidate(candidate_dir, generated)
+        validation = _validate_haproxy(candidate_dir / "haproxy.cfg")
+        if not validation.ok:
+            logger.error(
+                "config-seed validation failed correlation_id=%s output=%s",
+                correlation_id,
+                validation.output,
+            )
+            shutil.rmtree(candidate_dir, ignore_errors=True)
+            return
+        _swap_current_link(current_link, candidate_dir, runtime_root)
+    except OSError:
+        logger.exception(
+            "config-seed failed correlation_id=%s",
+            correlation_id,
+        )
+        shutil.rmtree(candidate_dir, ignore_errors=True)
+        return
+
+    logger.info(
+        "config-seed wrote initial runtime config correlation_id=%s",
+        correlation_id,
     )
 
 
