@@ -128,7 +128,6 @@ PY
 
 ensure_vhost() {
   local domain="$1"; local backend_url="$2"; local description="$3"; local policy_id="$4"
-  echo "Ensuring vhost ${domain} -> ${backend_url}..."
   local vhost_body vhost_response vhost_id
   vhost_body="$(printf '{"domain":%s,"backend_url":%s,"description":%s,"ssl_enabled":false,"is_active":true,"policy_id":%s}' \
     "$(json_string "${domain}")" "$(json_string "${backend_url}")" \
@@ -207,6 +206,7 @@ LAB_DVWA_BACKEND_URL="$(env_value LAB_DVWA_BACKEND_URL http://dvwa:80)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_WP_BACKEND_URL="$(env_value LAB_WP_BACKEND_URL http://wordpress:80)"
 
+echo "Registering lab vhosts (${LAB_JUICESHOP_DOMAIN}, ${LAB_FTW_DOMAIN}, ${LAB_DVWA_DOMAIN}, ${LAB_WP_DOMAIN})..."
 ensure_vhost "${LAB_JUICESHOP_DOMAIN}" "${LAB_JUICESHOP_BACKEND_URL}" "OWASP Juice Shop — intentionally vulnerable app" "${baseline_policy_id}"
 ensure_vhost "${LAB_FTW_DOMAIN}" "${LAB_FTW_BACKEND_URL}" "Albedo — CRS go-ftw regression backend" "${baseline_policy_id}"
 ensure_vhost "${LAB_DVWA_DOMAIN}" "${LAB_DVWA_BACKEND_URL}" "DVWA — Damn Vulnerable Web Application" "${baseline_policy_id}"
@@ -225,12 +225,5 @@ curl -sf --max-time 30 \
   -H "Host: ${LAB_DVWA_DOMAIN}" >/dev/null || echo "DVWA setup.php returned non-200 (may already be initialised)"
 
 echo
-echo "Eval lab is ready."
-echo "  Juice Shop:  curl -H 'Host: ${LAB_JUICESHOP_DOMAIN}' ${WAF_BASE_URL}/"
-echo "  FTW backend: curl -H 'Host: ${LAB_FTW_DOMAIN}' ${WAF_BASE_URL}/"
-echo "  DVWA:        curl -H 'Host: ${LAB_DVWA_DOMAIN}' ${WAF_BASE_URL}/"
-echo "  WordPress:   curl -H 'Host: ${LAB_WP_DOMAIN}' ${WAF_BASE_URL}/"
-echo
-echo "Quick smoke:"
-echo "  curl -si -H 'Host: ${LAB_JUICESHOP_DOMAIN}' '${WAF_BASE_URL}/?q=1+UNION+SELECT+1--' | grep 'HTTP/'"
-echo "  (expect 403 — WAF blocking SQLi)"
+echo "Eval lab ready: ${LAB_JUICESHOP_DOMAIN}, ${LAB_FTW_DOMAIN}, ${LAB_DVWA_DOMAIN}, ${LAB_WP_DOMAIN} via ${WAF_BASE_URL} (curl -H 'Host: <domain>')."
+echo "Smoke (expect 403): curl -si -H 'Host: ${LAB_JUICESHOP_DOMAIN}' '${WAF_BASE_URL}/?q=1+UNION+SELECT+1--' | grep 'HTTP/'"

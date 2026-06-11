@@ -30,14 +30,15 @@ from app.passwords import hash_password  # noqa: E402
 
 
 def seed_admin(email: str, password: str, full_name: str = "Administrator") -> None:
-    """Tworzy pierwszego admina jeśli żaden nie istnieje w bazie.
+    """Create the first admin user if none exists in the database.
 
-    Sprawdzamy czy istnieje *jakikolwiek* user z rolą admin — nie tylko
-    czy podany email jest zajęty. Dzięki temu skrypt jest idempotentny
-    i nie tworzy duplikatów adminów przy ponownym uruchomieniu.
+    The check looks for *any* user with the admin role, not just whether the
+    given email is taken. This keeps the script idempotent: re-running it
+    never creates duplicate admins.
 
-    Przed insertem sprawdzamy też czy podany email nie jest już zajęty
-    przez innego usera — unikamy IntegrityError na unikalnym kolumnie email.
+    Before inserting, the script also verifies the given email is not already
+    used by another user, avoiding an IntegrityError on the unique email
+    column.
     """
     db = SessionLocal()
     try:

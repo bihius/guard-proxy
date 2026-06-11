@@ -28,18 +28,18 @@ EFFECTIVE_RUN_ID := $(RUN_ID)-$(POLICY)
 ## Bring up the real stack + all lab targets and register vhosts.
 lab-up:
 	@echo "==> Starting guard-proxy stack + lab targets..."
-	$(COMPOSE) up -d --build
+	@$(COMPOSE) up -d --build
 	@echo "==> Seeding admin user..."
-	$(COMPOSE) exec -T backend /app/.venv/bin/python scripts/seed_admin.py
+	@$(COMPOSE) exec -T backend /app/.venv/bin/python scripts/seed_admin.py
 	@echo "==> Waiting for HAProxy master socket..."
-	$(COMPOSE) exec -T backend sh -c \
+	@$(COMPOSE) exec -T backend sh -c \
 	  'deadline=$$((SECONDS+120)); \
 	   until test -S /var/run/haproxy/master.sock; do \
 	     if [ $$SECONDS -ge $$deadline ]; then echo "Timed out waiting for HAProxy master socket" >&2; exit 1; fi; \
 	     sleep 2; \
 	   done; echo "HAProxy master socket is ready."'
 	@echo "==> Seeding vhosts..."
-	bash $(REPO_ROOT)/benchmarks/lab/setup-lab.sh --skip-compose
+	@bash $(REPO_ROOT)/benchmarks/lab/setup-lab.sh --skip-compose
 
 ## Stop the lab (preserve volumes).
 lab-down:
