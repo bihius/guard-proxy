@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
+import { getVHostDetailPath } from "@/app/routes";
 import type { DataTableColumn } from "@/components/shared/DataTable";
 import { DataTable } from "@/components/shared/DataTable";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -21,6 +23,7 @@ type ModalState =
   | { type: "delete"; vhost: VHost };
 
 export function VHostsPage() {
+  const navigate = useNavigate();
   const { hasRole } = useAuth();
   const { vhosts, policies, policyNameById, isLoading, error, refresh } = useVHosts();
   const [modal, setModal] = useState<ModalState>(null);
@@ -84,7 +87,11 @@ export function VHostsPage() {
             header: "",
             className: "w-px whitespace-nowrap",
             cell: (row: VHost) => (
-              <div className="flex items-center gap-2">
+              // Keep Edit/Delete clicks from triggering row navigation.
+              <div
+                className="flex items-center gap-2"
+                onClick={(event) => event.stopPropagation()}
+              >
                 <Button
                   type="button"
                   onClick={() => setModal({ type: "edit", vhost: row })}
@@ -147,6 +154,7 @@ export function VHostsPage() {
             columns={columns}
             rows={vhosts}
             getRowKey={(row) => String(row.id)}
+            onRowClick={(row) => navigate(getVHostDetailPath(row.id))}
             emptyTitle="No virtual hosts yet"
             emptyDescription="Create your first virtual host to start routing traffic through Guard Proxy."
           />
