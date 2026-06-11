@@ -22,7 +22,7 @@ class CertbotService:
     def __init__(self, port: int = 8888):
         self.port = port
 
-    def provision_cert(self, domain: str, email: str) -> tuple[str, str]:
+    def provision_cert(self, domain: str, email: str | None = None) -> tuple[str, str]:
         """
         Provisions a certificate for the given domain using certbot.
         
@@ -45,8 +45,14 @@ class CertbotService:
             domain,
             "--non-interactive",
             "--agree-tos",
-            "-m",
-            email,
+        ]
+        
+        if email:
+            cmd.extend(["-m", email])
+        else:
+            cmd.append("--register-unsafely-without-email")
+            
+        cmd.extend([
             "--config-dir", "/tmp/certbot/config",
             "--work-dir", "/tmp/certbot/work",
             "--logs-dir", "/tmp/certbot/logs",
