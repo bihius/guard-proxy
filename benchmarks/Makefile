@@ -100,10 +100,10 @@ eval-sweep:
 	$(MAKE) set-policy POLICY=pl2; \
 	$(MAKE) eval-all RUN_ID=$${base_run_id} POLICY=pl2; \
 	echo "==> Done. Results for PL1 pass:"; \
-	$(MAKE) results RUN_ID=$${base_run_id}-pl1; \
+	$(MAKE) results RUN_ID=$${base_run_id} POLICY=pl1; \
 	echo ""; \
 	echo "==> Results for PL2 pass:"; \
-	$(MAKE) results RUN_ID=$${base_run_id}-pl2
+	$(MAKE) results RUN_ID=$${base_run_id} POLICY=pl2
 
 # ── Results summary ────────────────────────────────────────────────────────
 
