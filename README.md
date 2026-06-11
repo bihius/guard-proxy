@@ -8,6 +8,16 @@ Developed as a master's thesis at Wrocław University DSW.
 
 ---
 
+## Features
+
+- **Reverse proxy + WAF** — HAProxy 3.0 inspects every request through the Coraza SPOA (OWASP CRS 4.x), blocks attacks with 403, and fails closed (503) when the WAF is unavailable.
+- **Virtual host management** — register domains and backend targets from the admin panel; unknown hosts are rejected before WAF inspection.
+- **Policy management** — paranoia level, anomaly thresholds, enforcement mode (block / detect-only), and per-policy CRS rule overrides.
+- **One-click config deployment** — `POST /config/apply` renders HAProxy/Coraza config from the database, validates it, atomically swaps it in, reloads HAProxy, and rolls back on failure. Deployment status is shown live on the dashboard.
+- **WAF event logs** — a sidecar log shipper ingests Coraza audit events into PostgreSQL; the panel provides filtering, pagination, and event detail views.
+- **Authentication and roles** — JWT-based login with admin/viewer roles and CLI user management.
+- **Evaluation lab** — reproducible benchmark environment (Juice Shop, DVWA, WordPress, go-ftw) for measuring WAF effectiveness and overhead.
+
 ## Architecture
 
 ```mermaid
@@ -16,32 +26,15 @@ graph TB
     H -.->|SPOE| CS[Coraza WAF]
     CS -.->|Allow / Deny| H
     H --> APP[Backend Apps]
+    CS --> LS[Log shipper]
+    LS -->|Ingest API| BE
 
     FE[React Admin Panel] -->|REST API| BE[FastAPI]
     BE -->|Generated config| H
     BE --> DB[(PostgreSQL)]
 ```
 
----
-
-## What's Implemented
-
-### Milestone 1 — Vertical slice ✅
-- HAProxy 3.0 reverse proxy with SPOE integration
-- Coraza SPOA + OWASP CRS 4.x for request inspection
-- Fail-closed degraded mode when Coraza is unavailable
-- FastAPI backend: auth, vhosts, policies, rule overrides, WAF logs, health
-- React admin panel: dashboard, login, vhost management, policy editing
-- Docker Compose full-stack deployment
-
-### Milestone 2 — Config generator ✅
-- Multi-vhost HAProxy + Coraza config generation from stored policies
-- `POST /config/apply` endpoint with atomic swap and automatic rollback
-- inotify-based config reload supervisor (no Docker socket dependency)
-- Live runtime deployment status card in the dashboard
-- Apply-config button in the admin panel
-
----
+See [README.architecture.md](README.architecture.md) for the full data flow.
 
 ## Tech Stack
 
@@ -53,39 +46,6 @@ graph TB
 | Frontend | React, TypeScript, Vite, Tailwind CSS |
 | Package mgmt | uv (Python), pnpm (Node) |
 | Infrastructure | Docker Compose |
-
----
-
-## Roadmap
-
-| Milestone | Scope | Status |
-|---|---|---|
-| M0 | Cleanup & scaffolding | Done |
-| M1 | Vertical slice — full stack end-to-end | Done |
-| M2 | Config generator & live apply | Done |
-| M3 | WAF log ingestion, presentation, and dashboard evidence | Done |
-| M4 | Policy hardening and per-vhost rule tuning | Path B |
-| M5 | Panel hardening and DevEx | Done |
-| M6 | Thesis evaluation — benchmarks, ZAP, Nuclei, CRS suite, comparison work | Path A active |
-| Post-MVP | Product expansion outside the thesis MVP | Deferred |
-
-### Delivery order
-
-The thesis-critical path is:
-
-```text
-M3 -> M5 -> M6
-```
-
-That path should produce the demo and thesis evidence first: visible WAF logs, runtime/dashboard status, health checks, user/admin basics, benchmark harnesses, effectiveness tests, and false-positive/false-negative analysis.
-
-Path B work can run after that convergence point, or in parallel only when it does not slow the thesis path:
-
-```text
-M4 policy depth -> M3/M5 polish -> optional M6 comparisons -> Post-MVP backlog
-```
-
-Path B covers richer policy tuning, path-scoped bindings, custom rules, live log streaming, pagination, password-management polish, product analytics, GeoIP/DDoS features, TLS automation, and advanced backend routing.
 
 ---
 
@@ -105,8 +65,17 @@ cp deploy/docker/.env.example deploy/docker/.env
 make run       # normal mode or
 make dev       # HAProxy + Coraza debug logging
 
-make seed      # add the initial admin user
+make seed      # add the initial admin user (ADMIN_EMAIL / ADMIN_PASSWORD from .env)
 ```
+
+Additional accounts are managed with the user CLI, e.g.:
+
+```bash
+make users ARGS="create --email alice@example.com --password '<min 12 chars>' --full-name 'Alice'"
+make users ARGS="list"
+```
+
+See [User Management](README.commands.md#user-management) for all commands.
 
 ### Access
 
@@ -137,8 +106,12 @@ make clean   # stop containers and remove all volumes
 ## Documentation
 
 - [Architecture](README.architecture.md) — system architecture and data flow
-- [Development Commands](README.commands.md) — all dev commands
+- [Development Commands](README.commands.md) — all dev commands, including user management
 - [Testing Strategy](README.testing.md) — testing approach and targets
+- [Evaluation Plan](docs/evaluation-plan.md) — thesis benchmark methodology and lab scenarios
+- [HAProxy configs](configs/haproxy/README.md) — SPOE wiring, degraded mode, troubleshooting
+- [Coraza configs](configs/coraza/README.md) — CRS bundle, audit log mapping
+- [Frontend](src/frontend/README.md) — admin panel development notes
 - [Project board](https://github.com/users/bihius/projects/1) — task breakdown
 - [Milestones](https://github.com/bihius/guard-proxy/milestones)
 

@@ -64,6 +64,33 @@ make clean                                                           # Stop stac
 make seed                                                            # Seed admin user in backend container
 ```
 
+## User Management
+
+There is no REST endpoint for managing users; accounts are managed with the
+backend CLI scripts (run inside the backend container via `make`).
+
+```bash
+# Bootstrap the first admin (idempotent; reads ADMIN_EMAIL / ADMIN_PASSWORD
+# from deploy/docker/.env when --email/--password are omitted)
+make seed
+
+# Manage further accounts with the manage_users.py CLI
+make users ARGS="create --email alice@example.com --password '<min 12 chars>' --full-name 'Alice' --role viewer"
+make users ARGS="list"                                # All users (add --json for JSON output)
+make users ARGS="list --role admin --active"          # Filtered list
+make users ARGS="update alice@example.com --role admin"  # Promote by email
+make users ARGS="update 3 --deactivate"               # Deactivate by user ID
+make users ARGS="update 3 --password '<new password>'"   # Reset a password
+```
+
+Outside Docker (local backend checkout):
+
+```bash
+cd src/backend
+uv run python scripts/seed_admin.py --email admin@example.com --password '<min 12 chars>'
+uv run python scripts/manage_users.py --help
+```
+
 ## Smoke Testing
 
 ```bash
