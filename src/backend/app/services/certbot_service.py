@@ -47,6 +47,9 @@ class CertbotService:
             "--agree-tos",
             "-m",
             email,
+            "--config-dir", "/tmp/certbot/config",
+            "--work-dir", "/tmp/certbot/work",
+            "--logs-dir", "/tmp/certbot/logs",
         ]
         
         try:
@@ -59,7 +62,7 @@ class CertbotService:
                 raise CertbotError(f"Certbot failed: {result.stderr or result.stdout}")
                 
             # Read the generated certificates
-            live_dir = Path("/etc/letsencrypt/live") / domain
+            live_dir = Path("/tmp/certbot/config/live") / domain
             cert_path = live_dir / "fullchain.pem"
             key_path = live_dir / "privkey.pem"
             
