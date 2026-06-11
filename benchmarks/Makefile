@@ -4,7 +4,8 @@ LAB_COMPOSE  := $(REPO_ROOT)/benchmarks/lab/docker-compose.targets.yml
 CORE_ENV     := $(REPO_ROOT)/deploy/docker/.env
 LAB_ENV      := $(REPO_ROOT)/benchmarks/lab/.env
 RUNNERS      := $(REPO_ROOT)/benchmarks/lab/runners
-COMPOSE      := docker compose -f $(CORE_COMPOSE) -f $(LAB_COMPOSE) --env-file $(CORE_ENV) --env-file $(LAB_ENV)
+DOCKER_COMPOSE ?= $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose")
+COMPOSE      := $(DOCKER_COMPOSE) -f $(CORE_COMPOSE) -f $(LAB_COMPOSE) --env-file $(CORE_ENV) --env-file $(LAB_ENV)
 
 RUN_ID       ?= $(shell date +%Y%m%d-%H%M%S)
 TARGET_VHOST ?=
