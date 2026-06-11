@@ -13,12 +13,13 @@ type ModalProps = {
   children: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
+  contentClassName?: string;
 };
 
-export function Modal({ title, children, footer, onClose }: ModalProps) {
+export function Modal({ title, children, footer, onClose, contentClassName }: ModalProps) {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent aria-describedby={undefined} className={contentClassName}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

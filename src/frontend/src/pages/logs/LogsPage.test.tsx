@@ -180,14 +180,14 @@ describe("LogsPage", () => {
     );
   });
 
-  it("View button opens detail modal with log fields", async () => {
+  it("clicking an event row opens detail modal with log fields", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
     vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole("button", { name: /view/i }));
+    await userEvent.click(screen.getByText("app.example.com"));
 
     expect(screen.getByText("Event details")).toBeInTheDocument();
     expect(screen.getByText("SQL injection attack detected")).toBeInTheDocument();
