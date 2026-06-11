@@ -38,7 +38,7 @@ RUN apt-get update \
        > /etc/apt/sources.list.d/haproxy.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends haproxy \
-    && apt-get purge -y ca-certificates curl gnupg \
+    && apt-get purge -y curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
