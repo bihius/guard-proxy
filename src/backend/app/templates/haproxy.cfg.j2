@@ -38,21 +38,24 @@ frontend fe_http
     acl is_health path /health
     http-request set-log-level silent if is_health
 
+    # Let's Encrypt HTTP-01 challenge routing
+    # Defined first so the deny rule below can reference it.
+    acl is_acme path_beg /.well-known/acme-challenge/
+
     # Known vhosts. Match Host without the optional request port so local
     # Docker/browser requests such as app.local:8080 still route correctly.
     # Unknown hosts are rejected here, before WAF inspection, so that
     # Coraza does not process traffic destined for no valid backend.
+    # ACME HTTP-01 challenges are exempted: Let's Encrypt verification
+    # must pass through even when a domain's first config-apply is pending.
 {% for route in routes %}
     acl {{ route.vhost_acl_name }} hdr(host),field(1,:) -i {{ route.vhost_hosts | join(" ") }}
 {% endfor %}
 {% if routes %}
-    http-request deny deny_status 421 if{% for route in routes %} !{{ route.vhost_acl_name }}{% endfor %}
+    http-request deny deny_status 421 if{% for route in routes %} !{{ route.vhost_acl_name }}{% endfor %} !is_acme
 {% else %}
-    http-request deny deny_status 421
+    http-request deny deny_status 421 if !is_acme
 {% endif %}
-
-    # Let's Encrypt HTTP-01 challenge routing
-    acl is_acme path_beg /.well-known/acme-challenge/
 
     # HTTP to HTTPS redirection for domains with SSL enabled
 {% for route in routes %}
@@ -111,18 +114,18 @@ frontend fe_https
     acl is_health path /health
     http-request set-log-level silent if is_health
 
-    # Known vhosts validation
+    # Let's Encrypt HTTP-01 challenge routing (failsafe)
+    acl is_acme path_beg /.well-known/acme-challenge/
+
+    # Known vhosts validation — ACME challenges are exempted (see fe_http).
 {% for route in routes %}
     acl {{ route.vhost_acl_name }} hdr(host),field(1,:) -i {{ route.vhost_hosts | join(" ") }}
 {% endfor %}
 {% if routes %}
-    http-request deny deny_status 421 if{% for route in routes %} !{{ route.vhost_acl_name }}{% endfor %}
+    http-request deny deny_status 421 if{% for route in routes %} !{{ route.vhost_acl_name }}{% endfor %} !is_acme
 {% else %}
-    http-request deny deny_status 421
+    http-request deny deny_status 421 if !is_acme
 {% endif %}
-
-    # Let's Encrypt HTTP-01 challenge routing (failsafe)
-    acl is_acme path_beg /.well-known/acme-challenge/
 
     http-request set-header X-Forwarded-For %[src]
     http-request set-header X-Forwarded-Proto https
