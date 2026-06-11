@@ -142,12 +142,19 @@ def _to_rule_override_contexts(
 
 def _extract_backend_address(backend_url: str) -> str:
     parsed = urlparse(backend_url)
+    
     if parsed.scheme:
-        address = parsed.netloc
+        host = parsed.hostname
+        port = parsed.port
+        if not port:
+            port = 443 if parsed.scheme == "https" else 80
+        address = f"{host}:{port}"
     else:
         address = parsed.path
+        if ":" not in address:
+            address = f"{address}:80"
 
-    if not address:
+    if not address or address.startswith(":"):
         raise ValueError(f"Invalid backend URL {backend_url!r}: missing host")
     if "@" in address:
         raise ValueError(
