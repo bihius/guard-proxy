@@ -83,26 +83,6 @@ def _seed_runtime_config() -> None:
         db.close()
 
 
-def _seed_runtime_config() -> None:
-    """Seed the runtime config directory from the database, if needed.
-
-    HAProxy and Coraza read their config from the runtime "current"
-    release on startup. If no admin has run "Apply config" yet, that
-    release does not exist. Best-effort: failures are logged but must not
-    block backend startup.
-    """
-    db = SessionLocal()
-    try:
-        vhosts = db.query(VHost).all()
-        policies = db.query(Policy).all()
-        rule_overrides = db.query(RuleOverride).all()
-        generated = generate(vhosts, policies, rule_overrides)
-        seed_runtime_config(generated)
-    except Exception:
-        logger.exception("Failed to seed runtime config on startup")
-    finally:
-        db.close()
-
 
 app = FastAPI(
     title=settings.app_name,
