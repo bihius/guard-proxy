@@ -10,6 +10,15 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      "/api/v1": {
+        target: process.env.VITE_DEV_SERVER_PROXY_TARGET || "http://127.0.0.1:8000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/v1/, ""),
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",

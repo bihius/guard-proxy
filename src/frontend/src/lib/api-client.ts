@@ -1,4 +1,3 @@
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 
 export type ApiResponseType = "json" | "text" | "empty";
 
@@ -32,7 +31,11 @@ export class InvalidResponseError extends Error {
 }
 
 function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl;
+  }
+  return "/api/v1";
 }
 
 function isJsonContentType(contentType: string | null) {
@@ -96,7 +99,12 @@ export async function apiRequest<T>(
     }
   }
 
-  const response = await fetch(new URL(path, getApiBaseUrl()).toString(), {
+  const base = getApiBaseUrl();
+  const cleanBase = base.endsWith("/") ? base.slice(0, -1) : base;
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${cleanBase}${cleanPath}`;
+
+  const response = await fetch(url, {
     method: options.method ?? "GET",
     headers,
     body: buildBody(options.body),

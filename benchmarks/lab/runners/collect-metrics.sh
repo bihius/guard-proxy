@@ -2,7 +2,7 @@
 # collect-metrics.sh — Aggregate all scenario summaries into results.csv.
 #
 # Reads all summary.json files in a run directory and produces:
-#   benchmarks/results/run-<RUN_ID>/results.csv   — flat table for thesis tables
+#   benchmarks/results/run-<RUN_ID>/results.csv   — flat table for analysis
 #   benchmarks/results/run-<RUN_ID>/report.json   — full structured report
 #
 # Cross-references tagged Coraza audit snapshots for block counts. TP/FP counts
@@ -174,5 +174,5 @@ PY
 echo ""
 echo "Done. Results → ${RUN_DIR}/"
 echo ""
-echo "To copy to thesis assets (after review):"
-echo "  cp ${RUN_DIR}/results.csv thesis/assets/figures/eval-results-${RUN_ID}.csv"
+echo "To copy to analysis assets (after review):"
+echo "  cp ${RUN_DIR}/results.csv assets/figures/eval-results-${RUN_ID}.csv"
