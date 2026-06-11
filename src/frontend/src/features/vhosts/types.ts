@@ -4,6 +4,8 @@ export type VHost = {
   backend_url: string;
   description: string | null;
   ssl_enabled: boolean;
+  ssl_provider: "none" | "upload" | "letsencrypt";
+  ssl_expires_at: string | null;
   is_active: boolean;
   policy_id: number | null;
   created_by: number | null;
@@ -34,6 +36,9 @@ export type VHostCreate = {
   backend_url: string;
   description?: string | null;
   ssl_enabled?: boolean;
+  ssl_provider?: "none" | "upload" | "letsencrypt";
+  ssl_cert?: string | null;
+  ssl_key?: string | null;
   is_active?: boolean;
   policy_id?: number | null;
 };
@@ -43,6 +48,9 @@ export type VHostUpdate = {
   backend_url?: string;
   description?: string | null;
   ssl_enabled?: boolean;
+  ssl_provider?: "none" | "upload" | "letsencrypt";
+  ssl_cert?: string | null;
+  ssl_key?: string | null;
   is_active?: boolean;
   policy_id?: number | null;
 };

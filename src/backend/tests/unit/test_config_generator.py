@@ -144,6 +144,7 @@ def _make_single_route_context(acl_name: str, backend_name: str) -> HaproxyRende
             HaproxyRoute(
                 vhost_acl_name=acl_name,
                 vhost_hosts=("example.com",),
+                ssl_provider="none",
                 backend=HaproxyBackend(
                     name=backend_name,
                     server_name=f"srv_{acl_name}",

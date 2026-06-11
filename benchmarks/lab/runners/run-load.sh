@@ -69,7 +69,7 @@ if [[ -n "${HAPROXY_CONTAINER}" ]]; then
   SAMPLER_HAPROXY_PID=$!
 fi
 
-docker run --rm --cpuset-cpus="21-23" \
+docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
   -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
   -e "LOAD_VHOST=${TARGET_VHOST}" \
@@ -94,7 +94,7 @@ copy_audit_log_snapshot "${OUT_DIR}"
 
 echo "--- Run 2: direct to ${DIRECT_HOST}:${DIRECT_PORT} ---"
 
-docker run --rm --cpuset-cpus="21-23" \
+docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
   -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
   -e "LOAD_VHOST=${TARGET_VHOST}" \

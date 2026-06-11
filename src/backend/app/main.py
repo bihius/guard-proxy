@@ -29,6 +29,7 @@ from app.routers import (
 )
 from app.services.config_apply import seed_runtime_config
 from app.services.config_generator import generate
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +56,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
     validate_runtime_settings(settings)
     _seed_runtime_config()
+    start_scheduler()
     yield
     # Shutdown
+    stop_scheduler()
 
 
 def _seed_runtime_config() -> None:
@@ -78,6 +81,7 @@ def _seed_runtime_config() -> None:
         logger.exception("Failed to seed runtime config on startup")
     finally:
         db.close()
+
 
 
 app = FastAPI(

@@ -4,7 +4,8 @@ LAB_COMPOSE  := $(REPO_ROOT)/benchmarks/lab/docker-compose.targets.yml
 CORE_ENV     := $(REPO_ROOT)/deploy/docker/.env
 LAB_ENV      := $(REPO_ROOT)/benchmarks/lab/.env
 RUNNERS      := $(REPO_ROOT)/benchmarks/lab/runners
-COMPOSE      := docker compose -f $(CORE_COMPOSE) -f $(LAB_COMPOSE) --env-file $(CORE_ENV) --env-file $(LAB_ENV)
+DOCKER_COMPOSE ?= $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose")
+COMPOSE      := $(DOCKER_COMPOSE) -f $(CORE_COMPOSE) -f $(LAB_COMPOSE) --env-file $(CORE_ENV) --env-file $(LAB_ENV)
 
 RUN_ID       ?= $(shell date +%Y%m%d-%H%M%S)
 TARGET_VHOST ?=
@@ -30,6 +31,13 @@ lab-up:
 	$(COMPOSE) up -d --build
 	@echo "==> Seeding admin user..."
 	$(COMPOSE) exec -T backend /app/.venv/bin/python scripts/seed_admin.py
+	@echo "==> Waiting for HAProxy master socket..."
+	$(COMPOSE) exec -T backend sh -c \
+	  'deadline=$$((SECONDS+120)); \
+	   until test -S /var/run/haproxy/master.sock; do \
+	     if [ $$SECONDS -ge $$deadline ]; then echo "Timed out waiting for HAProxy master socket" >&2; exit 1; fi; \
+	     sleep 2; \
+	   done; echo "HAProxy master socket is ready."'
 	@echo "==> Seeding vhosts..."
 	bash $(REPO_ROOT)/benchmarks/lab/setup-lab.sh --skip-compose
 
