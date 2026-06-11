@@ -13,9 +13,6 @@ vi.mock("@/features/vhosts/api");
 vi.mock("@/features/runtime/use-runtime-status", () => ({
   useRuntimeStatus: () => ({ data: null, isLoading: false, error: null, refresh: vi.fn() }),
 }));
-vi.mock("@/features/runtime/ApplyConfigButton", () => ({
-  ApplyConfigButton: () => null,
-}));
 vi.mock("@/features/runtime/RuntimeStatusCard", () => ({
   RuntimeStatusCard: () => null,
 }));

@@ -13,7 +13,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings, validate_runtime_settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
+from app.models.policy import Policy
+from app.models.rule_override import RuleOverride
+from app.models.vhost import VHost
 from app.rate_limit import limiter, rate_limit_exceeded_handler
 from app.routers import (
     auth,
@@ -24,6 +27,8 @@ from app.routers import (
     runtime_status,
     vhosts,
 )
+from app.services.config_apply import seed_runtime_config
+from app.services.config_generator import generate
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +54,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan — startup and shutdown events."""
     # Startup
     validate_runtime_settings(settings)
+    _seed_runtime_config()
     yield
     # Shutdown
+
+
+def _seed_runtime_config() -> None:
+    """Seed the runtime config directory from the database, if needed.
+
+    HAProxy and Coraza read their config from the runtime "current"
+    release on startup. If no admin has run "Apply config" yet, that
+    release does not exist. Best-effort: failures are logged but must not
+    block backend startup.
+    """
+    db = SessionLocal()
+    try:
+        vhosts = db.query(VHost).all()
+        policies = db.query(Policy).all()
+        rule_overrides = db.query(RuleOverride).all()
+        generated = generate(vhosts, policies, rule_overrides)
+        seed_runtime_config(generated)
+    except Exception:
+        logger.exception("Failed to seed runtime config on startup")
+    finally:
+        db.close()
 
 
 app = FastAPI(
