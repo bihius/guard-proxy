@@ -79,6 +79,7 @@ class HaproxyRoute:
 
     vhost_acl_name: str
     vhost_hosts: tuple[str, ...]
+    ssl_provider: str
     backend: HaproxyBackend
 
     def __post_init__(self) -> None:

@@ -287,17 +287,19 @@ make results RUN_ID=20260610-123456
 
 ## 9. Threats to Validity
 
+### 9.1 Noisy-neighbour CPU contention
 
+The Proxmox host runs a live homelab (media services). CPU pinning (WAF stack + targets to cores 18–20, attacker/load containers to cores 21–23, see `benchmarks/lab/.env.example`) mitigates contention with the host's other workloads, but memory bandwidth and I/O remain shared. **Mitigation:** run during low-traffic hours (early morning); record host load in `manifest.json`; discard outlier runs.
 
-### 9.1 Single-host load generator
+### 9.2 Single-host load generator
 
 The wrk container and the WAF stack run on the same host. The load generator's CPU consumption competes with the WAF. **Effect:** RPS numbers may be pessimistic (load generator throttles before WAF saturates). **Mitigation:** document the single-host topology as a limitation; the relative overhead delta (WAF vs direct) is still valid because both runs share the same load-generator cost.
 
-### 9.2 WordPress false positives without CRS exclusions
+### 9.3 WordPress false positives without CRS exclusions
 
 WordPress is tested without CRS application exclusion plugins (not yet implemented in the backend). Any false positives are for an **untuned** WAF+CMS combination under a documented policy. They are not generalized to all Guard Proxy deployments.
 
-### 9.3 Scanner denominators
+### 9.4 Scanner denominators
 
 ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/FP in the current harness. Their results are reported as scanner evidence, while labeled corpus requests provide the metric denominator.
 

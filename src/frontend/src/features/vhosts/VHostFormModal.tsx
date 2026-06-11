@@ -32,6 +32,12 @@ export function VHostFormModal(props: VHostFormModalProps) {
   const [backendUrl, setBackendUrl] = useState(initial?.backend_url ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
+  const [sslEnabled, setSslEnabled] = useState(initial?.ssl_enabled ?? false);
+  const [sslProvider, setSslProvider] = useState<"none" | "upload" | "letsencrypt">(
+    initial?.ssl_provider ?? "none"
+  );
+  const [sslCert, setSslCert] = useState("");
+  const [sslKey, setSslKey] = useState("");
   const [policyId, setPolicyId] = useState<string>(
     initial?.policy_id != null ? String(initial.policy_id) : "",
   );
@@ -49,7 +55,10 @@ export function VHostFormModal(props: VHostFormModalProps) {
       domain,
       backend_url: backendUrl,
       description: description || null,
-      ssl_enabled: initial?.ssl_enabled ?? false,
+      ssl_enabled: sslEnabled,
+      ssl_provider: sslProvider,
+      ssl_cert: sslProvider === "upload" ? (sslCert || null) : null,
+      ssl_key: sslProvider === "upload" ? (sslKey || null) : null,
       is_active: isActive,
       policy_id: policyId ? Number(policyId) : null,
     };
@@ -154,13 +163,67 @@ export function VHostFormModal(props: VHostFormModalProps) {
           </Select>
         </div>
 
-        <Label className="flex cursor-pointer items-center gap-2">
-          <Checkbox
-            checked={isActive}
-            onChange={(e) => setIsActive(e.target.checked)}
-          />
-          Active
-        </Label>
+        <div className="space-y-1.5 border-t pt-4">
+          <Label className="flex cursor-pointer items-center gap-2 font-semibold">
+            <Checkbox
+              checked={sslEnabled}
+              onChange={(e) => setSslEnabled(e.target.checked)}
+            />
+            Enable SSL
+          </Label>
+
+          {sslEnabled && (
+            <div className="mt-4 space-y-4 rounded-md border p-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="vhost-ssl-provider">SSL Provider</Label>
+                <Select
+                  id="vhost-ssl-provider"
+                  value={sslProvider}
+                  onChange={(e) => setSslProvider(e.target.value as "none" | "upload" | "letsencrypt")}
+                >
+                  <option value="none">None</option>
+                  <option value="upload">Upload Custom Certificate</option>
+                  <option value="letsencrypt">Let's Encrypt (Auto-provision)</option>
+                </Select>
+              </div>
+
+              {sslProvider === "upload" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="vhost-ssl-cert">Certificate (PEM)</Label>
+                    <textarea
+                      id="vhost-ssl-cert"
+                      className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-mono"
+                      value={sslCert}
+                      onChange={(e) => setSslCert(e.target.value)}
+                      placeholder="-----BEGIN CERTIFICATE-----..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="vhost-ssl-key">Private Key (PEM)</Label>
+                    <textarea
+                      id="vhost-ssl-key"
+                      className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-mono"
+                      value={sslKey}
+                      onChange={(e) => setSslKey(e.target.value)}
+                      placeholder="-----BEGIN PRIVATE KEY-----..."
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t pt-4">
+          <Label className="flex cursor-pointer items-center gap-2">
+            <Checkbox
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+            />
+            Active
+          </Label>
+        </div>
       </form>
     </Modal>
   );

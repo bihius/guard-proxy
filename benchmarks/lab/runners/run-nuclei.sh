@@ -37,7 +37,7 @@ echo ""
 
 # Pull nuclei-templates inside the container on first run. Header flags inject
 # the vhost and benchmark correlation tags.
-docker run --rm --cpuset-cpus="21-23" \
+docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
   -v "${OUT_DIR}:/output:rw" \
   -v "${NUCLEI_CONF}:/nuclei.yaml:ro" \

@@ -34,9 +34,13 @@ def create_vhost(
             backend_url=body.backend_url,
             description=body.description,
             ssl_enabled=body.ssl_enabled,
+            ssl_provider=body.ssl_provider,
+            ssl_cert=body.ssl_cert,
+            ssl_key=body.ssl_key,
             is_active=body.is_active,
             policy_id=body.policy_id,
             created_by=current_user.id,
+            user_email=current_user.email,
         )
     except VHostPolicyNotFoundError as error:
         raise HTTPException(
@@ -47,6 +51,11 @@ def create_vhost(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="VHost domain already exists",
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
         ) from error
 
 
@@ -82,13 +91,17 @@ def update_vhost(
     vhost_id: int,
     body: VHostUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ) -> VHost:
     """Updates selected vhost fields (admin only)."""
     service = VHostService(db)
 
     try:
-        return service.update_vhost(vhost_id, body.model_dump(exclude_unset=True))
+        return service.update_vhost(
+            vhost_id, 
+            body.model_dump(exclude_unset=True), 
+            user_email=current_user.email
+        )
     except VHostNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -102,6 +115,11 @@ def update_vhost(
     except VHostFieldCannotBeNullError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(error),
         ) from error
     except VHostDomainAlreadyExistsError as error:

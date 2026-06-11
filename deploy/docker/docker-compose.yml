@@ -134,6 +134,7 @@ services:
         condition: service_started
     ports:
       - "${HAPROXY_HTTP_PORT:-8080}:80"
+      - "${HAPROXY_HTTPS_PORT:-8443}:443"
     volumes:
       - ../../configs/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro

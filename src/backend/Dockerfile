@@ -31,14 +31,14 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg certbot \
     && curl -fsSL https://haproxy.debian.net/bernat.debian.org.gpg \
        | gpg --dearmor > /etc/apt/trusted.gpg.d/haproxy.gpg \
     && printf "deb [signed-by=/etc/apt/trusted.gpg.d/haproxy.gpg] http://haproxy.debian.net bookworm-backports-3.0 main\n" \
        > /etc/apt/sources.list.d/haproxy.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends haproxy \
-    && apt-get purge -y ca-certificates curl gnupg \
+    && apt-get purge -y curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv

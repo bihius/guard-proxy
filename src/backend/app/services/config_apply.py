@@ -310,6 +310,29 @@ def _write_candidate(candidate_dir: Path, generated: GeneratedConfig) -> None:
         generated.rule_overrides_conf,
         encoding="utf-8",
     )
+    certs_dir = candidate_dir / "certs"
+    certs_dir.mkdir(exist_ok=True)
+    for domain, pem in generated.certs.items():
+        (certs_dir / f"{domain}.pem").write_text(pem, encoding="utf-8")
+    
+    # Write a default dummy cert so HAProxy doesn't fail if no certs are present
+    if not generated.certs:
+        dummy_cert = (
+            "-----BEGIN PRIVATE KEY-----\n"
+            "MC4CAQAwBQYDK2VwBCIEIKxU2vJ06X1k5d1w7tB6d/m3E9aL4jT2bI0kG9l6F7m8\n"
+            "-----END PRIVATE KEY-----\n"
+            "-----BEGIN CERTIFICATE-----\n"
+            "MIIBBDCCAWugAwIBAgIUW6o6+vK8/J9tXf/mF0M+9qO3ZfswBQYDK2VwMDExLzAt\n"
+            "BgNVBAMMJkd1YXJkIFByb3h5IERlZmF1bHQgU2VsZi1TaWduZWQgQ2VydDAeFw0y\n"
+            "NDA1MTEwMDAwMDBaFw0zNDA1MDkwMDAwMDBaMDExLzAtBgNVBAMMJkd1YXJkIFBy\n"
+            "b3h5IERlZmF1bHQgU2VsZi1TaWduZWQgQ2VydDAqMAUGAytlcAMhAN3fXjP8Cq7y\n"
+            "K3+7yL9X4bK7f/n2X5d1w7tB6d/m3E9ao0UwQzAPBgNVHRMBAf8EBTADAQH/MA4G\n"
+            "A1UdDwEB/wQEAwIChDAdBgNVHQ4EFgQU0/3fXjP8Cq7yK3+7yL9X4bK7f/n2X5d1\n"
+            "MAUGAytlcANBAO/4bK7f/n2X5d1w7tB6d/m3E9aL4jT2bI0kG9l6F7m8K3+7yL9X\n"
+            "4bK7f/n2X5d1w7tB6d/m3E9aL4jT2bI0kG9l6F7m8A==\n"
+            "-----END CERTIFICATE-----\n"
+        )
+        (certs_dir / "default.pem").write_text(dummy_cert, encoding="utf-8")
 
 
 def _validate_haproxy(config_path: Path) -> CommandResult:

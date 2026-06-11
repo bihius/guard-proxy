@@ -1,3 +1,5 @@
+DOCKER_COMPOSE ?= $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose")
+
 COMPOSE_FILE := deploy/docker/docker-compose.yml
 COMPOSE_DEBUG_FILE := deploy/docker/docker-compose.debug.yml
 ENV_FILE := deploy/docker/.env
@@ -6,28 +8,28 @@ ENV_FILE := deploy/docker/.env
         eval-up eval-down eval-clean eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics eval-all eval-results
 
 run:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build -d
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build -d
 
 dev:
-	docker-compose -f $(COMPOSE_FILE) -f $(COMPOSE_DEBUG_FILE) --env-file $(ENV_FILE) up --build
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) -f $(COMPOSE_DEBUG_FILE) --env-file $(ENV_FILE) up --build
 
 down:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down
 
 clean:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down -v
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down -v
 
 logs:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) logs -f
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) logs -f
 
 ps:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) ps
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) ps
 
 seed:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/seed_admin.py
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/seed_admin.py
 
 users:
-	docker-compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(ARGS)
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(ARGS)
 
 coraza-build:
 	docker build -f deploy/docker/coraza.Dockerfile -t guard-proxy/coraza-spoa:dev .

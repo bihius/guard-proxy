@@ -20,6 +20,7 @@ def _sample_generated() -> GeneratedConfig:
         haproxy_cfg="global\n",
         crs_setup_conf="SecRuleEngine On\n",
         rule_overrides_conf="# no overrides\n",
+        certs={},
     )
 
 

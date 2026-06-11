@@ -213,6 +213,7 @@ class RuntimeStatusService:
                     HaproxyRoute(
                         vhost_acl_name="host_app",
                         vhost_hosts=("app.local", "localhost", "127.0.0.1"),
+                        ssl_provider="none",
                         backend=HaproxyBackend(
                             name="be_app",
                             server_name="app",
@@ -240,6 +241,7 @@ class RuntimeStatusService:
         return HaproxyRoute(
             vhost_acl_name=f"host_{suffix}",
             vhost_hosts=(vhost.domain,),
+            ssl_provider=vhost.ssl_provider,
             backend=HaproxyBackend(
                 name=f"be_{suffix}",
                 server_name=f"srv_{suffix}",
