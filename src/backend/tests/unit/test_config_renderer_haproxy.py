@@ -74,7 +74,9 @@ def test_haproxy_template_parameterises_vhost_and_backend() -> None:
     assert "acl host_api hdr(host),field(1,:) -i api.example.com" in rendered
     assert "http-request deny deny_status 421 if !host_api" in rendered
     assert "use_backend be_api if host_api" in rendered
-    assert "default_backend be_api" in rendered
+    # Unknown hosts are denied with 421 before backend selection, so the
+    # generated config must not contain an unreachable default_backend.
+    assert "default_backend" not in rendered
     assert "server api api-backend:9000 check" in rendered
 
 

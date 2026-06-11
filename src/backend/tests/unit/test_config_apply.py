@@ -335,6 +335,35 @@ def test_seed_runtime_config_writes_current_when_missing(
     ) == "SecRuleEngine On\n"
 
 
+def test_seed_runtime_config_replaces_entrypoint_stub_release(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The shell entrypoint seeds crs-setup.conf without haproxy.cfg; the
+    Python seeder must replace that stub with the full rendered release so
+    CRS rule 901001 does not keep firing."""
+    runtime_root = tmp_path / "generated"
+    stub_dir = runtime_root / "releases" / "seed"
+    stub_dir.mkdir(parents=True)
+    (stub_dir / "crs-setup.conf").write_text("SecRuleEngine On\n", encoding="utf-8")
+    (stub_dir / "rule-overrides.conf").write_text("# stub\n", encoding="utf-8")
+    (runtime_root / "current").symlink_to("releases/seed")
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    current = runtime_root / "current"
+    assert current.resolve() != stub_dir.resolve()
+    assert (current / "haproxy.cfg").exists()
+    assert (current / "crs-setup.conf").read_text(
+        encoding="utf-8"
+    ) == "SecRuleEngine On\n"
+
+
 def test_seed_runtime_config_is_noop_when_current_already_exists(
     tmp_path: Path,
     monkeypatch,

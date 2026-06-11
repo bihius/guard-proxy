@@ -106,3 +106,66 @@ def test_apply_validation_failure(
     body = resp.json()
     assert body["status"] == "validation_failed"
     assert "parse error" in body["validation_output"]
+
+
+# ---------------------------------------------------------------------------
+# Runtime operation recording (deployment status)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_success_marks_runtime_status_deployed(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "runtime_generated_config_root",
+        str(tmp_path / "generated"),
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        _mock_validate_ok,
+    )
+    monkeypatch.setattr("app.services.config_apply._reload_haproxy", _mock_reload_ok)
+
+    apply_resp = client.post("/config/apply", headers=admin_token)
+    assert apply_resp.status_code == 200
+
+    status_resp = client.get("/runtime/status", headers=admin_token)
+    assert status_resp.status_code == 200
+    body = status_resp.json()
+    assert body["deployment_state"] == "deployed"
+    assert body["latest_validation"]["status"] == "success"
+    assert body["latest_reload"]["status"] == "success"
+    assert body["latest_reload"]["config_checksum"] == apply_resp.json()["checksum"]
+
+
+def test_apply_validation_failure_records_failed_validation_only(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "runtime_generated_config_root",
+        str(tmp_path / "generated"),
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        _mock_validate_fail,
+    )
+    monkeypatch.setattr("app.services.config_apply._reload_haproxy", _mock_reload_ok)
+
+    apply_resp = client.post("/config/apply", headers=admin_token)
+    assert apply_resp.status_code == 422
+
+    status_resp = client.get("/runtime/status", headers=admin_token)
+    assert status_resp.status_code == 200
+    body = status_resp.json()
+    # No reload was attempted, so the deployment state is unchanged.
+    assert body["deployment_state"] == "never_deployed"
+    assert body["latest_validation"]["status"] == "failed"
+    assert body["latest_reload"] is None

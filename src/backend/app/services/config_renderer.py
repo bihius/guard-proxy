@@ -172,10 +172,7 @@ def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
 
 def _render_haproxy_routes(routes: tuple[HaproxyRoute, ...]) -> str:
     template = _ENVIRONMENT.get_template("haproxy.cfg.j2")
-    return template.render(
-        routes=routes,
-        default_backend=routes[0].backend if routes else None,
-    )
+    return template.render(routes=routes)
 
 
 def render_crs_setup(policy: CrsPolicyRenderContext) -> str:

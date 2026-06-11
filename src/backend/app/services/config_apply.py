@@ -260,7 +260,14 @@ def seed_runtime_config(generated: GeneratedConfig) -> None:
     runtime_root = Path(settings.runtime_generated_config_root).resolve()
     current_link = runtime_root / "current"
 
-    if (current_link / "crs-setup.conf").exists():
+    # A complete release contains both files. The container entrypoint seeds a
+    # minimal crs-setup.conf stub (without haproxy.cfg) so Coraza can start
+    # before the backend; that stub must be replaced with the full rendered
+    # config here, so only skip seeding when a real release is active.
+    if (
+        (current_link / "crs-setup.conf").exists()
+        and (current_link / "haproxy.cfg").exists()
+    ):
         return
 
     correlation_id = uuid.uuid4().hex
