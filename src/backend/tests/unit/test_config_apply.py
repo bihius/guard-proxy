@@ -5,11 +5,12 @@ from pathlib import Path
 
 from app.config import settings
 from app.services.config_apply import (
+    _RELOAD_ERROR_RE,
     ApplyStatus,
     CommandResult,
-    _RELOAD_ERROR_RE,
     _read_current_symlink,
     apply,
+    seed_runtime_config,
 )
 from app.services.config_generator import GeneratedConfig
 
@@ -305,6 +306,66 @@ def test_apply_returns_state_invalid_when_current_is_directory(
 # ---------------------------------------------------------------------------
 # MED M4 — rollback path must validate previous release before reloading
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# seed_runtime_config — backend startup must populate /runtime/current so
+# Coraza's `Include /runtime/current/crs-setup.conf` resolves on first boot.
+# ---------------------------------------------------------------------------
+
+
+def test_seed_runtime_config_writes_current_when_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    current = runtime_root / "current"
+    assert current.is_symlink()
+    assert (current / "crs-setup.conf").read_text(
+        encoding="utf-8"
+    ) == "SecRuleEngine On\n"
+
+
+def test_seed_runtime_config_is_noop_when_current_already_exists(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    previous = _seed_current_release(runtime_root)
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: (_ for _ in ()).throw(AssertionError("should not validate")),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    assert (runtime_root / "current").resolve() == previous.resolve()
+
+
+def test_seed_runtime_config_does_not_swap_current_when_validation_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=False, output="parse error"),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    assert not (runtime_root / "current").exists()
+    assert not (runtime_root / "current").is_symlink()
 
 
 def test_apply_skips_rollback_reload_when_previous_no_longer_validates(
