@@ -246,104 +246,58 @@ cp benchmarks/lab/.env.example benchmarks/lab/.env
 make lab-up
 ```
 
-### 8.2 Running the evaluation
+### 8.2 The "One-Click" Evaluation (Recommended)
+
+To run the entire test suite and compare Paranoia Level 1 (PL1) against Paranoia Level 2 (PL2), just run this single command:
 
 ```bash
-cd /opt/guard-proxy
-
-# Single pass (for smoke check with PL1):
-make eval-all RUN_ID=$(date +%Y%m%d-%H%M%S) POLICY=pl1
-
-# Three passes for thesis (median of three):
-for i in 1 2 3; do
-  RUN_ID=$(date +%Y%m%d-%H%M%S) make eval-all
-  sleep 60  # brief pause between runs
-done
-
-# View results summary:
-make results
-```
-
-### 8.3 Changing target vhost
-
-```bash
-# Run ZAP against WordPress (scanner-assisted coverage):
-make eval-zap TARGET_VHOST=wp.local
-
-# Run load test against DVWA:
-make eval-load TARGET_VHOST=dvwa.local DIRECT_HOST=dvwa DIRECT_PORT=80
-```
-
-### 8.4 Collecting results for the thesis
-
-After runs complete:
-
-```bash
-# Aggregate to CSV:
-RUN_ID=<id> make eval-metrics
-
-# Copy curated results to thesis:
-cp benchmarks/results/run-<id>/results.csv thesis/assets/figures/eval-results-<id>.csv
-```
-
-### 8.5 Paranoia level sweep (PL1 vs PL2)
-
-`make lab-up` (via `setup-lab.sh`) seeds two policies — `Lab Baseline` (PL1, anomaly
-threshold 5) and `Lab PL2` (PL2, anomaly threshold 3, see `benchmarks/lab/.env.example`
-`LAB_PL2_POLICY_*`) — and binds all lab vhosts to PL1 by default.
-
-`POLICY=pl1|pl2` selects which of these policies is active for an `eval-*` target
-(default `pl1`). Each policy pass writes to its own results directory,
-`benchmarks/results/run-<RUN_ID>-pl1/` or `run-<RUN_ID>-pl2/`, and every `summary.json` /
-`results.csv` row is tagged with the active `paranoia_level` (1 or 2) so the two passes
-can be compared side-by-side.
-
-Run both passes for every tool/target with one command:
-
-```bash
-# Runs eval-all at PL1, switches the lab vhosts to PL2, then runs eval-all again.
-# Produces benchmarks/results/run-<id>-pl1/ and run-<id>-pl2/.
 make eval-sweep
 ```
 
-Equivalent manual steps (e.g. to re-run just one tool at PL2):
+**What happens when you run this?**
+1. The script first sets Guard Proxy to **PL1**.
+2. It attacks the lab using multiple tools (go-ftw, Nuclei, ZAP, and a custom corpus) and runs a performance load test.
+3. It saves all metrics for PL1.
+4. Then, it automatically switches Guard Proxy to **PL2** and repeats all the attacks and load tests.
+5. It saves all metrics for PL2.
+
+**What do you do next?**
+When `make eval-sweep` finishes, your results are saved in the `benchmarks/results/` directory as CSV files. 
+You can view a clean table of the most recent results by simply running:
 
 ```bash
-# Switch all lab vhosts to PL2 and reload HAProxy/Coraza config:
-make set-policy POLICY=pl2
-
-# Run (or re-run) any eval target at PL2:
-make eval-nuclei POLICY=pl2
-
-# Switch back to PL1 when done:
-make set-policy POLICY=pl1
+make results
 ```
+This will print a summary of your test run directly in the terminal. You can copy the contents of the generated CSV files into your thesis (`thesis/chapters/06-testy.md`).
 
-For the thesis, copy both CSVs (or concatenate them — they share the same column set
-plus `paranoia_level`):
+### 8.3 Advanced: Manual Runs
+
+If you only want to run a quick smoke test on the default configuration without testing PL2, use:
 
 ```bash
-cp benchmarks/results/run-<id>-pl1/results.csv thesis/assets/figures/eval-results-<id>-pl1.csv
-cp benchmarks/results/run-<id>-pl2/results.csv thesis/assets/figures/eval-results-<id>-pl2.csv
+make eval-all
 ```
 
+If you need to view results for a specific historical run ID (e.g., if you lost the terminal output), you can use:
+```bash
+make results RUN_ID=20260610-123456
+```
+*(Note: Do not append `-pl1` or `-pl2` to the `RUN_ID` here; the Makefile handles that automatically).*
 ---
 
 ## 9. Threats to Validity
 
-### 9.1 Noisy-neighbour CPU contention
 
-The Proxmox host runs a live homelab (media services). CPU pinning to cores 18–23 mitigates this, but memory bandwidth and I/O remain shared. **Mitigation:** run during low-traffic hours (early morning); record host load in `manifest.json`; discard outlier runs.
 
-### 9.2 Single-host load generator
+### 9.1 Single-host load generator
 
 The wrk container and the WAF stack run on the same host. The load generator's CPU consumption competes with the WAF. **Effect:** RPS numbers may be pessimistic (load generator throttles before WAF saturates). **Mitigation:** document the single-host topology as a limitation; the relative overhead delta (WAF vs direct) is still valid because both runs share the same load-generator cost.
 
-### 9.3 WordPress false positives without CRS exclusions
+### 9.2 WordPress false positives without CRS exclusions
 
 WordPress is tested without CRS application exclusion plugins (not yet implemented in the backend). Any false positives are for an **untuned** WAF+CMS combination under a documented policy. They are not generalized to all Guard Proxy deployments.
 
-### 9.4 Scanner denominators
+### 9.3 Scanner denominators
 
 ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/FP in the current harness. Their results are reported as scanner evidence, while labeled corpus requests provide the metric denominator.
 

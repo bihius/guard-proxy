@@ -99,20 +99,24 @@ eval-sweep:
 	echo "==> PL2 pass (run-$${base_run_id}-pl2)"; \
 	$(MAKE) set-policy POLICY=pl2; \
 	$(MAKE) eval-all RUN_ID=$${base_run_id} POLICY=pl2; \
-	echo "==> Done. Compare benchmarks/results/run-$${base_run_id}-pl1/results.csv and run-$${base_run_id}-pl2/results.csv"
+	echo "==> Done. Results for PL1 pass:"; \
+	$(MAKE) results RUN_ID=$${base_run_id} POLICY=pl1; \
+	echo ""; \
+	echo "==> Results for PL2 pass:"; \
+	$(MAKE) results RUN_ID=$${base_run_id} POLICY=pl2
 
 # ── Results summary ────────────────────────────────────────────────────────
 
 ## Print a summary of the most recent run (or RUN_ID=<id> [POLICY=pl1|pl2] for a specific run).
 results:
-	@if [[ "$(origin RUN_ID)" == "command line" ]]; then \
+	@if [ "$(origin RUN_ID)" = "command line" ]; then \
 	  run="$(EFFECTIVE_RUN_ID)"; \
 	else \
 	  run=$$(ls -1t $(REPO_ROOT)/benchmarks/results/ 2>/dev/null \
 	          | grep '^run-' | head -1 | sed 's/^run-//'); \
 	fi; \
 	csv="$(REPO_ROOT)/benchmarks/results/run-$${run}/results.csv"; \
-	if [[ -f "$$csv" ]]; then \
+	if [ -f "$$csv" ]; then \
 	  echo "Run: $${run}"; column -t -s, "$$csv"; \
 	else \
 	  echo "No results found for run-$${run}. Run 'make eval-all RUN_ID=<id> [POLICY=pl1|pl2]' first."; \
@@ -139,7 +143,7 @@ help:
 	@echo "  DIRECT_HOST=<name>  Direct-access Docker service name"
 	@echo "  DIRECT_PORT=<port>  Direct-access port (bypasses HAProxy)"
 	@echo ""
-	@echo "Example (3 runs for thesis median):"
+	@echo "Example (3 runs for median):"
 	@echo "  for i in 1 2 3; do make eval-all; done"
 	@echo ""
 	@echo "Example (PL1 vs PL2 sweep across all tools/targets):"

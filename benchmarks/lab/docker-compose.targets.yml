@@ -18,14 +18,31 @@ name: guard-proxy
 
 services:
   backend:
+    cpuset: "18-20"
     ports:
       - "${BACKEND_HTTP_PORT:-8000}:8000"
+
+  postgres:
+    cpuset: "18-20"
+
+  frontend:
+    cpuset: "18-20"
+
+  coraza:
+    cpuset: "18-20"
+
+  haproxy:
+    cpuset: "18-20"
+
+  log-shipper:
+    cpuset: "18-20"
 
   # ── OWASP Juice Shop ──────────────────────────────────────────────────────
   # Intentionally vulnerable Node.js app designed for security testing.
   # Vhost: juice.local
   juiceshop:
     image: bkimminich/juice-shop:v17.1.1
+    cpuset: "18-20"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/rest/admin/application-version >/dev/null 2>&1"]
@@ -41,6 +58,7 @@ services:
   # Vhost: ftw.local
   ftw-backend:
     image: ghcr.io/coreruleset/albedo:0.2.0
+    cpuset: "18-20"
     restart: unless-stopped
     networks:
       - gp_internal
@@ -50,6 +68,7 @@ services:
   # Vhost: dvwa.local
   dvwa-db:
     image: mariadb:11.4
+    cpuset: "18-20"
     restart: unless-stopped
     environment:
       MARIADB_ROOT_PASSWORD: ${DVWA_DB_ROOT_PASSWORD:-dvwa_root_pw}
@@ -68,6 +87,7 @@ services:
 
   dvwa:
     image: ghcr.io/digininja/dvwa:latest
+    cpuset: "18-20"
     restart: unless-stopped
     environment:
       DB_SERVER: dvwa-db
@@ -94,6 +114,7 @@ services:
   # Vhost: wp.local
   wp-db:
     image: mariadb:11.4
+    cpuset: "18-20"
     restart: unless-stopped
     environment:
       MARIADB_ROOT_PASSWORD: ${WP_DB_ROOT_PASSWORD:-wp_root_pw}
@@ -112,6 +133,7 @@ services:
 
   wordpress:
     image: wordpress:php8.3-apache
+    cpuset: "18-20"
     restart: unless-stopped
     environment:
       WORDPRESS_DB_HOST: wp-db
@@ -137,6 +159,7 @@ services:
   # Runs once (no restart), exits 0 after wp core install succeeds.
   wp-cli:
     image: wordpress:cli-php8.3
+    cpuset: "18-20"
     restart: "no"
     environment:
       WORDPRESS_DB_HOST: wp-db

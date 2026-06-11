@@ -37,7 +37,7 @@ echo "Output dir   : ${OUT_DIR}"
 echo "Image        : ${FTW_IMAGE}"
 echo ""
 
-docker run --rm \
+docker run --rm --cpuset-cpus="21-23" \
   --network "${DOCKER_NETWORK}" \
   -v "${CRS_TESTS}:/tests:ro" \
   -v "${FTW_CONFIG}:/config.yaml:ro" \
