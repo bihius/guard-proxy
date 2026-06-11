@@ -47,7 +47,7 @@ class CertbotService:
             "--agree-tos",
         ]
         
-        if email:
+        if email and not email.endswith("@example.com"):
             cmd.extend(["-m", email])
         else:
             cmd.append("--register-unsafely-without-email")
