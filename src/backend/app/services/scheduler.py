@@ -31,7 +31,7 @@ def renew_certificates() -> None:
                 try:
                     # In a real background job, we'd find the admin email
                     # or use the generic one.
-                    email = None
+                    email = f"admin@{vhost.domain}"
                     cert, key = certbot.provision_cert(vhost.domain, email)
                     vhost.ssl_cert = cert
                     vhost.ssl_key = key

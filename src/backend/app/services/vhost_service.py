@@ -75,7 +75,7 @@ class VHostService:
         if ssl_provider == "upload" and ssl_cert:
             ssl_expires_at = self._parse_cert_expiration(ssl_cert)
         elif ssl_provider == "letsencrypt":
-            email = user_email
+            email = user_email or f"admin@{domain}"
             certbot = CertbotService()
             try:
                 ssl_cert, ssl_key = certbot.provision_cert(domain, email)
@@ -150,7 +150,7 @@ class VHostService:
                 patch_data["ssl_expires_at"] = self._parse_cert_expiration(ssl_cert)
             elif ssl_provider == "letsencrypt":
                 domain = str(patch_data.get("domain", vhost.domain))
-                email = user_email
+                email = user_email or f"admin@{domain}"
                 certbot = CertbotService()
                 try:
                     new_cert, new_key = certbot.provision_cert(domain, email)
