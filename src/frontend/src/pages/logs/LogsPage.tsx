@@ -303,25 +303,6 @@ export function LogsPage() {
     applyFilters(EMPTY_FILTERS);
   }
 
-  const allColumns: DataTableColumn<Log>[] = [
-    ...columns,
-    {
-      key: "actions",
-      header: "",
-      className: "w-px whitespace-nowrap",
-      cell: (row) => (
-        <Button
-          type="button"
-          onClick={() => setSelected(row)}
-          variant="outline"
-          size="sm"
-        >
-          View
-        </Button>
-      ),
-    },
-  ];
-
   return (
     <section className="space-y-8">
       <PageHeader
@@ -411,9 +392,10 @@ export function LogsPage() {
         ) : (
           <>
             <DataTable
-              columns={allColumns}
+              columns={columns}
               rows={logs}
               getRowKey={(row) => String(row.id)}
+              onRowClick={setSelected}
               emptyTitle="No events found"
               emptyDescription="No log events match the current filters. Try adjusting or clearing them."
             />

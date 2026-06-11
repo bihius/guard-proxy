@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -37,10 +37,13 @@ function Nullable({ value }: { value: string | number | null | undefined }) {
 }
 
 export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
+  const [showRawContext, setShowRawContext] = useState(false);
+
   return (
     <Modal
       title="Event details"
       onClose={onClose}
+      contentClassName="max-w-[min(80vw,72rem)]"
       footer={
         <Button type="button" onClick={onClose} variant="outline">
           Close
@@ -93,9 +96,22 @@ export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
           </Field>
           {log.raw_context !== null && (
             <Field label="Raw context">
-              <pre className="overflow-auto rounded-md bg-muted p-3 text-xs text-foreground">
-                {JSON.stringify(log.raw_context, null, 2)}
-              </pre>
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  onClick={() => setShowRawContext((current) => !current)}
+                  variant="outline"
+                  size="sm"
+                  aria-expanded={showRawContext}
+                >
+                  {showRawContext ? "Hide raw context" : "Show raw context"}
+                </Button>
+                {showRawContext && (
+                  <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs text-foreground">
+                    {JSON.stringify(log.raw_context, null, 2)}
+                  </pre>
+                )}
+              </div>
             </Field>
           )}
         </dl>
