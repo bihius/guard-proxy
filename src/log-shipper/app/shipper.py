@@ -77,7 +77,7 @@ def _post_event(settings: Settings, payload: dict[str, object]) -> int:
     with urllib.request.urlopen(
         request, timeout=settings.request_timeout_seconds
     ) as response:
-        return response.status
+        return int(response.status)
 
 
 def _ship_line(settings: Settings, line: bytes) -> _ShipResult:

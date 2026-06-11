@@ -143,9 +143,10 @@ def test_real_event_maps_correctly() -> None:
     assert p["action"] == "deny"               # is_interrupted=True
     assert p["rule_id"] == 941100              # first message
     assert p["rule_message"] == "XSS Attack Detected via libinjection"
+    # Score 20 (parsed from the blocking message) is far above the threshold.
     assert p["severity"] == "critical"
     assert p["status_code"] is None            # status=0 out of range
-    assert p["anomaly_score"] is None          # variables absent
+    assert p["anomaly_score"] == 20            # parsed from "(Total Score: 20)"
     assert p["raw_context"] is _REAL_EVENT
 
 
@@ -242,15 +243,21 @@ def test_action_allow_when_warning_severity_not_interrupted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: severity mapping (string form from error_message)
+# Tests: event severity derivation
 # ---------------------------------------------------------------------------
 
 def test_severity_string_buckets() -> None:
+    """Event severity is derived from action + score, not copied per-rule.
+
+    High per-rule severities imply action=deny, which maps to "error" unless
+    the anomaly score is clearly above the blocking threshold; non-blocking
+    events are capped at "warning".
+    """
     cases = {
-        "emergency": "critical",
-        "alert": "critical",
-        "critical": "critical",
-        "error": "error",
+        "emergency": "error",    # deny without a high total score
+        "alert": "error",
+        "critical": "error",
+        "error": "warning",      # allow, capped at warning
         "warning": "warning",
         "notice": "info",
         "info": "info",
@@ -263,13 +270,73 @@ def test_severity_string_buckets() -> None:
         assert p["severity"] == expected, f"severity={sev_str!r} → {p['severity']!r}, want {expected!r}"
 
 
+def test_blocked_event_with_high_score_is_critical() -> None:
+    event = _base_event(transaction={"is_interrupted": True})
+    event["transaction"]["variables"] = {"tx": {"anomaly_score": 15}}
+    p = coraza_event_to_ingest(event)
+    assert p is not None
+    assert p["action"] == "deny"
+    assert p["severity"] == "critical"
+
+
+def test_blocked_event_with_low_score_is_error() -> None:
+    event = _base_event(transaction={"is_interrupted": True})
+    event["transaction"]["variables"] = {"tx": {"anomaly_score": 5}}
+    p = coraza_event_to_ingest(event)
+    assert p is not None
+    assert p["action"] == "deny"
+    assert p["severity"] == "error"
+
+
+def test_blocked_event_without_score_is_error() -> None:
+    event = _base_event(transaction={"is_interrupted": True})
+    p = coraza_event_to_ingest(event)
+    assert p is not None
+    assert p["action"] == "deny"
+    assert p["severity"] == "error"
+
+
+def test_allowed_event_with_high_score_is_critical() -> None:
+    """In DetectionOnly mode nothing is ever blocked (action stays "allow"),
+    but a high anomaly score must still surface as "critical" so the
+    dashboard isn't blind to severe attacks under detect-only policies."""
+    event = _base_event(messages=[_message_entry(severity="notice")])
+    event["transaction"]["is_interrupted"] = False
+    event["transaction"]["variables"] = {"tx": {"anomaly_score": 15}}
+    p = coraza_event_to_ingest(event)
+    assert p is not None
+    assert p["action"] == "allow"
+    assert p["severity"] == "critical"
+
+
+def test_anomaly_score_parsed_from_blocking_message() -> None:
+    """When variables are absent, the score comes from the 949110 message."""
+    event = _base_event(transaction={"is_interrupted": True})
+    event["messages"].append({
+        "actionset": "", "message": "",
+        "error_message": (
+            '[client "203.0.113.7"] Coraza: Access denied (phase 2). '
+            'Inbound Anomaly Score Exceeded (Total Score: 12) '
+            '[id "949110"] [msg "Inbound Anomaly Score Exceeded"] '
+            '[severity "emergency"]'
+        ),
+        "data": None,
+    })
+    p = coraza_event_to_ingest(event)
+    assert p is not None
+    assert p["anomaly_score"] == 12
+    assert p["severity"] == "critical"
+
+
 def test_severity_numeric_string_still_works() -> None:
     """Backward compat: if data dict is populated with numeric severity string."""
     event = _base_event()
     event["messages"][0]["data"] = {"id": "941100", "msg": "XSS", "severity": "2"}
     p = coraza_event_to_ingest(event)
     assert p is not None
-    assert p["severity"] == "error"
+    # Rule severity "2" maps to error; non-blocking events are capped at warning.
+    assert p["action"] == "allow"
+    assert p["severity"] == "warning"
     assert p["rule_id"] == 941100
 
 
