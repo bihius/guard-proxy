@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useAuth } from "@/hooks/use-auth";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "@/lib/api-client";
+import { ApiError, apiRequest } from "@/lib/api-client";
 import type { CurrentUser } from "@/types/api";
 import type { TokenResponse } from "@/types/api";
 
@@ -117,6 +117,10 @@ async function waitForReady() {
 describe("AuthProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("restores a session through refresh and me calls", async () => {
@@ -363,6 +367,69 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("user")).toHaveTextContent(latestUser.email);
     expect(screen.getByTestId("token")).toHaveTextContent("session-access");
     expect(screen.getByTestId("error")).toHaveTextContent("no-error");
+  });
+
+  it("refreshes the current user after an automatic 401 token refresh", async () => {
+    const signedInUser = createUser({ email: "old@example.com" });
+    const refreshedUser = createUser({
+      email: "updated@example.com",
+      full_name: "Updated User",
+    });
+
+    mockedRefreshSession
+      .mockRejectedValueOnce(new Error("No session"))
+      .mockResolvedValueOnce({
+        access_token: "new-access",
+        token_type: "bearer",
+      });
+    mockedLogin.mockResolvedValueOnce({
+      access_token: "old-access",
+      token_type: "bearer",
+    });
+    mockedGetCurrentUser
+      .mockResolvedValueOnce(signedInUser)
+      .mockResolvedValueOnce(refreshedUser);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: "Invalid or expired token" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "ok" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitForReady();
+    fireEvent.click(screen.getByRole("button", { name: "sign in" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("token")).toHaveTextContent("old-access");
+      expect(screen.getByTestId("user")).toHaveTextContent(signedInUser.email);
+    });
+
+    await expect(
+      apiRequest<{ status: string }>("/vhosts", { token: "old-access" }),
+    ).resolves.toEqual({ status: "ok" });
+
+    expect(mockedRefreshSession).toHaveBeenCalledTimes(2);
+    expect(mockedGetCurrentUser).toHaveBeenLastCalledWith("new-access");
+    const retryHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(retryHeaders.get("Authorization")).toBe("Bearer new-access");
+    await waitFor(() => {
+      expect(screen.getByTestId("token")).toHaveTextContent("new-access");
+      expect(screen.getByTestId("user")).toHaveTextContent(refreshedUser.email);
+    });
   });
 
   it("aborts restore requests on unmount", async () => {
