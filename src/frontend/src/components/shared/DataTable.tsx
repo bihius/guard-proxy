@@ -26,6 +26,7 @@ type DataTableProps<Row> = {
   getRowKey: (row: Row) => string;
   emptyTitle?: string;
   emptyDescription?: string;
+  onRowClick?: (row: Row) => void;
 };
 
 export function DataTable<Row>({
@@ -34,6 +35,7 @@ export function DataTable<Row>({
   getRowKey,
   emptyTitle = "No records yet",
   emptyDescription = "This table will show data here once the feature is connected to real records.",
+  onRowClick,
 }: DataTableProps<Row>) {
   if (rows.length === 0) {
     return (
@@ -62,7 +64,11 @@ export function DataTable<Row>({
 
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={getRowKey(row)}>
+            <TableRow
+              key={getRowKey(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={cn(onRowClick && "cursor-pointer")}
+            >
               {columns.map((column) => (
                 <TableCell
                   key={column.key}

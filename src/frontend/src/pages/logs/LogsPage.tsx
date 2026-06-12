@@ -24,66 +24,6 @@ function actionTone(action: LogAction) {
   return "success" as const;
 }
 
-const columns: DataTableColumn<Log>[] = [
-  {
-    key: "timestamp",
-    header: "Timestamp",
-    cell: (row) => (
-      <span className="whitespace-nowrap text-xs text-muted-foreground">
-        {new Date(row.event_at).toLocaleString()}
-      </span>
-    ),
-  },
-  {
-    key: "vhost",
-    header: "VHost",
-    cell: (row) => row.vhost,
-  },
-  {
-    key: "method",
-    header: "Method",
-    cell: (row) => <span className="font-mono text-xs">{row.method}</span>,
-  },
-  {
-    key: "path",
-    header: "Path",
-    cell: (row) => (
-      <span
-        className="block max-w-xs truncate font-mono text-xs"
-        title={row.request_uri}
-      >
-        {row.request_uri}
-      </span>
-    ),
-  },
-  {
-    key: "action",
-    header: "Action",
-    cell: (row) => <StatusBadge label={row.action} tone={actionTone(row.action)} />,
-  },
-  {
-    key: "score",
-    header: "Score",
-    cell: (row) => <span>{row.anomaly_score ?? "—"}</span>,
-  },
-  {
-    // The log model stores a single matched rule per event.
-    key: "rules",
-    header: "Top matched rules",
-    cell: (row) => {
-      if (row.rule_id === null) return <span className="text-muted-foreground">—</span>;
-      const label = row.rule_message
-        ? `#${row.rule_id} — ${row.rule_message}`
-        : `#${row.rule_id}`;
-      return (
-        <span className="block max-w-xs truncate text-xs" title={label}>
-          {label}
-        </span>
-      );
-    },
-  },
-];
-
 type DateRangePreset = {
   label: string;
   getRange: (now: Date) => Pick<LogFilters, "date_from" | "date_to">;
@@ -293,18 +233,64 @@ export function LogsPage() {
   const [selected, setSelected] = useState<Log | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-  function handleApply() {
-    applyFilters(draft);
-  }
-
-  function handleClear() {
-    setDraft(EMPTY_FILTERS);
-    applyFilters(EMPTY_FILTERS);
-  }
-
-  const allColumns: DataTableColumn<Log>[] = [
-    ...columns,
+  const columns: DataTableColumn<Log>[] = [
+    {
+      key: "timestamp",
+      header: "Timestamp",
+      cell: (row) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {new Date(row.event_at).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: "vhost",
+      header: "VHost",
+      cell: (row) => row.vhost,
+    },
+    {
+      key: "method",
+      header: "Method",
+      cell: (row) => <span className="font-mono text-xs">{row.method}</span>,
+    },
+    {
+      key: "path",
+      header: "Path",
+      cell: (row) => (
+        <span
+          className="block max-w-xs truncate font-mono text-xs"
+          title={row.request_uri}
+        >
+          {row.request_uri}
+        </span>
+      ),
+    },
+    {
+      key: "action",
+      header: "Action",
+      cell: (row) => <StatusBadge label={row.action} tone={actionTone(row.action)} />,
+    },
+    {
+      key: "score",
+      header: "Score",
+      cell: (row) => <span>{row.anomaly_score ?? "—"}</span>,
+    },
+    {
+      // The log model stores a single matched rule per event.
+      key: "rules",
+      header: "Top matched rules",
+      cell: (row) => {
+        if (row.rule_id === null) return <span className="text-muted-foreground">—</span>;
+        const label = row.rule_message
+          ? `#${row.rule_id} — ${row.rule_message}`
+          : `#${row.rule_id}`;
+        return (
+          <span className="block max-w-xs truncate text-xs" title={label}>
+            {label}
+          </span>
+        );
+      },
+    },
     {
       key: "actions",
       header: "",
@@ -321,6 +307,15 @@ export function LogsPage() {
       ),
     },
   ];
+
+  function handleApply() {
+    applyFilters(draft);
+  }
+
+  function handleClear() {
+    setDraft(EMPTY_FILTERS);
+    applyFilters(EMPTY_FILTERS);
+  }
 
   return (
     <section className="space-y-8">
@@ -411,7 +406,7 @@ export function LogsPage() {
         ) : (
           <>
             <DataTable
-              columns={allColumns}
+              columns={columns}
               rows={logs}
               getRowKey={(row) => String(row.id)}
               emptyTitle="No events found"

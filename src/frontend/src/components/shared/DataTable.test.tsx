@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { DataTable, type DataTableColumn } from "./DataTable";
 
@@ -47,5 +47,26 @@ describe("DataTable", () => {
 
     expect(screen.getByText("No rows")).toBeInTheDocument();
     expect(screen.getByText("Nothing to display")).toBeInTheDocument();
+  });
+
+  it("invokes onRowClick with the clicked row", () => {
+    const onRowClick = vi.fn();
+
+    render(
+      <DataTable
+        columns={columns}
+        rows={[
+          { id: "1", name: "Alpha" },
+          { id: "2", name: "Beta" },
+        ]}
+        getRowKey={(row) => row.id}
+        onRowClick={onRowClick}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Beta"));
+
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(onRowClick).toHaveBeenCalledWith({ id: "2", name: "Beta" });
   });
 });
