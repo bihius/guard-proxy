@@ -24,66 +24,6 @@ function actionTone(action: LogAction) {
   return "success" as const;
 }
 
-const columns: DataTableColumn<Log>[] = [
-  {
-    key: "timestamp",
-    header: "Timestamp",
-    cell: (row) => (
-      <span className="whitespace-nowrap text-xs text-muted-foreground">
-        {new Date(row.event_at).toLocaleString()}
-      </span>
-    ),
-  },
-  {
-    key: "vhost",
-    header: "VHost",
-    cell: (row) => row.vhost,
-  },
-  {
-    key: "method",
-    header: "Method",
-    cell: (row) => <span className="font-mono text-xs">{row.method}</span>,
-  },
-  {
-    key: "path",
-    header: "Path",
-    cell: (row) => (
-      <span
-        className="block max-w-xs truncate font-mono text-xs"
-        title={row.request_uri}
-      >
-        {row.request_uri}
-      </span>
-    ),
-  },
-  {
-    key: "action",
-    header: "Action",
-    cell: (row) => <StatusBadge label={row.action} tone={actionTone(row.action)} />,
-  },
-  {
-    key: "score",
-    header: "Score",
-    cell: (row) => <span>{row.anomaly_score ?? "—"}</span>,
-  },
-  {
-    // The log model stores a single matched rule per event.
-    key: "rules",
-    header: "Top matched rules",
-    cell: (row) => {
-      if (row.rule_id === null) return <span className="text-muted-foreground">—</span>;
-      const label = row.rule_message
-        ? `#${row.rule_id} — ${row.rule_message}`
-        : `#${row.rule_id}`;
-      return (
-        <span className="block max-w-xs truncate text-xs" title={label}>
-          {label}
-        </span>
-      );
-    },
-  },
-];
-
 type DateRangePreset = {
   label: string;
   getRange: (now: Date) => Pick<LogFilters, "date_from" | "date_to">;
@@ -293,6 +233,80 @@ export function LogsPage() {
   const [selected, setSelected] = useState<Log | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const columns: DataTableColumn<Log>[] = [
+    {
+      key: "timestamp",
+      header: "Timestamp",
+      cell: (row) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {new Date(row.event_at).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: "vhost",
+      header: "VHost",
+      cell: (row) => row.vhost,
+    },
+    {
+      key: "method",
+      header: "Method",
+      cell: (row) => <span className="font-mono text-xs">{row.method}</span>,
+    },
+    {
+      key: "path",
+      header: "Path",
+      cell: (row) => (
+        <span
+          className="block max-w-xs truncate font-mono text-xs"
+          title={row.request_uri}
+        >
+          {row.request_uri}
+        </span>
+      ),
+    },
+    {
+      key: "action",
+      header: "Action",
+      cell: (row) => <StatusBadge label={row.action} tone={actionTone(row.action)} />,
+    },
+    {
+      key: "score",
+      header: "Score",
+      cell: (row) => <span>{row.anomaly_score ?? "—"}</span>,
+    },
+    {
+      // The log model stores a single matched rule per event.
+      key: "rules",
+      header: "Top matched rules",
+      cell: (row) => {
+        if (row.rule_id === null) return <span className="text-muted-foreground">—</span>;
+        const label = row.rule_message
+          ? `#${row.rule_id} — ${row.rule_message}`
+          : `#${row.rule_id}`;
+        return (
+          <span className="block max-w-xs truncate text-xs" title={label}>
+            {label}
+          </span>
+        );
+      },
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "w-px whitespace-nowrap",
+      cell: (row) => (
+        <Button
+          type="button"
+          onClick={() => setSelected(row)}
+          variant="outline"
+          size="sm"
+        >
+          View
+        </Button>
+      ),
+    },
+  ];
 
   function handleApply() {
     applyFilters(draft);
@@ -395,7 +409,6 @@ export function LogsPage() {
               columns={columns}
               rows={logs}
               getRowKey={(row) => String(row.id)}
-              onRowClick={setSelected}
               emptyTitle="No events found"
               emptyDescription="No log events match the current filters. Try adjusting or clearing them."
             />
