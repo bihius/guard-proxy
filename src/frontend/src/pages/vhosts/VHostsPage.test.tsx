@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "@/features/auth/auth-context.shared";
@@ -46,7 +47,12 @@ const mockPolicies = [{ id: 1, name: "Default" }];
 function renderPage(authOverrides: Partial<AuthContextValue> = {}) {
   return render(
     <AuthContext.Provider value={makeAuthContext(authOverrides)}>
-      <VHostsPage />
+      <MemoryRouter initialEntries={["/vhosts"]}>
+        <Routes>
+          <Route path="/vhosts" element={<VHostsPage />} />
+          <Route path="/vhosts/:vhostId" element={<p>VHost detail page</p>} />
+        </Routes>
+      </MemoryRouter>
     </AuthContext.Provider>,
   );
 }
@@ -122,6 +128,35 @@ describe("VHostsPage", () => {
     expect(screen.queryByRole("button", { name: /new vhost/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
+  });
+
+  it("navigates to the vhost detail page when a row is clicked", async () => {
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("app.example.com")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByText("app.example.com"));
+
+    expect(screen.getByText("VHost detail page")).toBeInTheDocument();
+  });
+
+  it("does not navigate when row action buttons are clicked", async () => {
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage({ hasRole: vi.fn().mockReturnValue(true) });
+
+    await waitFor(() =>
+      expect(screen.getByText("app.example.com")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /edit/i }));
+
+    expect(screen.queryByText("VHost detail page")).not.toBeInTheDocument();
+    expect(screen.getByText("Edit virtual host")).toBeInTheDocument();
   });
 
   it("retry button calls refresh after error", async () => {
