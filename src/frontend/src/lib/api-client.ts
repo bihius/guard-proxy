@@ -30,6 +30,36 @@ export class InvalidResponseError extends Error {
   }
 }
 
+/**
+ * Called when an authenticated request gets a 401. Should attempt a session
+ * refresh and return the new access token, or null when the session is gone
+ * (in which case auth state is expected to be cleared by the handler).
+ */
+type UnauthorizedHandler = () => Promise<string | null>;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+let pendingTokenRefresh: Promise<string | null> | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
+  pendingTokenRefresh = null;
+}
+
+function refreshAccessToken(): Promise<string | null> {
+  if (!unauthorizedHandler) {
+    return Promise.resolve(null);
+  }
+
+  // Deduplicate concurrent 401s into a single refresh attempt.
+  pendingTokenRefresh ??= unauthorizedHandler()
+    .catch(() => null)
+    .finally(() => {
+      pendingTokenRefresh = null;
+    });
+
+  return pendingTokenRefresh;
+}
+
 function getApiBaseUrl() {
   const envUrl = import.meta.env.VITE_API_BASE_URL;
   if (envUrl && envUrl.trim() !== "") {
@@ -77,9 +107,17 @@ function buildBody(body: ApiClientOptions["body"]) {
   return JSON.stringify(body);
 }
 
-export async function apiRequest<T>(
+export function apiRequest<T>(
   path: string,
   options: ApiClientOptions = {}
+): Promise<T> {
+  return executeRequest<T>(path, options, false);
+}
+
+async function executeRequest<T>(
+  path: string,
+  options: ApiClientOptions,
+  isRetry: boolean
 ): Promise<T> {
   const headers = new Headers(options.headers);
 
@@ -113,6 +151,13 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401 && options.token && !isRetry) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        return executeRequest<T>(path, { ...options, token: newToken }, true);
+      }
+    }
+
     let detail = "Request failed";
 
     try {

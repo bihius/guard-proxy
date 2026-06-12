@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { InvalidResponseError, apiRequest } from "./api-client";
+import {
+  InvalidResponseError,
+  apiRequest,
+  setUnauthorizedHandler,
+} from "./api-client";
 
 describe("apiRequest", () => {
   afterEach(() => {
+    setUnauthorizedHandler(null);
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
@@ -145,5 +150,66 @@ describe("apiRequest", () => {
       detail: "Backend exploded",
       status: 500,
     });
+  });
+
+  it("retries an authenticated request once after a 401 refresh", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: "Invalid or expired token" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "ok" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    const handler = vi.fn().mockResolvedValue("new-token");
+    setUnauthorizedHandler(handler);
+
+    await expect(
+      apiRequest<{ status: string }>("/vhosts", { token: "stale-token" }),
+    ).resolves.toEqual({ status: "ok" });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const retryHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(retryHeaders.get("Authorization")).toBe("Bearer new-token");
+  });
+
+  it("throws the original 401 when the refresh handler fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Invalid or expired token" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const handler = vi.fn().mockResolvedValue(null);
+    setUnauthorizedHandler(handler);
+
+    await expect(
+      apiRequest("/vhosts", { token: "stale-token" }),
+    ).rejects.toMatchObject({ status: 401 });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invoke the refresh handler for unauthenticated requests", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Invalid credentials" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const handler = vi.fn().mockResolvedValue("new-token");
+    setUnauthorizedHandler(handler);
+
+    await expect(
+      apiRequest("/auth/login", { method: "POST", body: {} }),
+    ).rejects.toMatchObject({ status: 401 });
+
+    expect(handler).not.toHaveBeenCalled();
   });
 });
