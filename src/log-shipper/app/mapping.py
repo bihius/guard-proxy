@@ -34,6 +34,12 @@ _BRACKET_INT = re.compile(r'\[id "(\d+)"\]')
 _BRACKET_MSG = re.compile(r'\[msg "([^"]+)"\]')
 _BRACKET_SEV = re.compile(r'\[severity "([\w]+)"\]')
 
+# The CRS blocking-evaluation rule embeds the total inbound anomaly score in its
+# message text, e.g. "Inbound Anomaly Score Exceeded (Total Score: 20)". Since
+# coraza-spoa v0.6.1 does not expose transaction.variables, this is the only
+# reliable source of the score for blocked requests.
+_TOTAL_SCORE = re.compile(r"\(Total Score:\s*(\d+)\)")
+
 # Severity strings Coraza writes in error_message → LogSeverity enum values.
 # ModSecurity/Coraza uses: emergency, alert, critical, error, warning, notice, info, debug
 _SEVERITY_STRING_MAP: dict[str, str] = {
@@ -49,6 +55,11 @@ _SEVERITY_STRING_MAP: dict[str, str] = {
 
 # Severity strings that indicate a blocking/deny action even without is_interrupted.
 _DENY_SEVERITY_STRINGS = frozenset({"emergency", "alert", "critical"})
+
+# Anomaly score from which a blocked event is escalated to "critical" severity.
+# With the CRS default inbound threshold of 5, a score of 10+ means at least two
+# high-severity rules matched - a clear attack rather than a borderline block.
+_CRITICAL_ANOMALY_SCORE = 10
 
 # Timestamp formats Coraza may emit in addition to ISO 8601.
 _CORAZA_TS_FORMATS = (
@@ -81,25 +92,30 @@ def coraza_event_to_ingest(event: dict[str, Any]) -> dict[str, Any] | None:
 
     messages = event.get("messages")
     messages = messages if isinstance(messages, list) else []
-    is_interrupted = bool(transaction.get("is_interrupted"))
+    is_interrupted = transaction.get("is_interrupted")
 
     # Prefer the structured data field; fall back to parsing error_message.
     primary_data = _primary_rule_data(messages)
+
+    action = _action(is_interrupted, primary_data)
+    anomaly_score = _anomaly_score(transaction.get("variables"))
+    if anomaly_score is None:
+        anomaly_score = _anomaly_score_from_messages(messages)
 
     payload: dict[str, Any] = {
         "producer_event_id": _clean_str(transaction.get("id")),
         "event_at": _event_at(transaction.get("timestamp")),
         "vhost": _vhost(request.get("headers")),
-        "action": _action(is_interrupted, primary_data),
+        "action": action,
         "source_ip": source_ip,
         "method": method.upper(),
         "request_uri": request_uri,
         "status_code": _status_code(transaction.get("response")),
         "rule_id": _rule_id(primary_data),
         "rule_message": _rule_message(primary_data),
-        "anomaly_score": _anomaly_score(transaction.get("variables")),
+        "anomaly_score": anomaly_score,
         "paranoia_level": _paranoia_level(transaction.get("variables")),
-        "severity": _severity(primary_data),
+        "severity": _event_severity(action, anomaly_score, primary_data),
         "message": None,
         "raw_context": event,
     }
@@ -155,11 +171,14 @@ def _primary_rule_data(messages: list[Any]) -> _RuleData | None:
 # Field derivation helpers
 # ---------------------------------------------------------------------------
 
-def _action(is_interrupted: bool, primary_data: _RuleData | None) -> str:
-    if is_interrupted:
+def _action(is_interrupted: Any, primary_data: _RuleData | None) -> str:
+    if is_interrupted is True:
         return "deny"
-    # Secondary check: deny when a high-severity rule fired even without interruption
-    # (e.g. DetectionOnly-adjacent configs that still log critical hits).
+    if is_interrupted is False:
+        return "allow"
+    # Fallback for older or malformed events where the interruption flag is
+    # absent. Do not apply it to explicit False; DetectionOnly policies emit
+    # high-severity matches without blocking the request.
     if primary_data is not None and primary_data.severity_str is not None:
         if primary_data.severity_str.lower() in _DENY_SEVERITY_STRINGS:
             return "deny"
@@ -177,7 +196,34 @@ def _rule_message(rd: _RuleData | None) -> str | None:
     return rd.msg if rd is not None else None
 
 
-def _severity(rd: _RuleData | None) -> str:
+def _event_severity(
+    action: str,
+    anomaly_score: int | None,
+    rd: _RuleData | None,
+) -> str:
+    """Derive event-level severity instead of copying the per-rule severity.
+
+    Most CRS attack rules carry severity "critical", so copying it verbatim
+    made every blocked request a critical alert. Instead, the anomaly score is
+    the primary signal: a score clearly above the blocking threshold is
+    "critical" regardless of whether the request was actually blocked, so
+    policies in DetectionOnly mode (where nothing is ever denied) still surface
+    critical alerts. Otherwise, blocked events are "error" and non-blocked
+    events are capped at "warning".
+    """
+    if anomaly_score is not None and anomaly_score >= _CRITICAL_ANOMALY_SCORE:
+        return "critical"
+
+    if action == "deny":
+        return "error"
+
+    rule_severity = _rule_severity(rd)
+    if rule_severity in ("critical", "error"):
+        return "warning"
+    return rule_severity
+
+
+def _rule_severity(rd: _RuleData | None) -> str:
     if rd is None or rd.severity_str is None:
         return "info"
     key = rd.severity_str.lower()
@@ -241,6 +287,19 @@ def _status_code(response: Any) -> int | None:
 def _anomaly_score(variables: Any) -> int | None:
     score = _coerce_int(_tx_variable(variables, "anomaly_score"))
     return score if score is not None and score >= 0 else None
+
+
+def _anomaly_score_from_messages(messages: list[Any]) -> int | None:
+    """Extract the total inbound anomaly score from the CRS blocking message."""
+    for raw in messages:
+        error_msg = _as_dict(raw).get("error_message")
+        if isinstance(error_msg, str):
+            match = _TOTAL_SCORE.search(error_msg)
+            if match:
+                score = _coerce_int(match.group(1))
+                if score is not None and score >= 0:
+                    return score
+    return None
 
 
 def _paranoia_level(variables: Any) -> int | None:
