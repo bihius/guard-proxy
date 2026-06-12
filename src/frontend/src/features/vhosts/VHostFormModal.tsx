@@ -163,7 +163,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
           </Select>
         </div>
 
-        <div className="space-y-1.5 border-t pt-4">
+        <div className="space-y-1.5 pt-2">
           <Label className="flex cursor-pointer items-center gap-2 font-semibold">
             <Checkbox
               checked={sslEnabled}
@@ -173,7 +173,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
           </Label>
 
           {sslEnabled && (
-            <div className="mt-4 space-y-4 rounded-md border p-4">
+            <div className="mt-4 space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="vhost-ssl-provider">SSL Provider</Label>
                 <Select
@@ -215,7 +215,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
           )}
         </div>
 
-        <div className="border-t pt-4">
+        <div className="pt-2">
           <Label className="flex cursor-pointer items-center gap-2">
             <Checkbox
               checked={isActive}

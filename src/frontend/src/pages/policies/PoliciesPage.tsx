@@ -40,7 +40,7 @@ export function PoliciesPage() {
       cell: (row) => (
         <Link
           to={getPolicyDetailPath(row.id)}
-          className="font-medium text-accent hover:underline"
+          className="font-medium text-primary hover:underline"
         >
           {row.name}
         </Link>
