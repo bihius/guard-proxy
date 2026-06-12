@@ -219,7 +219,7 @@ def test_action_deny_when_interrupted() -> None:
 
 def test_action_deny_when_critical_severity_string() -> None:
     event = _base_event(messages=[_message_entry(severity="critical")])
-    event["transaction"]["is_interrupted"] = False
+    event["transaction"].pop("is_interrupted")
     payload = coraza_event_to_ingest(event)
     assert payload is not None
     assert payload["action"] == "deny"
@@ -227,10 +227,19 @@ def test_action_deny_when_critical_severity_string() -> None:
 
 def test_action_deny_when_emergency_severity_string() -> None:
     event = _base_event(messages=[_message_entry(severity="emergency")])
-    event["transaction"]["is_interrupted"] = False
+    event["transaction"].pop("is_interrupted")
     p = coraza_event_to_ingest(event)
     assert p is not None
     assert p["action"] == "deny"
+
+
+def test_action_allow_when_critical_severity_not_interrupted() -> None:
+    event = _base_event(messages=[_message_entry(severity="critical")])
+    event["transaction"]["is_interrupted"] = False
+    payload = coraza_event_to_ingest(event)
+    assert payload is not None
+    assert payload["action"] == "allow"
+    assert payload["severity"] == "warning"
 
 
 def test_action_allow_when_warning_severity_not_interrupted() -> None:
@@ -249,14 +258,12 @@ def test_action_allow_when_warning_severity_not_interrupted() -> None:
 def test_severity_string_buckets() -> None:
     """Event severity is derived from action + score, not copied per-rule.
 
-    High per-rule severities imply action=deny, which maps to "error" unless
-    the anomaly score is clearly above the blocking threshold; non-blocking
-    events are capped at "warning".
+    Per-rule severities are capped at "warning" for non-blocking events.
     """
     cases = {
-        "emergency": "error",    # deny without a high total score
-        "alert": "error",
-        "critical": "error",
+        "emergency": "warning",
+        "alert": "warning",
+        "critical": "warning",
         "error": "warning",      # allow, capped at warning
         "warning": "warning",
         "notice": "info",
@@ -300,7 +307,7 @@ def test_allowed_event_with_high_score_is_critical() -> None:
     """In DetectionOnly mode nothing is ever blocked (action stays "allow"),
     but a high anomaly score must still surface as "critical" so the
     dashboard isn't blind to severe attacks under detect-only policies."""
-    event = _base_event(messages=[_message_entry(severity="notice")])
+    event = _base_event(messages=[_message_entry(severity="critical")])
     event["transaction"]["is_interrupted"] = False
     event["transaction"]["variables"] = {"tx": {"anomaly_score": 15}}
     p = coraza_event_to_ingest(event)

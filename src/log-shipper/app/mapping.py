@@ -92,7 +92,7 @@ def coraza_event_to_ingest(event: dict[str, Any]) -> dict[str, Any] | None:
 
     messages = event.get("messages")
     messages = messages if isinstance(messages, list) else []
-    is_interrupted = bool(transaction.get("is_interrupted"))
+    is_interrupted = transaction.get("is_interrupted")
 
     # Prefer the structured data field; fall back to parsing error_message.
     primary_data = _primary_rule_data(messages)
@@ -171,11 +171,14 @@ def _primary_rule_data(messages: list[Any]) -> _RuleData | None:
 # Field derivation helpers
 # ---------------------------------------------------------------------------
 
-def _action(is_interrupted: bool, primary_data: _RuleData | None) -> str:
-    if is_interrupted:
+def _action(is_interrupted: Any, primary_data: _RuleData | None) -> str:
+    if is_interrupted is True:
         return "deny"
-    # Secondary check: deny when a high-severity rule fired even without interruption
-    # (e.g. DetectionOnly-adjacent configs that still log critical hits).
+    if is_interrupted is False:
+        return "allow"
+    # Fallback for older or malformed events where the interruption flag is
+    # absent. Do not apply it to explicit False; DetectionOnly policies emit
+    # high-severity matches without blocking the request.
     if primary_data is not None and primary_data.severity_str is not None:
         if primary_data.severity_str.lower() in _DENY_SEVERITY_STRINGS:
             return "deny"
