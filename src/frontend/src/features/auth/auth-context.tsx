@@ -112,9 +112,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setUnauthorizedHandler(async () => {
       try {
         const tokens = await refreshSession();
+        const currentUser = await getCurrentUser(tokens.access_token);
 
         if (isMountedRef.current) {
           setAccessToken(tokens.access_token);
+          setUser(currentUser);
+          setLoginError(null);
         }
 
         return tokens.access_token;
