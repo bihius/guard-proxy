@@ -112,10 +112,10 @@ function DateTimeRangePicker({ value, onChange }: DateTimeRangePickerProps) {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-foreground">
             <CalendarClock className="h-4 w-4" />
           </span>
           Time range
@@ -136,7 +136,7 @@ function DateTimeRangePicker({ value, onChange }: DateTimeRangePickerProps) {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <DateTimeEndpoint
           label="From"
           dateId="filter-date-from"
@@ -325,52 +325,52 @@ export function LogsPage() {
       />
 
       <SectionCard title="Filters">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="filter-vhost">VHost</Label>
-            <Input
-              id="filter-vhost"
-              type="text"
-              value={draft.vhost}
-              onChange={(e) => setDraft({ ...draft, vhost: e.target.value })}
-              placeholder="example.com (exact match)"
-            />
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.95fr)] lg:items-start">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-vhost">VHost</Label>
+              <Input
+                id="filter-vhost"
+                type="text"
+                value={draft.vhost}
+                onChange={(e) => setDraft({ ...draft, vhost: e.target.value })}
+                placeholder="example.com (exact match)"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-action">Action</Label>
+              <Select
+                id="filter-action"
+                value={draft.action}
+                onChange={(e) => setDraft({ ...draft, action: e.target.value as LogFilters["action"] })}
+              >
+                <option value="">All actions</option>
+                <option value="allow">Allow</option>
+                <option value="deny">Deny</option>
+                <option value="monitor">Monitor</option>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-policy">Policy</Label>
+              <Select
+                id="filter-policy"
+                value={draft.policy_id ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, policy_id: e.target.value ? Number(e.target.value) : null })
+                }
+              >
+                <option value="">All policies</option>
+                {policies.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="filter-action">Action</Label>
-            <Select
-              id="filter-action"
-              value={draft.action}
-              onChange={(e) => setDraft({ ...draft, action: e.target.value as LogFilters["action"] })}
-            >
-              <option value="">All actions</option>
-              <option value="allow">Allow</option>
-              <option value="deny">Deny</option>
-              <option value="monitor">Monitor</option>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="filter-policy">Policy</Label>
-            <Select
-              id="filter-policy"
-              value={draft.policy_id ?? ""}
-              onChange={(e) =>
-                setDraft({ ...draft, policy_id: e.target.value ? Number(e.target.value) : null })
-              }
-            >
-              <option value="">All policies</option>
-              {policies.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        <div className="mt-4">
           <DateTimeRangePicker
             value={{
               date_from: draft.date_from,

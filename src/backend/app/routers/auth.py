@@ -14,7 +14,6 @@ from app.schemas.user import UserResponse
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_REFRESH_COOKIE_PATH = "/auth"
 
 # Precomputed bcrypt hash used for timing-attack mitigation when user is missing.
 # Keep this as a constant to avoid bcrypt work during module import/startup.
@@ -35,7 +34,7 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         httponly=True,
         secure=settings.auth_refresh_cookie_secure,
         samesite=settings.auth_refresh_cookie_samesite,
-        path=_REFRESH_COOKIE_PATH,
+        path=settings.auth_refresh_cookie_path,
     )
 
 
@@ -45,7 +44,7 @@ def _clear_refresh_cookie(response: Response) -> None:
         httponly=True,
         secure=settings.auth_refresh_cookie_secure,
         samesite=settings.auth_refresh_cookie_samesite,
-        path=_REFRESH_COOKIE_PATH,
+        path=settings.auth_refresh_cookie_path,
     )
 
 

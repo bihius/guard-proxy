@@ -22,6 +22,7 @@ def test_login_valid_admin_returns_200_and_sets_refresh_cookie(
     assert body["token_type"] == "bearer"
     assert settings.auth_refresh_cookie_name in resp.cookies
     assert "HttpOnly" in resp.headers["set-cookie"]
+    assert f"Path={settings.auth_refresh_cookie_path}" in resp.headers["set-cookie"]
 
 
 def test_login_valid_viewer_returns_200_and_sets_refresh_cookie(
