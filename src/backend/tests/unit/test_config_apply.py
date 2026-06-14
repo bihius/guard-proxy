@@ -8,7 +8,9 @@ from app.services.config_apply import (
     _RELOAD_ERROR_RE,
     ApplyStatus,
     CommandResult,
+    _ensure_default_cert,
     _read_current_symlink,
+    _write_candidate,
     apply,
     seed_runtime_config,
 )
@@ -396,6 +398,69 @@ def test_seed_runtime_config_does_not_swap_current_when_validation_fails(
 
     assert not (runtime_root / "current").exists()
     assert not (runtime_root / "current").is_symlink()
+
+
+# ---------------------------------------------------------------------------
+# Certificate handling — a vhost may enable SSL before its real certificate is
+# provisioned (e.g. a freshly added Let's Encrypt domain). HAProxy's
+# `bind ... ssl crt <dir>` then needs a loadable fallback or `haproxy -c`
+# rejects the whole config. Certificates also live in a single shared directory
+# so the absolute cert path in haproxy.cfg resolves identically during backend
+# validation and at HAProxy runtime.
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_default_cert_generates_a_loadable_certificate(tmp_path: Path) -> None:
+    """The fallback default.pem must parse as a real certificate + key, not a
+    placeholder string that haproxy -c would reject with 'too long'."""
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+    from cryptography.x509 import load_pem_x509_certificate
+
+    certs_dir = tmp_path / "certs"
+    certs_dir.mkdir()
+
+    _ensure_default_cert(certs_dir)
+
+    pem = (certs_dir / "default.pem").read_bytes()
+    # Both a certificate and a private key must be present and parseable.
+    load_pem_x509_certificate(pem)
+    load_pem_private_key(pem, password=None)
+
+
+def test_ensure_default_cert_is_idempotent(tmp_path: Path) -> None:
+    certs_dir = tmp_path / "certs"
+    certs_dir.mkdir()
+
+    _ensure_default_cert(certs_dir)
+    first = (certs_dir / "default.pem").read_bytes()
+    _ensure_default_cert(certs_dir)
+    second = (certs_dir / "default.pem").read_bytes()
+
+    assert first == second, "default cert must not be regenerated when present"
+
+
+def test_write_candidate_writes_certs_to_shared_dir_not_per_release(
+    tmp_path: Path,
+) -> None:
+    """Certificates must land in the shared certs dir, with a default fallback,
+    so the absolute crt path in haproxy.cfg resolves for validation and runtime."""
+    runtime_root = tmp_path / "generated"
+    candidate_dir = runtime_root / "releases" / "abc123"
+    shared_certs = runtime_root / "certs"
+    generated = GeneratedConfig(
+        haproxy_cfg="global\n",
+        crs_setup_conf="SecRuleEngine On\n",
+        rule_overrides_conf="# no overrides\n",
+        certs={"example.com": "PEMDATA\n"},
+    )
+
+    _write_candidate(candidate_dir, generated, shared_certs)
+
+    # Per-release dir holds only the rendered config, not certs.
+    assert not (candidate_dir / "certs").exists()
+    # Shared dir holds the domain cert plus a fallback default.
+    assert (shared_certs / "example.com.pem").read_text(encoding="utf-8") == "PEMDATA\n"
+    assert (shared_certs / "default.pem").exists()
 
 
 def test_apply_skips_rollback_reload_when_previous_no_longer_validates(
