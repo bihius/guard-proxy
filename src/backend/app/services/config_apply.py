@@ -143,10 +143,7 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
             status=ApplyStatus.success,
             correlation_id=correlation_id,
             checksum=checksum,
-            message=(
-                "Configuration applied. HAProxy reloaded; Coraza is reloading "
-                "the updated WAF ruleset (within ~1s)."
-            ),
+            message="Configuration applied.",
             candidate_path=str(candidate_dir),
             active_path=str(_resolve_current(current_link)),
             validation_output=validation.output,

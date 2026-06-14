@@ -193,4 +193,32 @@ describe("LogsPage", () => {
     expect(screen.getByText("SQL injection attack detected")).toBeInTheDocument();
     expect(screen.getByText("203.0.113.10")).toBeInTheDocument();
   });
+
+  it("wraps raw context in the detail modal", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue({
+      ...mockListResponse,
+      items: [
+        {
+          ...mockLog,
+          raw_context: {
+            long_value: "x".repeat(120),
+          },
+        },
+      ],
+    });
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /view/i }));
+    await userEvent.click(screen.getByRole("button", { name: /show raw context/i }));
+
+    const rawContext = screen.getByText((content, element) => {
+      return element?.tagName.toLowerCase() === "pre" && content.includes("long_value");
+    });
+    expect(rawContext).toHaveClass("whitespace-pre-wrap");
+    expect(rawContext).toHaveClass("break-words");
+    expect(rawContext).toHaveClass("overflow-x-hidden");
+  });
 });

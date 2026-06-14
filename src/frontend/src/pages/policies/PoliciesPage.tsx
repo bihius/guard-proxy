@@ -40,7 +40,7 @@ export function PoliciesPage() {
       cell: (row) => (
         <Link
           to={getPolicyDetailPath(row.id)}
-          className="font-medium text-primary hover:underline"
+          className="font-medium text-foreground hover:underline"
         >
           {row.name}
         </Link>
@@ -65,7 +65,7 @@ export function PoliciesPage() {
       key: "thresholds",
       header: "Inbound threshold",
       cell: (row) => (
-        <span className="tabular-nums text-muted-foreground">
+        <span className="tabular-nums text-foreground">
           {row.inbound_anomaly_threshold}
         </span>
       ),
@@ -98,7 +98,13 @@ export function PoliciesPage() {
                   >
                     Edit
                   </Button>
-                  <span title={assigned ? "Assigned to a virtual host" : undefined}>
+                  <span
+                    title={
+                      assigned
+                        ? "Cannot delete because this policy is assigned to a virtual host"
+                        : undefined
+                    }
+                  >
                     <Button
                       type="button"
                       disabled={assigned}

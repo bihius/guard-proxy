@@ -108,6 +108,7 @@ class Settings(EnvFileSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
     auth_refresh_cookie_name: str = "guard_proxy_refresh_token"
+    auth_refresh_cookie_path: str = "/"
     auth_refresh_cookie_secure: bool = False
     auth_refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     log_ingest_shared_secret: str
@@ -123,6 +124,14 @@ class Settings(EnvFileSettings):
         if not v.strip():
             raise ValueError("AUTH_REFRESH_COOKIE_NAME must not be empty.")
         return v
+
+    @field_validator("auth_refresh_cookie_path")
+    @classmethod
+    def auth_refresh_cookie_path_must_be_absolute(cls, v: str) -> str:
+        value = v.strip()
+        if not value.startswith("/"):
+            raise ValueError("AUTH_REFRESH_COOKIE_PATH must start with '/'.")
+        return value
 
     @field_validator("log_ingest_shared_secret")
     @classmethod
