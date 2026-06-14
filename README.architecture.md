@@ -109,9 +109,10 @@ machine-readable degraded reason header.
 ## Authentication & Rate Limiting
 
 The FastAPI backend issues short-lived **JWT access tokens** (30 min, HS256) and
-long-lived **refresh tokens** (7 days) stored in an `HttpOnly` cookie at path
-`/auth`. The refresh cookie is unavailable to JavaScript, so the frontend keeps
-no long-lived secret in memory or `localStorage`.
+long-lived **refresh tokens** (7 days) stored in an `HttpOnly` cookie. The
+refresh cookie path defaults to `/` so it is sent through proxied API prefixes
+such as `/api/v1/auth/refresh`, while remaining unavailable to JavaScript. The
+frontend keeps no long-lived secret in memory or `localStorage`.
 
 ### Brute-force protection
 
