@@ -145,6 +145,12 @@ CODEX.md
 .opencode/
 .opencodeignore
 opencode.json
+.agents/
 
 scripts/setup-worktree.sh
 
+.ruff_cache/
+
+worktrees/
+
+.dockerignore
