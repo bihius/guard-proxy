@@ -114,6 +114,23 @@ def test_default_refresh_token_expire_days() -> None:
     assert getattr(s, "jwt_refresh_token_expire_days") == 7
 
 
+def test_default_auth_refresh_cookie_path_covers_api_prefix() -> None:
+    s = _make_settings(
+        JWT_SECRET_KEY="sekret",
+        LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+    )
+    assert getattr(s, "auth_refresh_cookie_path") == "/"
+
+
+def test_auth_refresh_cookie_path_must_be_absolute() -> None:
+    with pytest.raises(ValidationError, match="AUTH_REFRESH_COOKIE_PATH"):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            AUTH_REFRESH_COOKIE_PATH="auth",
+        )
+
+
 def test_log_ingest_shared_secret_valid() -> None:
     s = _make_settings(
         JWT_SECRET_KEY="sekret",

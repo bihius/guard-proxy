@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react";
 
+import { InfoTooltip } from "@/components/shared/InfoTooltip";
 import { Modal } from "@/components/shared/Modal";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -137,7 +138,10 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="policy-enforcement-mode">Enforcement mode</Label>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="policy-enforcement-mode">Enforcement mode</Label>
+            <InfoTooltip label="Block denies requests that exceed the policy threshold. Detect only logs matches without blocking traffic." />
+          </div>
           <Select
             id="policy-enforcement-mode"
             value={enforcementMode}
@@ -149,7 +153,10 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="policy-paranoia-level">Paranoia level</Label>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="policy-paranoia-level">Paranoia level</Label>
+            <InfoTooltip label="Higher paranoia levels enable stricter CRS checks. Start low and raise only when the application tolerates the extra sensitivity." />
+          </div>
           <Select
             id="policy-paranoia-level"
             value={paranoiaLevel}
@@ -163,7 +170,10 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="policy-inbound-threshold">Inbound threshold</Label>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="policy-inbound-threshold">Inbound threshold</Label>
+            <InfoTooltip label="Requests are treated as suspicious when their inbound anomaly score reaches this threshold." />
+          </div>
           <Input
             id="policy-inbound-threshold"
             type="number"

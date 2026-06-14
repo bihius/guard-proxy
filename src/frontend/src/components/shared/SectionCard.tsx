@@ -8,9 +8,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+import { InfoTooltip } from "./InfoTooltip";
+
 type SectionCardProps = {
   title: string;
   description?: string;
+  descriptionDisplay?: "visible" | "tooltip";
   icon?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
@@ -19,6 +22,7 @@ type SectionCardProps = {
 export function SectionCard({
   title,
   description,
+  descriptionDisplay = "visible",
   icon,
   actions,
   children,
@@ -34,8 +38,13 @@ export function SectionCard({
           ) : null}
 
           <div className="space-y-1">
-            <CardTitle>{title}</CardTitle>
-            {description ? (
+            <div className="flex items-center gap-2">
+              <CardTitle>{title}</CardTitle>
+              {description && descriptionDisplay === "tooltip" ? (
+                <InfoTooltip label={description} />
+              ) : null}
+            </div>
+            {description && descriptionDisplay === "visible" ? (
               <CardDescription>{description}</CardDescription>
             ) : null}
           </div>

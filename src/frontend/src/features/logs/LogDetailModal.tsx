@@ -107,7 +107,7 @@ export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
                   {showRawContext ? "Hide raw context" : "Show raw context"}
                 </Button>
                 {showRawContext && (
-                  <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs text-foreground">
+                  <pre className="max-h-80 max-w-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs text-foreground">
                     {JSON.stringify(log.raw_context, null, 2)}
                   </pre>
                 )}
