@@ -25,7 +25,15 @@ RUN apt-get update \
 RUN groupadd --system app && useradd --system --gid app --home-dir /app --no-create-home --shell /usr/sbin/nologin app
 
 WORKDIR /app
-RUN mkdir -p /var/lib/guard-proxy/generated/crs && chown app:app /app /var/lib/guard-proxy/generated /var/lib/guard-proxy/generated/crs
+# The shared `generated_config` volume is mounted here in the backend but at
+# /etc/haproxy/generated in the HAProxy container. haproxy.cfg bakes in the
+# absolute cert path /etc/haproxy/generated/certs, so alias it to the backend's
+# mount point; this lets `haproxy -c` validation resolve the same shared certs
+# directory HAProxy uses at runtime, without duplicating the volume mount.
+RUN mkdir -p /var/lib/guard-proxy/generated/crs \
+    && chown app:app /app /var/lib/guard-proxy/generated /var/lib/guard-proxy/generated/crs \
+    && mkdir -p /etc/haproxy \
+    && ln -s /var/lib/guard-proxy/generated /etc/haproxy/generated
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh

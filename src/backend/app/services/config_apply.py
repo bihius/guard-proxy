@@ -11,8 +11,14 @@ import socket
 import subprocess
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from app.config import settings
 from app.services.config_generator import GeneratedConfig
@@ -91,7 +97,7 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
     )
 
     try:
-        _write_candidate(candidate_dir, generated)
+        _write_candidate(candidate_dir, generated, runtime_root / "certs")
     except OSError as error:
         logger.exception(
             "config-apply write failed correlation_id=%s error=%s",
@@ -275,7 +281,7 @@ def seed_runtime_config(generated: GeneratedConfig) -> None:
 
     try:
         _sweep_orphaned_temp_links(runtime_root)
-        _write_candidate(candidate_dir, generated)
+        _write_candidate(candidate_dir, generated, runtime_root / "certs")
         validation = _validate_haproxy(candidate_dir / "haproxy.cfg")
         if not validation.ok:
             logger.error(
@@ -306,7 +312,9 @@ class CommandResult:
     output: str
 
 
-def _write_candidate(candidate_dir: Path, generated: GeneratedConfig) -> None:
+def _write_candidate(
+    candidate_dir: Path, generated: GeneratedConfig, certs_dir: Path
+) -> None:
     candidate_dir.mkdir(parents=True, exist_ok=False)
     (candidate_dir / "haproxy.cfg").write_text(generated.haproxy_cfg, encoding="utf-8")
     (candidate_dir / "crs-setup.conf").write_text(
@@ -317,29 +325,56 @@ def _write_candidate(candidate_dir: Path, generated: GeneratedConfig) -> None:
         generated.rule_overrides_conf,
         encoding="utf-8",
     )
-    certs_dir = candidate_dir / "certs"
-    certs_dir.mkdir(exist_ok=True)
+
+    # Certificates live in a single shared directory (not per-release) so the
+    # absolute `crt` path baked into haproxy.cfg resolves to the same files
+    # during backend validation and at HAProxy runtime. The backend reaches it
+    # via its runtime root; HAProxy reaches the same volume directory through
+    # the `/etc/haproxy/generated/certs` path referenced in the template.
+    certs_dir.mkdir(parents=True, exist_ok=True)
     for domain, pem in generated.certs.items():
         (certs_dir / f"{domain}.pem").write_text(pem, encoding="utf-8")
-    
-    # Write a default dummy cert so HAProxy doesn't fail if no certs are present
-    if not generated.certs:
-        dummy_cert = (
-            "-----BEGIN PRIVATE KEY-----\n"
-            "MC4CAQAwBQYDK2VwBCIEIKxU2vJ06X1k5d1w7tB6d/m3E9aL4jT2bI0kG9l6F7m8\n"
-            "-----END PRIVATE KEY-----\n"
-            "-----BEGIN CERTIFICATE-----\n"
-            "MIIBBDCCAWugAwIBAgIUW6o6+vK8/J9tXf/mF0M+9qO3ZfswBQYDK2VwMDExLzAt\n"
-            "BgNVBAMMJkd1YXJkIFByb3h5IERlZmF1bHQgU2VsZi1TaWduZWQgQ2VydDAeFw0y\n"
-            "NDA1MTEwMDAwMDBaFw0zNDA1MDkwMDAwMDBaMDExLzAtBgNVBAMMJkd1YXJkIFBy\n"
-            "b3h5IERlZmF1bHQgU2VsZi1TaWduZWQgQ2VydDAqMAUGAytlcAMhAN3fXjP8Cq7y\n"
-            "K3+7yL9X4bK7f/n2X5d1w7tB6d/m3E9ao0UwQzAPBgNVHRMBAf8EBTADAQH/MA4G\n"
-            "A1UdDwEB/wQEAwIChDAdBgNVHQ4EFgQU0/3fXjP8Cq7yK3+7yL9X4bK7f/n2X5d1\n"
-            "MAUGAytlcANBAO/4bK7f/n2X5d1w7tB6d/m3E9aL4jT2bI0kG9l6F7m8K3+7yL9X\n"
-            "4bK7f/n2X5d1w7tB6d/m3E9aL4jT2bI0kG9l6F7m8A==\n"
-            "-----END CERTIFICATE-----\n"
+    _ensure_default_cert(certs_dir)
+
+
+def _ensure_default_cert(certs_dir: Path) -> None:
+    """Ensure a loadable fallback certificate exists in the shared certs dir.
+
+    HAProxy's `bind ... ssl crt <dir>` rejects the whole config if the directory
+    contains no parseable certificate. When an SSL vhost is enabled before its
+    real certificate is provisioned (e.g. a freshly added Let's Encrypt domain),
+    no per-domain PEM exists yet, so without a valid fallback `haproxy -c` fails.
+    A self-signed certificate is generated once and reused; SNI selects the real
+    certificate when present and falls back to this one otherwise.
+    """
+    default_pem = certs_dir / "default.pem"
+    if default_pem.exists():
+        return
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "guard-proxy-default")]
+    )
+    now = datetime.now(UTC)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=3650))
+        .add_extension(
+            x509.BasicConstraints(ca=False, path_length=None), critical=True
         )
-        (certs_dir / "default.pem").write_text(dummy_cert, encoding="utf-8")
+        .sign(key, hashes.SHA256())
+    )
+    pem = certificate.public_bytes(serialization.Encoding.PEM) + key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption(),
+    )
+    default_pem.write_bytes(pem)
 
 
 def _validate_haproxy(config_path: Path) -> CommandResult:
