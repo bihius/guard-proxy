@@ -100,8 +100,12 @@ export function PolicyDetailPage() {
         />
       ) : policy ? (
         <>
-          <SectionCard title="Policy settings" description="Current configuration for this WAF policy.">
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm sm:grid-cols-3">
+          <SectionCard
+            title="Policy settings"
+            description="Current configuration for this WAF policy."
+            descriptionDisplay="tooltip"
+          >
+            <dl className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <dt className="font-medium text-muted-foreground">Enforcement mode</dt>
                 <dd className="mt-1">
@@ -134,6 +138,7 @@ export function PolicyDetailPage() {
           <SectionCard
             title="Rule overrides"
             description="Individual CRS rules enabled or disabled for this policy."
+            descriptionDisplay="tooltip"
           >
             <DataTable
               columns={overrideColumns}
