@@ -84,7 +84,6 @@ export function DashboardPage() {
       <div className="grid gap-5 xl:grid-cols-[1.25fr_1fr]">
         <SectionCard
           title="Recent activity"
-          description="Example of a section-level card that a teammate can later fill with API data."
         >
           <div className="space-y-4">
             <ActivityRow
