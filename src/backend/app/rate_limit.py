@@ -58,5 +58,15 @@ def rate_limit_exceeded_handler(
 #:   app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 limiter = Limiter(key_func=client_ip)
 
-#: Brute-force limit applied to auth endpoints that accept credentials.
+#: Brute-force limit applied to auth endpoints that accept credentials
+#: (login). Deliberately strict because each attempt is a password guess.
 AUTH_RATE_LIMIT = "5/minute"
+
+#: Limit applied to the token-refresh endpoint. Refresh carries no
+#: user-supplied credentials — only a signed, HttpOnly refresh cookie — and the
+#: frontend calls it automatically on every page load (twice under React
+#: StrictMode in dev). The strict login limit would therefore reject normal
+#: reloads with a 429 and bounce the user to the login page, so refresh gets a
+#: much more generous ceiling that still bounds abuse of the rotating-token
+#: endpoint.
+REFRESH_RATE_LIMIT = "60/minute"
