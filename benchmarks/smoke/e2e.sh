@@ -8,9 +8,13 @@ ENV_FILE="${REPO_ROOT}/deploy/docker/.env"
 CRS_RULES_DIR="${REPO_ROOT}/configs/coraza/crs/rules"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-120}"
 SMOKE_PROJECT="${SMOKE_PROJECT:-guard-proxy-smoke-${RANDOM}-${RANDOM}}"
+# Must be one of the hosts accepted by the host_app ACL in
+# configs/haproxy/haproxy.cfg, otherwise HAProxy responds with 421.
 HOST_HEADER="${HOST_HEADER:-app.local}"
 HAPROXY_HTTP_PORT="${HAPROXY_HTTP_PORT:-$((20000 + RANDOM % 40000))}"
+HAPROXY_HTTPS_PORT="${HAPROXY_HTTPS_PORT:-$((20000 + RANDOM % 40000))}"
 export HAPROXY_HTTP_PORT
+export HAPROXY_HTTPS_PORT
 HAPROXY_BASE_URL="http://127.0.0.1:${HAPROXY_HTTP_PORT}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
