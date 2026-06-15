@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.models.user import User
+from app.rate_limit import REFRESH_RATE_LIMIT
 from tests.conftest import ADMIN_PASSWORD, INACTIVE_PASSWORD, VIEWER_PASSWORD
 
 
@@ -270,23 +271,38 @@ def test_login_rate_limited_after_five_attempts(
     assert "detail" in sixth.json()
 
 
-def test_refresh_rate_limited_after_five_attempts(client: TestClient) -> None:
-    """Six rapid refresh attempts from the same IP hit 429 on the sixth.
+def test_refresh_not_rate_limited_at_login_threshold(client: TestClient) -> None:
+    """Refresh tolerates more requests than the strict login limit.
 
-    The refresh endpoint is called without a valid cookie so it would return
-    401 anyway, but the rate limit is evaluated before authentication and
-    counts all requests regardless of cookie validity.
+    The frontend calls ``/auth/refresh`` automatically on every page load (twice
+    under React StrictMode in dev), so it must not share login's 5/minute
+    brute-force ceiling. Ten rapid refreshes — well past the login limit — must
+    never be rate-limited, otherwise normal reloads would bounce the user to the
+    login page with a 429.
     """
-    for i in range(5):
+    for i in range(10):
         resp = client.post("/auth/refresh")
-        assert resp.status_code == 401, (
-            f"attempt {i + 1}: expected 401, got {resp.status_code}"
+        assert resp.status_code != 429, (
+            f"attempt {i + 1} unexpectedly rate-limited"
         )
 
-    sixth = client.post("/auth/refresh")
-    assert sixth.status_code == 429
-    assert "retry-after" in sixth.headers
-    assert "detail" in sixth.json()
+
+def test_refresh_eventually_rate_limited(client: TestClient) -> None:
+    """Refresh is still bounded — exceeding its own limit returns 429.
+
+    The endpoint rotates the refresh token on each successful call, so it keeps
+    a generous-but-finite ceiling. Sending one request beyond REFRESH_RATE_LIMIT
+    from the same IP trips the limiter.
+    """
+    limit = int(REFRESH_RATE_LIMIT.split("/")[0])
+
+    for _ in range(limit):
+        client.post("/auth/refresh")
+
+    over_limit = client.post("/auth/refresh")
+    assert over_limit.status_code == 429
+    assert "retry-after" in over_limit.headers
+    assert "detail" in over_limit.json()
 
 
 def test_login_under_limit_is_not_rate_limited(
