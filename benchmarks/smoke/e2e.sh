@@ -5,13 +5,25 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
 ENV_FILE="${REPO_ROOT}/deploy/docker/.env"
+CRS_RULES_DIR="${REPO_ROOT}/configs/coraza/crs/rules"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-120}"
-SMOKE_PROJECT="${SMOKE_PROJECT:-guard-proxy-smoke}"
-HAPROXY_HTTP_PORT="${HAPROXY_HTTP_PORT:-8080}"
+SMOKE_PROJECT="${SMOKE_PROJECT:-guard-proxy-smoke-${RANDOM}-${RANDOM}}"
+# Must be one of the hosts accepted by the host_app ACL in
+# configs/haproxy/haproxy.cfg, otherwise HAProxy responds with 421.
+HOST_HEADER="${HOST_HEADER:-app.local}"
+HAPROXY_HTTP_PORT="${HAPROXY_HTTP_PORT:-$((20000 + RANDOM % 40000))}"
+HAPROXY_HTTPS_PORT="${HAPROXY_HTTPS_PORT:-$((20000 + RANDOM % 40000))}"
+export HAPROXY_HTTP_PORT
+export HAPROXY_HTTPS_PORT
 HAPROXY_BASE_URL="http://127.0.0.1:${HAPROXY_HTTP_PORT}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing ${ENV_FILE}. Copy deploy/docker/.env.example to deploy/docker/.env first." >&2
+  exit 1
+fi
+
+if [[ ! -d "${CRS_RULES_DIR}" ]]; then
+  echo "Missing CRS submodule content. Run 'git submodule update --init --recursive' first." >&2
   exit 1
 fi
 
@@ -94,7 +106,7 @@ assert_status() {
       --show-error \
       --output /dev/null \
       --write-out '%{http_code}' \
-      --header 'Host: app.local' \
+      --header "Host: ${HOST_HEADER}" \
       "${url}"
   )"
 
@@ -118,7 +130,7 @@ assert_header() {
       --show-error \
       --output /dev/null \
       --dump-header - \
-      --header 'Host: app.local' \
+      --header "Host: ${HOST_HEADER}" \
       "${url}"
   )"
 
@@ -147,7 +159,7 @@ wait_for_header() {
         --show-error \
         --output /dev/null \
         --dump-header - \
-        --header 'Host: app.local' \
+        --header "Host: ${HOST_HEADER}" \
         --max-time 2 \
         "${url}" \
         2>/dev/null || true
@@ -170,13 +182,15 @@ wait_for_header() {
 
 cd "${REPO_ROOT}"
 
+echo "Starting smoke stack '${SMOKE_PROJECT}' on ${HAPROXY_BASE_URL}..."
 "${COMPOSE[@]}" up -d --build postgres backend coraza haproxy
 
+wait_for_healthy postgres
 wait_for_healthy backend
 wait_for_healthy coraza
 wait_for_healthy haproxy
 
-assert_status "Benign request" "200" "${HAPROXY_BASE_URL}/health"
+assert_status "Benign request through WAF" "200" "${HAPROXY_BASE_URL}/docs"
 assert_status "SQL injection request" "403" "${HAPROXY_BASE_URL}/?id=1%27%20OR%20%271%27%3D%271"
 
 "${COMPOSE[@]}" stop coraza
