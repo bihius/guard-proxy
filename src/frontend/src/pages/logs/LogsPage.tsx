@@ -6,6 +6,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { InfoTooltip } from "@/components/shared/InfoTooltip";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -339,14 +340,17 @@ export function LogsPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="filter-action">Action</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="filter-action">Action</Label>
+                <InfoTooltip label="Guard Proxy only logs requests that triggered at least one WAF rule. 'Allowed (flagged)' means a rule matched but the combined score stayed under the policy's anomaly threshold, so the request was let through. Fully clean traffic that never matches a rule is not logged." />
+              </div>
               <Select
                 id="filter-action"
                 value={draft.action}
                 onChange={(e) => setDraft({ ...draft, action: e.target.value as LogFilters["action"] })}
               >
                 <option value="">All actions</option>
-                <option value="allow">Allow</option>
+                <option value="allow">Allowed (flagged)</option>
                 <option value="deny">Deny</option>
                 <option value="monitor">Monitor</option>
               </Select>
