@@ -10,6 +10,11 @@ export type ListLogsParams = {
   policy_id?: number | null;
   date_from?: string;
   date_to?: string;
+  severity?: LogSeverity;
+  source_ip?: string;
+  method?: string;
+  rule_id?: number | null;
+  min_score?: number | null;
 };
 
 function toIso(datetimeLocal: string): string | undefined {
