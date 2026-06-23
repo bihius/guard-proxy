@@ -109,12 +109,44 @@ describe("LogsPage", () => {
     );
   });
 
+  it("hides filter inputs until the Filters toggle is opened", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    expect(screen.queryByLabelText(/vhost/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+
+    expect(screen.getByLabelText(/vhost/i)).toBeInTheDocument();
+  });
+
+  it("shows an active filter count badge after applying filters", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+    await userEvent.type(screen.getByLabelText(/vhost/i), "api.example.com");
+    await userEvent.click(screen.getByRole("button", { name: /apply/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /filters/i })).toHaveTextContent("1"),
+    );
+  });
+
   it("labels the allow filter option to clarify it means flagged-but-allowed", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
     vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
 
     expect(
       screen.getByRole("option", { name: "Allowed (flagged)" }),
@@ -128,6 +160,7 @@ describe("LogsPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
 
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     await userEvent.type(screen.getByLabelText(/vhost/i), "api.example.com");
     await userEvent.click(screen.getByRole("button", { name: /apply/i }));
 
@@ -177,6 +210,7 @@ describe("LogsPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
 
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     fireEvent.change(screen.getByLabelText("From date"), {
       target: { value: "2026-06-01" },
     });
@@ -211,6 +245,7 @@ describe("LogsPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
 
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     await userEvent.type(screen.getByLabelText(/vhost/i), "something");
     await userEvent.click(screen.getByRole("button", { name: /clear/i }));
 
