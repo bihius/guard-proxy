@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.mapping import coraza_event_to_ingest
+from app.mapping import _BRACKET_INT, coraza_event_to_ingest
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -421,3 +421,82 @@ def test_absent_variables_gives_none_score_and_level() -> None:
     assert payload is not None
     assert payload["anomaly_score"] is None
     assert payload["paranoia_level"] is None
+
+
+# ---------------------------------------------------------------------------
+# Tests: a request flagged by multiple rules collapses to one log row
+# ---------------------------------------------------------------------------
+
+# Captured from a real SQLi probe against a lab WordPress vhost: four
+# distinct CRS attack rules fired on the same request (libinjection, MSSQL,
+# basic SQLi, concatenated SQLi), plus the blocking-evaluation meta-rule.
+_MULTI_RULE_EVENT: dict[str, Any] = {
+    "transaction": {
+        "timestamp": "2026/06/23 20:37:13",
+        "id": "multi-rule-tx-1",
+        "client_ip": "203.0.113.50",
+        "is_interrupted": True,
+        "request": {
+            "method": "GET",
+            "uri": "/?id=1 UNION SELECT username,password FROM users",
+            "headers": {"host": ["wp.example.com"]},
+        },
+        "response": {"status": 0},
+    },
+    "messages": [
+        _message_entry(
+            "942100", "SQL Injection Attack Detected via libinjection", "critical"
+        ),
+        _message_entry(
+            "942190",
+            "Detects MSSQL code execution and information gathering attempts",
+            "critical",
+        ),
+        _message_entry(
+            "942270", "Looking for basic sql injection", "critical"
+        ),
+        _message_entry(
+            "942360",
+            "Detects concatenated basic SQL injection and SQLLFI attempts",
+            "critical",
+        ),
+        {
+            "actionset": "", "message": "",
+            "error_message": (
+                '[client "203.0.113.50"] Coraza: Access denied (phase 2). '
+                'Inbound Anomaly Score Exceeded (Total Score: 20) '
+                '[file "/etc/coraza/crs/rules/REQUEST-949-BLOCKING-EVALUATION.conf"] '
+                '[id "949110"] [msg "Inbound Anomaly Score Exceeded"] '
+                '[data ""] [severity "emergency"]'
+            ),
+            "data": None,
+        },
+    ],
+}
+
+
+def test_multi_rule_request_collapses_to_one_ingest_payload() -> None:
+    """A single request flagged by several rules still produces one payload."""
+    payload = coraza_event_to_ingest(_MULTI_RULE_EVENT)
+    assert payload is not None
+    # The first rule-bearing message wins for rule_id/rule_message...
+    assert payload["rule_id"] == 942100
+    assert payload["rule_message"] == "SQL Injection Attack Detected via libinjection"
+    # ...but the combined score (parsed from the blocking rule's message)
+    # reflects all four matches, not just the first.
+    assert payload["anomaly_score"] == 20
+    assert payload["action"] == "deny"
+
+
+def test_multi_rule_request_preserves_all_matched_rules_in_raw_context() -> None:
+    """The other matched rules are not lost — they survive in raw_context."""
+    payload = coraza_event_to_ingest(_MULTI_RULE_EVENT)
+    assert payload is not None
+    assert payload["raw_context"] is _MULTI_RULE_EVENT
+    raw_messages = payload["raw_context"]["messages"]
+    assert len(raw_messages) == 5
+    matched_ids = [
+        _BRACKET_INT.search(m["error_message"]).group(1)  # type: ignore[union-attr]
+        for m in raw_messages
+    ]
+    assert matched_ids == ["942100", "942190", "942270", "942360", "949110"]

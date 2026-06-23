@@ -106,6 +106,21 @@ machine-readable degraded reason header.
 5. FastAPI validates and normalizes payloads into the persisted `Log` model.
 6. `GET /logs` exposes stored events for the admin panel log viewer.
 
+**Limitation — one log row per request, even when multiple rules fire.** A
+single Coraza transaction can trigger several CRS rules at once (e.g. an SQL
+injection probe matching `942100`, `942190`, `942270`, and `942360`
+simultaneously). The `Log` model has no per-rule child table, so the shipper
+picks the **first** rule-bearing message as `rule_id`/`rule_message`
+(`_primary_rule_data` in `src/log-shipper/app/mapping.py`); the request still
+produces exactly one ingested log row, and `anomaly_score` reflects the
+*combined* score from all matched rules, not just the first one. The other
+matched rules are not lost — they remain in `raw_context` (the full Coraza
+event JSON) for manual inspection in the log detail view, but are not
+independently queryable or filterable. See
+`src/log-shipper/tests/test_mapping.py::test_multi_rule_request_collapses_to_one_ingest_payload`
+and `::test_multi_rule_request_preserves_all_matched_rules_in_raw_context`
+for the tested behavior. A per-rule breakdown is deferred post-MVP.
+
 ## Authentication & Rate Limiting
 
 The FastAPI backend issues short-lived **JWT access tokens** (30 min, HS256) and
