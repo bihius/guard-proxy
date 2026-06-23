@@ -82,14 +82,8 @@ export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
           <Field label="Rule message">
             <Nullable value={log.rule_message} />
           </Field>
-          <Field label="Message">
-            <Nullable value={log.message} />
-          </Field>
-          <Field label="VHost ID">
-            <Nullable value={log.vhost_id} />
-          </Field>
-          <Field label="Policy ID">
-            <Nullable value={log.policy_id} />
+          <Field label="Policy">
+            <Nullable value={log.policy_name} />
           </Field>
           <Field label="Producer event ID">
             <Nullable value={log.producer_event_id} />
