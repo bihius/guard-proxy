@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -49,6 +49,7 @@ const mockLog = {
   raw_context: null,
   vhost_id: 1,
   policy_id: 1,
+  policy_name: "Default Policy",
 };
 
 const mockListResponse = { items: [mockLog], total: 1, page: 1, page_size: 50 };
@@ -127,6 +128,36 @@ describe("LogsPage", () => {
     );
   });
 
+  it("applies the new severity, method, source IP, rule ID and min score filters", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.selectOptions(screen.getByLabelText(/severity/i), "critical");
+    await userEvent.type(screen.getByLabelText(/^method$/i), "POST");
+    await userEvent.type(screen.getByLabelText(/source ip/i), "203.0.113.10");
+    await userEvent.type(screen.getByLabelText(/rule id/i), "942290");
+    await userEvent.type(screen.getByLabelText(/min anomaly score/i), "5");
+    await userEvent.click(screen.getByRole("button", { name: /apply/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(logsApi.listLogs)).toHaveBeenCalledWith(
+        "test-token",
+        expect.objectContaining({
+          severity: "critical",
+          method: "POST",
+          source_ip: "203.0.113.10",
+          rule_id: 942290,
+          min_score: 5,
+          page: 1,
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("applies from and to date/time filters", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
     vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
@@ -189,9 +220,13 @@ describe("LogsPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /view/i }));
 
-    expect(screen.getByText("Event details")).toBeInTheDocument();
-    expect(screen.getByText("SQL injection attack detected")).toBeInTheDocument();
-    expect(screen.getByText("203.0.113.10")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Event details")).toBeInTheDocument();
+    expect(within(dialog).getByText("SQL injection attack detected")).toBeInTheDocument();
+    expect(within(dialog).getByText("203.0.113.10")).toBeInTheDocument();
+    expect(within(dialog).getByText("Default Policy")).toBeInTheDocument();
+    expect(within(dialog).queryByText("VHost ID")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Policy ID")).not.toBeInTheDocument();
   });
 
   it("wraps raw context in the detail modal", async () => {

@@ -369,6 +369,71 @@ export function LogsPage() {
                 ))}
               </Select>
             </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-severity">Severity</Label>
+              <Select
+                id="filter-severity"
+                value={draft.severity}
+                onChange={(e) =>
+                  setDraft({ ...draft, severity: e.target.value as LogFilters["severity"] })
+                }
+              >
+                <option value="">All severities</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+                <option value="critical">Critical</option>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-method">Method</Label>
+              <Input
+                id="filter-method"
+                type="text"
+                value={draft.method}
+                onChange={(e) => setDraft({ ...draft, method: e.target.value })}
+                placeholder="GET, POST, …"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-source-ip">Source IP</Label>
+              <Input
+                id="filter-source-ip"
+                type="text"
+                value={draft.source_ip}
+                onChange={(e) => setDraft({ ...draft, source_ip: e.target.value })}
+                placeholder="203.0.113.10"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-rule-id">Rule ID</Label>
+              <Input
+                id="filter-rule-id"
+                type="number"
+                value={draft.rule_id ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, rule_id: e.target.value ? Number(e.target.value) : null })
+                }
+                placeholder="942290"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-min-score">Min anomaly score</Label>
+              <Input
+                id="filter-min-score"
+                type="number"
+                value={draft.min_score ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, min_score: e.target.value ? Number(e.target.value) : null })
+                }
+                placeholder="5"
+              />
+            </div>
           </div>
 
           <DateTimeRangePicker
