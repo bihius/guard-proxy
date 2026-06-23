@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
 
 import { applyConfig } from "./api";
+import type { RuntimeStatusResponse } from "./types";
 
 type ApplyResult = {
   kind: "success" | "error";
@@ -14,7 +15,10 @@ type ApplyResult = {
 };
 
 type ApplyConfigButtonProps = {
-  runtimeStatus: { refresh: () => void };
+  runtimeStatus: {
+    data: RuntimeStatusResponse | null;
+    refresh: () => void;
+  };
   onResult?: (result: ApplyResult) => void;
 };
 
@@ -25,7 +29,13 @@ export function ApplyConfigButton({
   const { hasRole, accessToken } = useAuth();
   const [isApplying, setIsApplying] = useState(false);
 
-  if (!hasRole("admin")) return null;
+  const data = runtimeStatus.data;
+  const hasPendingChanges =
+    !!data &&
+    !!data.generated_config.checksum &&
+    data.generated_config.checksum !== data.latest_reload?.config_checksum;
+
+  if (!hasRole("admin") || !hasPendingChanges) return null;
 
   async function handleClick() {
     if (isApplying || !accessToken) return;
