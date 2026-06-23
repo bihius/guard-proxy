@@ -108,6 +108,18 @@ describe("LogsPage", () => {
     );
   });
 
+  it("labels the allow filter option to clarify it means flagged-but-allowed", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    expect(
+      screen.getByRole("option", { name: "Allowed (flagged)" }),
+    ).toBeInTheDocument();
+  });
+
   it("applying filters re-fetches with filter params", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
     vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
