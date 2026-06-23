@@ -2,12 +2,15 @@
 
 import enum
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.policy import Policy
 
 
 class LogSeverity(enum.StrEnum):
@@ -71,6 +74,14 @@ class Log(Base):
     policy_id: Mapped[int | None] = mapped_column(
         ForeignKey("policies.id", ondelete="SET NULL"), nullable=True, index=True
     )
+
+    # Read-only — lets the API expose the policy's current name without a
+    # separate lookup. No back_populates: Policy doesn't need a logs list.
+    policy: Mapped["Policy | None"] = relationship("Policy", viewonly=True)
+
+    @property
+    def policy_name(self) -> str | None:
+        return self.policy.name if self.policy is not None else None
 
     def __repr__(self) -> str:
         return (
