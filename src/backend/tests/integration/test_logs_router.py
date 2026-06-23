@@ -767,3 +767,87 @@ def test_list_logs_default_page_size_is_50(
     resp = client.get("/logs", headers=admin_token)
     assert resp.status_code == 200
     assert resp.json()["page_size"] == 50
+
+
+# ---------------------------------------------------------------------------
+# policy_name and paranoia_level backfill
+# ---------------------------------------------------------------------------
+
+
+def test_list_logs_includes_policy_name(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+) -> None:
+    """Logs assigned to a policy expose the policy's current name."""
+    policy = _create_policy(db, name="Lab Baseline")
+    log = _create_log(db, event_at=datetime(2026, 5, 1, 10, 0, 0))
+    log.policy_id = policy.id
+    db.commit()
+
+    resp = client.get("/logs", headers=admin_token)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items"][0]["policy_name"] == "Lab Baseline"
+
+
+def test_list_logs_policy_name_is_null_without_policy(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+) -> None:
+    """Logs with no assigned policy report policy_name as null."""
+    _create_log(db, event_at=datetime(2026, 5, 1, 10, 0, 0))
+
+    resp = client.get("/logs", headers=admin_token)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items"][0]["policy_name"] is None
+
+
+def test_ingest_backfills_paranoia_level_from_policy(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """When the producer omits paranoia_level, fall back to the resolved policy's."""
+    policy = _create_policy(db, name="strict")
+    policy.paranoia_level = 3
+    vh = _create_vhost(db, domain="app.example.com", policy=policy)
+    db.commit()
+
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="ev-pl-backfill",
+            paranoia_level=None,
+        ),
+        headers=log_ingest_headers,
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["vhost_id"] == vh.id
+    assert body["paranoia_level"] == 3
+
+
+def test_ingest_keeps_reported_paranoia_level_when_present(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """An explicit paranoia_level from the producer is not overridden."""
+    policy = _create_policy(db, name="strict-2")
+    policy.paranoia_level = 4
+    _create_vhost(db, domain="app.example.com", policy=policy)
+    db.commit()
+
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="ev-pl-explicit",
+            paranoia_level=1,
+        ),
+        headers=log_ingest_headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["paranoia_level"] == 1

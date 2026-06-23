@@ -32,6 +32,7 @@ class LogResponse(BaseModel):
     raw_context: dict[str, Any] | None
     vhost_id: int | None
     policy_id: int | None
+    policy_name: str | None
 
 
 class LogListResponse(BaseModel):

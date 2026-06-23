@@ -6,12 +6,13 @@ from secrets import compare_digest
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import IPvAnyAddress
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.log import Log, LogAction, LogSeverity
+from app.models.policy import Policy
 from app.models.user import User
 from app.models.vhost import VHost
 from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
@@ -45,6 +46,19 @@ def _resolve_vhost_refs(db: Session, vhost: str) -> tuple[int | None, int | None
     """Return (vhost_id, policy_id) by matching the vhost domain string."""
     vh = db.query(VHost).filter(VHost.domain == vhost).one_or_none()
     return (None, None) if vh is None else (vh.id, vh.policy_id)
+
+
+def _backfill_paranoia_level(db: Session, log: Log) -> None:
+    """Fill in the effective policy paranoia level when the producer omitted it.
+
+    coraza-spoa doesn't expose tx.* variables, so the shipper can never report
+    paranoia_level itself; fall back to the resolved policy's configured level.
+    """
+    if log.paranoia_level is not None or log.policy_id is None:
+        return
+    policy = db.get(Policy, log.policy_id)
+    if policy is not None:
+        log.paranoia_level = policy.paranoia_level
 
 
 def _persist_log_event(
@@ -96,6 +110,7 @@ def ingest_log_event(
 
     log = Log(**body.model_dump())
     log.vhost_id, log.policy_id = _resolve_vhost_refs(db, log.vhost)
+    _backfill_paranoia_level(db, log)
     persisted, created = _persist_log_event(
         db=db,
         log=log,
@@ -133,7 +148,7 @@ def list_logs(
             detail="date_from cannot be later than date_to",
         )
 
-    query = db.query(Log)
+    query = db.query(Log).options(joinedload(Log.policy))
 
     if date_from is not None:
         query = query.filter(Log.event_at >= date_from)
