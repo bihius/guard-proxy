@@ -27,6 +27,7 @@ git submodule update --init --recursive
 | `coraza.conf` | Baseline Coraza directives and CRS includes |
 | `crs-setup.conf` | CRS paranoia and anomaly-scoring defaults |
 | `crs/` | Pinned OWASP CRS 4.x submodule |
+| `guard-proxy-exceptions.conf` | Guard Proxy-owned CRS false-positive exceptions, loaded after CRS rules. Not part of the `crs/` submodule, so it survives CRS version bumps. |
 
 ## Defaults
 
@@ -34,6 +35,38 @@ git submodule update --init --recursive
 - Response body inspection is disabled for M1, matching ADR-007.
 - Blocking paranoia level is `1`.
 - Inbound and outbound anomaly thresholds are `5`.
+
+### Why a single PL1 rule can block a request at the default threshold
+
+CRS scores each fired rule by severity and sums the scores per transaction
+into `tx.inbound_anomaly_score`. A request is blocked once that sum reaches
+`inbound_anomaly_threshold`. Severity → score: `critical` = 5, `error` = 4,
+`warning` = 3, `notice` = 2. At the default threshold of `5`, **one single
+`critical`-severity PL1 rule match is enough to block the request by
+itself** — there's no need for multiple rules to combine.
+
+This is exactly what happened with a real plain WordPress site
+(`wp.bihius.me`) under the default policy (`paranoia_level=1`,
+`inbound_anomaly_threshold=5`): rule **942290** ("Finds basic MongoDB SQL
+injection attempts", PL1, `critical` severity = score 5) fired on every
+request because the browser sent a PostHog analytics cookie
+(`ph_phc_<project_key>_posthog`) whose JSON value contains `$`-prefixed keys
+like `"$initialization_time"` — the literal substring `$in` collides with
+942290's MongoDB `$in` operator heuristic. One critical false positive ==
+threshold 5 → the request was denied (403), even though nothing in the
+request was attacker-controlled.
+
+This is a known false-positive class — CRS already ships built-in exclusions
+for the same pattern with Google Analytics/Ads cookies (`_ga`, `__gads`, see
+`crs/rules/REQUEST-999-COMMON-EXCEPTIONS-AFTER.conf`). The fix here follows
+the same approach for the PostHog cookie via `guard-proxy-exceptions.conf`
+(see the Files table above) rather than lowering the global anomaly
+threshold, which would weaken protection against real SQL/NoSQL injection
+attempts site-wide. Operators hitting similar noisy false positives from
+other third-party cookies/headers can add the same
+`SecRuleUpdateTargetById <rule> "!REQUEST_COOKIES:/pattern/"` pattern to that
+file, or raise `inbound_anomaly_threshold` for a specific noisy policy via
+the Policies UI as a coarser, per-vhost workaround.
 
 ## Audit log output
 
