@@ -235,10 +235,9 @@ export function LogsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Log | null>(null);
 
-  const activeFilterCount = Object.entries(appliedFilters).filter(([key, value]) => {
-    if (key === "policy_id") return value !== null;
-    return value !== "";
-  }).length;
+  const activeFilterCount = Object.values(appliedFilters).filter(
+    (value) => value !== "" && value !== null,
+  ).length;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const columns: DataTableColumn<Log>[] = [
