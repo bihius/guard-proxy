@@ -149,6 +149,25 @@ Parts `ABIJDEFHZ` produce a top-level structure like:
 | `severity` | derived from `messages[0].data.severity` | Numeric Coraza severity: 0–2 → `critical`/`error`; 3–4 → `warning`; ≥5 → `info` |
 | `raw_context` | full Coraza event JSON | Fallback; stores everything not mapped above |
 
+### Known gaps in the mapped fields
+
+- **`paranoia_level`** — `coraza-spoa:0.6.1` doesn't expose `tx.*` variables to
+  the SPOA response, so `transaction.variables.tx.paranoia_level` is never
+  present and the shipper always sends `null`. The backend backfills it at
+  ingest time from the resolved vhost's policy (`paranoia_level` column on
+  `policies`), so `GET /logs` reports the *effective* paranoia level even
+  though the shipper itself can't observe it.
+- **`message`** (the `LogIngestRequest.message` field, distinct from
+  `rule_message`) — the shipper never populates it; it always ships as
+  `null`. There is no separate "message" concept in a Coraza event beyond the
+  per-rule `messages[].data.msg` already captured as `rule_message`. Treat
+  `message` as reserved for a future non-Coraza log producer rather than a
+  bug to fix.
+- **`status_code`** — absent for requests Coraza interrupts (blocked/denied
+  before reaching the upstream), since there is no upstream response to read
+  a status from. A blank status code in the log viewer for a `deny` event is
+  expected, not a missing-data bug.
+
 ## Docker Compose mounts
 
 When the stack runs through `deploy/docker/docker-compose.yml`, these files are

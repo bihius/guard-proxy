@@ -20,6 +20,7 @@ export type Log = {
   raw_context: Record<string, unknown> | null;
   vhost_id: number | null;
   policy_id: number | null;
+  policy_name: string | null;
 };
 
 export type LogListResponse = {
@@ -35,6 +36,11 @@ export type LogFilters = {
   policy_id: number | null;
   date_from: string;
   date_to: string;
+  severity: LogSeverity | "";
+  source_ip: string;
+  method: string;
+  rule_id: number | null;
+  min_score: number | null;
 };
 
 export const EMPTY_FILTERS: LogFilters = {
@@ -43,4 +49,9 @@ export const EMPTY_FILTERS: LogFilters = {
   policy_id: null,
   date_from: "",
   date_to: "",
+  severity: "",
+  source_ip: "",
+  method: "",
+  rule_id: null,
+  min_score: null,
 };
