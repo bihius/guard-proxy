@@ -10,6 +10,7 @@ COPY --from=upstream /coraza-spoa /usr/local/bin/coraza-spoa
 COPY configs/coraza/coraza-spoa.yaml /etc/coraza-spoa/coraza-spoa.yaml
 COPY configs/coraza/coraza.conf /etc/coraza/coraza.conf
 COPY configs/coraza/crs-setup.conf /etc/coraza/crs-setup.conf
+COPY configs/coraza/guard-proxy-exceptions.conf /etc/coraza/guard-proxy-exceptions.conf
 COPY configs/coraza/crs /etc/coraza/crs
 COPY deploy/docker/coraza-supervisor.sh /usr/local/bin/coraza-supervisor
 
