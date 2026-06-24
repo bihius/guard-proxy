@@ -180,6 +180,7 @@ describe("LogsPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
 
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     await userEvent.selectOptions(screen.getByLabelText(/severity/i), "critical");
     await userEvent.type(screen.getByLabelText(/^method$/i), "POST");
     await userEvent.type(screen.getByLabelText(/source ip/i), "203.0.113.10");
