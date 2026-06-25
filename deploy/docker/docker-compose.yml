@@ -40,6 +40,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 60s
     volumes:
       - backend_logs:/var/log/guard-proxy
       - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
