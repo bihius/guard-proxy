@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, SlidersHorizontal } from "lucide-react";
 
 import type { DataTableColumn } from "@/components/shared/DataTable";
 import { DataTable } from "@/components/shared/DataTable";
@@ -231,7 +231,13 @@ export function LogsPage() {
   const { logs, total, page, pageSize, policies, isLoading, error, setPage, applyFilters, refresh } =
     useLogs();
   const [draft, setDraft] = useState<LogFilters>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<LogFilters>(EMPTY_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Log | null>(null);
+
+  const activeFilterCount = Object.values(appliedFilters).filter(
+    (value) => value !== "" && value !== null,
+  ).length;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const columns: DataTableColumn<Log>[] = [
@@ -311,155 +317,181 @@ export function LogsPage() {
 
   function handleApply() {
     applyFilters(draft);
+    setAppliedFilters(draft);
   }
 
   function handleClear() {
     setDraft(EMPTY_FILTERS);
     applyFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
   }
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-6">
       <PageHeader
         title="Logs"
         description="Browse and filter WAF events captured by Guard Proxy."
       />
 
-      <SectionCard title="Filters">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.95fr)] lg:items-start">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="filter-vhost">VHost</Label>
-              <Input
-                id="filter-vhost"
-                type="text"
-                value={draft.vhost}
-                onChange={(e) => setDraft({ ...draft, vhost: e.target.value })}
-                placeholder="example.com (exact match)"
-              />
-            </div>
+      <SectionCard
+        title="Events"
+        description="Most recent events first."
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1 text-xs font-medium text-primary">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+        }
+      >
+        {filtersOpen && (
+          <div className="mb-5 rounded-md border border-border bg-muted/30 p-4">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.95fr)] lg:items-start">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-vhost">VHost</Label>
+                  <Input
+                    id="filter-vhost"
+                    type="text"
+                    value={draft.vhost}
+                    onChange={(e) => setDraft({ ...draft, vhost: e.target.value })}
+                    placeholder="example.com (exact match)"
+                  />
+                </div>
 
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="filter-action">Action</Label>
-                <InfoTooltip label="Guard Proxy only logs requests that triggered at least one WAF rule. 'Allowed (flagged)' means a rule matched but the combined score stayed under the policy's anomaly threshold, so the request was let through. Fully clean traffic that never matches a rule is not logged." />
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="filter-action">Action</Label>
+                    <InfoTooltip label="Guard Proxy only logs requests that triggered at least one WAF rule. 'Allowed (flagged)' means a rule matched but the combined score stayed under the policy's anomaly threshold, so the request was let through. Fully clean traffic that never matches a rule is not logged." />
+                  </div>
+                  <Select
+                    id="filter-action"
+                    value={draft.action}
+                    onChange={(e) =>
+                      setDraft({ ...draft, action: e.target.value as LogFilters["action"] })
+                    }
+                  >
+                    <option value="">All actions</option>
+                    <option value="allow">Allowed (flagged)</option>
+                    <option value="deny">Deny</option>
+                    <option value="monitor">Monitor</option>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-policy">Policy</Label>
+                  <Select
+                    id="filter-policy"
+                    value={draft.policy_id ?? ""}
+                    onChange={(e) =>
+                      setDraft({ ...draft, policy_id: e.target.value ? Number(e.target.value) : null })
+                    }
+                  >
+                    <option value="">All policies</option>
+                    {policies.map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-severity">Severity</Label>
+                  <Select
+                    id="filter-severity"
+                    value={draft.severity}
+                    onChange={(e) =>
+                      setDraft({ ...draft, severity: e.target.value as LogFilters["severity"] })
+                    }
+                  >
+                    <option value="">All severities</option>
+                    <option value="info">Info</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                    <option value="critical">Critical</option>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-method">Method</Label>
+                  <Input
+                    id="filter-method"
+                    type="text"
+                    value={draft.method}
+                    onChange={(e) => setDraft({ ...draft, method: e.target.value })}
+                    placeholder="GET, POST, …"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-source-ip">Source IP</Label>
+                  <Input
+                    id="filter-source-ip"
+                    type="text"
+                    value={draft.source_ip}
+                    onChange={(e) => setDraft({ ...draft, source_ip: e.target.value })}
+                    placeholder="203.0.113.10"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-rule-id">Rule ID</Label>
+                  <Input
+                    id="filter-rule-id"
+                    type="number"
+                    value={draft.rule_id ?? ""}
+                    onChange={(e) =>
+                      setDraft({ ...draft, rule_id: e.target.value ? Number(e.target.value) : null })
+                    }
+                    placeholder="942290"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-min-score">Min anomaly score</Label>
+                  <Input
+                    id="filter-min-score"
+                    type="number"
+                    value={draft.min_score ?? ""}
+                    onChange={(e) =>
+                      setDraft({ ...draft, min_score: e.target.value ? Number(e.target.value) : null })
+                    }
+                    placeholder="5"
+                  />
+                </div>
               </div>
-              <Select
-                id="filter-action"
-                value={draft.action}
-                onChange={(e) => setDraft({ ...draft, action: e.target.value as LogFilters["action"] })}
-              >
-                <option value="">All actions</option>
-                <option value="allow">Allowed (flagged)</option>
-                <option value="deny">Deny</option>
-                <option value="monitor">Monitor</option>
-              </Select>
-            </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="filter-policy">Policy</Label>
-              <Select
-                id="filter-policy"
-                value={draft.policy_id ?? ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, policy_id: e.target.value ? Number(e.target.value) : null })
-                }
-              >
-                <option value="">All policies</option>
-                {policies.map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="filter-severity">Severity</Label>
-              <Select
-                id="filter-severity"
-                value={draft.severity}
-                onChange={(e) =>
-                  setDraft({ ...draft, severity: e.target.value as LogFilters["severity"] })
-                }
-              >
-                <option value="">All severities</option>
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="error">Error</option>
-                <option value="critical">Critical</option>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="filter-method">Method</Label>
-              <Input
-                id="filter-method"
-                type="text"
-                value={draft.method}
-                onChange={(e) => setDraft({ ...draft, method: e.target.value })}
-                placeholder="GET, POST, …"
+              <DateTimeRangePicker
+                value={{
+                  date_from: draft.date_from,
+                  date_to: draft.date_to,
+                }}
+                onChange={(range) => setDraft({ ...draft, ...range })}
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="filter-source-ip">Source IP</Label>
-              <Input
-                id="filter-source-ip"
-                type="text"
-                value={draft.source_ip}
-                onChange={(e) => setDraft({ ...draft, source_ip: e.target.value })}
-                placeholder="203.0.113.10"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="filter-rule-id">Rule ID</Label>
-              <Input
-                id="filter-rule-id"
-                type="number"
-                value={draft.rule_id ?? ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, rule_id: e.target.value ? Number(e.target.value) : null })
-                }
-                placeholder="942290"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="filter-min-score">Min anomaly score</Label>
-              <Input
-                id="filter-min-score"
-                type="number"
-                value={draft.min_score ?? ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, min_score: e.target.value ? Number(e.target.value) : null })
-                }
-                placeholder="5"
-              />
+            <div className="mt-4 flex gap-3">
+              <Button type="button" onClick={handleApply}>
+                Apply
+              </Button>
+              <Button type="button" onClick={handleClear} variant="outline">
+                Clear
+              </Button>
             </div>
           </div>
+        )}
 
-          <DateTimeRangePicker
-            value={{
-              date_from: draft.date_from,
-              date_to: draft.date_to,
-            }}
-            onChange={(range) => setDraft({ ...draft, ...range })}
-          />
-        </div>
-
-        <div className="mt-4 flex gap-3">
-          <Button type="button" onClick={handleApply}>
-            Apply
-          </Button>
-          <Button type="button" onClick={handleClear} variant="outline">
-            Clear
-          </Button>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Events" description="Most recent events first.">
         {isLoading ? (
           <LoadingState label="Loading logs…" />
         ) : error ? (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import type { DataTableColumn } from "@/components/shared/DataTable";
 import { DataTable } from "@/components/shared/DataTable";
@@ -23,6 +23,7 @@ type ModalState =
   | { type: "delete"; policy: Policy };
 
 export function PoliciesPage() {
+  const navigate = useNavigate();
   const { hasRole } = useAuth();
   const { policies, assignedPolicyIds, isLoading, error, refresh } = usePolicies();
   const [modal, setModal] = useState<ModalState>(null);
@@ -92,7 +93,10 @@ export function PoliciesPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
-                    onClick={() => setModal({ type: "edit", policy: row })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setModal({ type: "edit", policy: row });
+                    }}
                     variant="outline"
                     size="sm"
                   >
@@ -108,7 +112,10 @@ export function PoliciesPage() {
                     <Button
                       type="button"
                       disabled={assigned}
-                      onClick={() => setModal({ type: "delete", policy: row })}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setModal({ type: "delete", policy: row });
+                      }}
                       variant="destructive"
                       size="sm"
                     >
@@ -164,6 +171,7 @@ export function PoliciesPage() {
             getRowKey={(row) => String(row.id)}
             emptyTitle="No policies yet"
             emptyDescription="Create your first WAF policy to start protecting your virtual hosts."
+            onRowClick={(row) => navigate(getPolicyDetailPath(row.id))}
           />
         )}
       </SectionCard>

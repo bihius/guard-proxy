@@ -10,7 +10,7 @@ vi.mock("./api", () => ({
 
 import { useAuth } from "@/hooks/use-auth";
 import { applyConfig } from "./api";
-import type { ConfigApplyResponse } from "./types";
+import type { ConfigApplyResponse, RuntimeStatusResponse } from "./types";
 import { ApplyConfigButton } from "./ApplyConfigButton";
 
 const mockedUseAuth = vi.mocked(useAuth);
@@ -36,7 +36,27 @@ function makeAuth(role: "admin" | "viewer") {
   };
 }
 
-const noop = { refresh: vi.fn() };
+const pendingStatus: RuntimeStatusResponse = {
+  frontend_contract_version: "1",
+  deployment_state: "deployed",
+  generated_config: {
+    can_generate: true,
+    checksum: "new-checksum",
+    generated_at: "2026-01-01T00:00:00Z",
+    error: null,
+  },
+  latest_validation: null,
+  latest_reload: {
+    id: 1,
+    operation_type: "reload",
+    status: "success",
+    config_checksum: "old-checksum",
+    message: null,
+    created_at: "2026-01-01T00:00:00Z",
+  },
+};
+
+const noop = { data: pendingStatus, refresh: vi.fn() };
 
 describe("ApplyConfigButton", () => {
   beforeEach(() => {
@@ -52,6 +72,29 @@ describe("ApplyConfigButton", () => {
   it("returns null for viewer", () => {
     mockedUseAuth.mockReturnValue(makeAuth("viewer"));
     const { container } = render(<ApplyConfigButton runtimeStatus={noop} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("returns null for admin when there are no pending changes", () => {
+    mockedUseAuth.mockReturnValue(makeAuth("admin"));
+    const upToDateStatus: RuntimeStatusResponse = {
+      ...pendingStatus,
+      latest_reload: {
+        ...pendingStatus.latest_reload!,
+        config_checksum: pendingStatus.generated_config.checksum,
+      },
+    };
+    const { container } = render(
+      <ApplyConfigButton runtimeStatus={{ data: upToDateStatus, refresh: vi.fn() }} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("returns null for admin when runtime status has not loaded yet", () => {
+    mockedUseAuth.mockReturnValue(makeAuth("admin"));
+    const { container } = render(
+      <ApplyConfigButton runtimeStatus={{ data: null, refresh: vi.fn() }} />,
+    );
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -94,7 +137,7 @@ describe("ApplyConfigButton", () => {
 
     render(
       <ApplyConfigButton
-        runtimeStatus={{ refresh: refreshMock }}
+        runtimeStatus={{ data: pendingStatus, refresh: refreshMock }}
         onResult={onResult}
       />,
     );
