@@ -1,7 +1,6 @@
 # Evaluation Plan — Guard Proxy WAF
 
 **Document status:** methodology contract — written before experiments run.  
-**Related chapter:** `thesis/chapters/06-testy.md` (results will be recorded there).  
 **Lab source:** `benchmarks/lab/` — all configs, composes, and runner scripts.
 
 ---
@@ -22,7 +21,6 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 - Authenticated multi-step attack chains.
 - DoS / rate-limiting capabilities.
 - Universal WAF detection-rate or false-positive guarantees independent of configuration.
-- Per-vhost Coraza plugin configuration (planned for a future milestone).
 
 ---
 
@@ -34,7 +32,7 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 | -------------- | ----------------------------------------------------- |
 | Host           | Dell PowerEdge R530 (Proxmox PVE 9.1.1)               |
 | CPU            | 2 × Intel Xeon E5-2620 v3 @ 2.40 GHz (24 cores total) |
-| RAM            | 128 GiB (32 GiB free at lab time)                     |
+| RAM            | 128 GiB                  |
 | Storage        | ZFS `local-zfs`                                       |
 | OS (LXC guest) | Debian 13 (Bookworm) — `debian-13-standard` template  |
 | Docker         | Docker Engine ≥ 27.x, Compose V2                      |
@@ -61,9 +59,7 @@ lxc.cgroup2.cpuset.cpus: 18-23
 
 This dedicates the second-socket tail cores to the lab container, away from the homelab media services running on cores 0–17.
 
-### Noisy-neighbour declaration
 
-The Proxmox host runs ~20 LXC containers (media stack: Jellyfin, \*arr apps, Immich, etc.) with live background traffic. This represents a **shared-tenancy deployment scenario** typical of self-hosted WAF use cases. Each run captures host load average at start time in `results/run-<RUN_ID>/manifest.json`. Runs are repeated three times; the median is reported. Outliers (>2 standard deviations) are discarded.
 
 ### Software versions (recorded per run)
 
