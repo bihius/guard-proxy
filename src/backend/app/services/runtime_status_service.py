@@ -8,7 +8,10 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
+from app.models.custom_rule import CustomRule
 from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.policy_binding import PolicyBinding
+from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
 from app.models.runtime_operation import (
     RuntimeOperation,
@@ -22,15 +25,13 @@ from app.schemas.runtime_status import (
     RuntimeOperationSnapshot,
     RuntimeStatusResponse,
 )
+from app.services.config_generator import generate
 from app.services.config_renderer import (
     CrsPolicyRenderContext,
     HaproxyBackend,
     HaproxyRenderContext,
     HaproxyRoute,
     RuleOverrideRenderContext,
-    render_crs_setup,
-    render_haproxy_cfg,
-    render_rule_overrides,
 )
 
 _FRONTEND_CONTRACT_VERSION = "1"
@@ -63,6 +64,13 @@ class RuntimeStatusService:
         rule_overrides = (
             self.db.query(RuleOverride).order_by(RuleOverride.id.asc()).all()
         )
+        rule_exclusions = (
+            self.db.query(RuleExclusion).order_by(RuleExclusion.id.asc()).all()
+        )
+        custom_rules = self.db.query(CustomRule).order_by(CustomRule.id.asc()).all()
+        policy_bindings = (
+            self.db.query(PolicyBinding).order_by(PolicyBinding.id.asc()).all()
+        )
         active_vhosts = [vhost for vhost in vhosts if vhost.is_active]
         # Compute before calling _pick_active_policy so they appear in the
         # response regardless of whether generation succeeds or fails.
@@ -71,15 +79,14 @@ class RuntimeStatusService:
         ] or None
 
         try:
-            active_policy, active_overrides = self._pick_active_policy(
-                active_vhosts=active_vhosts,
-                policies=policies,
-                rule_overrides=rule_overrides,
+            generated = generate(
+                vhosts,
+                policies,
+                rule_overrides,
+                rule_exclusions,
+                custom_rules,
+                policy_bindings,
             )
-            context = self._to_haproxy_context(active_vhosts)
-            haproxy_cfg = render_haproxy_cfg(context)
-            crs_setup_conf = render_crs_setup(active_policy)
-            rule_overrides_conf = render_rule_overrides(active_overrides)
         except Exception as error:  # pragma: no cover - defensive conversion
             return RuntimeGeneratedConfigStatus(
                 can_generate=False,
@@ -90,9 +97,9 @@ class RuntimeStatusService:
         return RuntimeGeneratedConfigStatus(
             can_generate=True,
             checksum=self._calculate_checksum(
-                haproxy_cfg,
-                crs_setup_conf,
-                rule_overrides_conf,
+                generated.haproxy_cfg,
+                generated.crs_setup_conf,
+                generated.rule_overrides_conf,
             ),
             generated_at=datetime.now(UTC),
             unbound_vhost_domains=unbound_vhost_domains,
@@ -241,7 +248,7 @@ class RuntimeStatusService:
         return HaproxyRoute(
             vhost_acl_name=f"host_{suffix}",
             vhost_hosts=(vhost.domain,),
-            ssl_provider=vhost.ssl_provider,
+            ssl_provider=vhost.ssl_provider if vhost.ssl_enabled else "none",
             backend=HaproxyBackend(
                 name=f"be_{suffix}",
                 server_name=f"srv_{suffix}",
