@@ -109,10 +109,13 @@ class PolicyService:
         return self.db.query(Policy).order_by(Policy.id.asc()).all()
 
     def get_policy(self, policy_id: int) -> Policy:
-        """Return one policy with related rule overrides loaded."""
+        """Return one policy with related rule overrides and exclusions loaded."""
         policy = (
             self.db.query(Policy)
-            .options(selectinload(Policy.rule_overrides))
+            .options(
+                selectinload(Policy.rule_overrides),
+                selectinload(Policy.rule_exclusions),
+            )
             .filter(Policy.id == policy_id)
             .first()
         )

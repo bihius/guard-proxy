@@ -23,6 +23,7 @@ from app.routers import (
     config,
     logs,
     policies,
+    rule_exclusions,
     rule_overrides,
     runtime_status,
     vhosts,
@@ -107,6 +108,7 @@ app.include_router(auth.router)
 app.include_router(config.router)
 app.include_router(logs.router)
 app.include_router(policies.router)
+app.include_router(rule_exclusions.router)
 app.include_router(rule_overrides.router)
 app.include_router(runtime_status.router)
 app.include_router(vhosts.router)
