@@ -32,9 +32,6 @@ export type CustomRuleModalState =
 const PHASE_OPTIONS: { value: CustomRulePhase; label: string }[] = [
   { value: "request_headers", label: "Request headers" },
   { value: "request_body", label: "Request body" },
-  { value: "response_headers", label: "Response headers" },
-  { value: "response_body", label: "Response body" },
-  { value: "logging", label: "Logging" },
 ];
 
 const OPERATOR_OPTIONS: { value: CustomRuleOperator; label: string }[] = [

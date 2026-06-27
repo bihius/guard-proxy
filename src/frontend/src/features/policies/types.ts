@@ -68,10 +68,7 @@ export type RuleExclusionUpdate = {
 
 export type CustomRulePhase =
   | "request_headers"
-  | "request_body"
-  | "response_headers"
-  | "response_body"
-  | "logging";
+  | "request_body";
 
 export type CustomRuleOperator =
   | "rx"
