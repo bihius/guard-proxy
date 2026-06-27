@@ -23,6 +23,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.custom_rule import CustomRule
+    from app.models.policy_binding import PolicyBinding
     from app.models.rule_exclusion import RuleExclusion
     from app.models.rule_override import RuleOverride
     from app.models.vhost import VHost
@@ -145,6 +146,12 @@ class Policy(Base):
     vhosts: Mapped[list[VHost]] = relationship(
         "VHost",
         back_populates="policy",
+    )
+
+    policy_bindings: Mapped[list[PolicyBinding]] = relationship(
+        "PolicyBinding",
+        back_populates="policy",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
