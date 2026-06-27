@@ -10,7 +10,7 @@ from app.models.runtime_operation import (
     RuntimeOperationType,
 )
 from app.models.vhost import VHost
-from app.services.config_renderer import render_haproxy_cfg
+from app.services.config_generator import generate
 from app.services.runtime_status_service import RuntimeStatusService
 
 
@@ -178,9 +178,8 @@ def test_haproxy_context_uses_vhost_id_identifiers_for_colliding_domains(
         backend_url="http://bar-backend:8000",
     )
 
-    rendered = render_haproxy_cfg(
-        RuntimeStatusService._to_haproxy_context([first, second])
-    )
+    generated = generate(vhosts=[first, second], policies=[], rule_overrides=[])
+    rendered = generated.haproxy_cfg
 
     assert f"acl host_vhost_{first.id} hdr(host),field(1,:) -i foo-bar.com" in rendered
     assert f"acl host_vhost_{second.id} hdr(host),field(1,:) -i foo.bar.com" in rendered
@@ -260,6 +259,7 @@ def test_generated_config_rejects_inactive_assigned_policy(db: Session) -> None:
 
 def test_active_policy_selection_rejects_missing_policy() -> None:
     vhost = VHost(
+        id=1,
         domain="app.example.com",
         backend_url="http://app-backend:8000",
         is_active=True,
@@ -268,11 +268,7 @@ def test_active_policy_selection_rejects_missing_policy() -> None:
     )
 
     try:
-        RuntimeStatusService._pick_active_policy(
-            active_vhosts=[vhost],
-            policies=[],
-            rule_overrides=[],
-        )
+        generate(vhosts=[vhost], policies=[], rule_overrides=[])
     except ValueError as error:
         assert "missing policy 999" in str(error)
     else:  # pragma: no cover - assertion guard

@@ -20,10 +20,27 @@ def _overrides(
 def test_rule_overrides_template_renders_header_for_empty_policy() -> None:
     rendered = render_rule_overrides(_overrides([]))
 
-    assert "Guard Proxy generated CRS policy tuning" in rendered
-    assert "SecRuleRemoveById" not in rendered
-    assert "SecRuleRemoveTargetById" not in rendered
-    assert "SecRule REQUEST_URI" not in rendered
+    assert rendered == (
+        "# Guard Proxy generated CRS policy tuning.\n"
+        "#\n"
+        "# Rules are enabled by default through the CRS include. This file"
+        " applies the\n"
+        "# selected policy's disabled rules, target exclusions, scoped"
+        " exclusions, and\n"
+        "# administrator-authored custom rules.\n"
+        "\n"
+        "# Disabled CRS rules.\n"
+        "\n"
+        "\n"
+        "# Global target exclusions.\n"
+        "\n"
+        "\n"
+        "# Path-scoped target exclusions.\n"
+        "\n"
+        "\n"
+        "# Custom rules.\n"
+        "\n"
+    )
 
 
 def test_rule_overrides_template_renders_disabled_rules_sorted() -> None:
