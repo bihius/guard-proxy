@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.policy import Policy
+from app.models.policy_binding import PolicyBinding
 from app.models.vhost import VHost
 from app.services.certbot_service import CertbotError, CertbotService
 
@@ -45,6 +46,45 @@ class VHostFieldCannotBeNullError(VHostError):
 
 class VHostPolicyNotFoundError(VHostError):
     """Raised when a referenced policy does not exist."""
+
+
+class PolicyBindingNotFoundError(VHostError):
+    """Raised when a policy binding does not exist for the given vhost."""
+
+
+class PolicyBindingAlreadyExistsError(VHostError):
+    """Raised when a policy binding conflicts with an existing binding."""
+
+
+class PolicyBindingDefaultManagedByVHostError(VHostError):
+    """Raised when callers try to manage the legacy default binding directly."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Default root policy binding is managed through vhost.policy_id"
+        )
+
+
+class PolicyBindingFieldCannotBeNullError(VHostError):
+    """Raised when a required policy binding field is null."""
+
+    def __init__(self, field_name: str) -> None:
+        self.field_name = field_name
+        super().__init__(f"Field '{field_name}' cannot be null")
+
+
+class PolicyBindingInvalidPathPrefixError(VHostError):
+    """Raised when a policy binding path prefix is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Path prefix must start with /")
+
+
+class PolicyBindingInvalidPriorityError(VHostError):
+    """Raised when a policy binding priority is invalid."""
+
+    def __init__(self) -> None:
+        super().__init__("Priority must be greater than or equal to 0")
 
 
 class VHostService:
@@ -102,6 +142,9 @@ class VHostService:
         self.db.add(vhost)
 
         try:
+            self.db.flush()
+            if policy_id is not None:
+                self._sync_default_policy_binding(vhost, policy_id)
             self.db.commit()
         except IntegrityError as error:
             self.db.rollback()
@@ -114,13 +157,21 @@ class VHostService:
 
     def list_vhosts(self) -> list[VHost]:
         """Return all vhosts sorted by ID."""
-        return self.db.query(VHost).order_by(VHost.id.asc()).all()
+        return (
+            self.db.query(VHost)
+            .options(selectinload(VHost.policy_bindings))
+            .order_by(VHost.id.asc())
+            .all()
+        )
 
     def get_vhost(self, vhost_id: int) -> VHost:
         """Return one vhost with related policy loaded."""
         vhost = (
             self.db.query(VHost)
-            .options(selectinload(VHost.policy))
+            .options(
+                selectinload(VHost.policy),
+                selectinload(VHost.policy_bindings),
+            )
             .filter(VHost.id == vhost_id)
             .first()
         )
@@ -163,6 +214,8 @@ class VHostService:
 
         for field, value in patch_data.items():
             setattr(vhost, field, value)
+        if "policy_id" in patch_data:
+            self._sync_default_policy_binding(vhost, patch_data["policy_id"])
 
         try:
             self.db.commit()
@@ -181,6 +234,65 @@ class VHostService:
         self.db.delete(vhost)
         self.db.commit()
 
+    def list_policy_bindings(self, vhost_id: int) -> list[PolicyBinding]:
+        """Return all policy bindings for a vhost ordered by priority and ID."""
+        self._get_vhost_or_raise(vhost_id)
+        return (
+            self.db.query(PolicyBinding)
+            .filter(PolicyBinding.vhost_id == vhost_id)
+            .order_by(PolicyBinding.priority.asc(), PolicyBinding.id.asc())
+            .all()
+        )
+
+    def create_policy_binding(
+        self,
+        vhost_id: int,
+        *,
+        policy_id: int,
+        path_prefix: str,
+        priority: int,
+        comment: str | None,
+    ) -> PolicyBinding:
+        """Create and persist a path-scoped policy binding for a vhost."""
+        self._get_vhost_or_raise(vhost_id)
+        self._ensure_policy_exists(policy_id)
+        self._validate_policy_binding_fields(
+            policy_id=policy_id,
+            path_prefix=path_prefix,
+            priority=priority,
+        )
+        if self._is_default_policy_binding(path_prefix, priority):
+            raise PolicyBindingDefaultManagedByVHostError()
+
+        binding = PolicyBinding(
+            vhost_id=vhost_id,
+            policy_id=policy_id,
+            path_prefix=path_prefix,
+            priority=priority,
+            comment=comment,
+        )
+        self.db.add(binding)
+
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            if self._is_policy_binding_unique_violation(error):
+                raise PolicyBindingAlreadyExistsError from error
+            raise
+
+        self.db.refresh(binding)
+        return binding
+
+    def delete_policy_binding(self, vhost_id: int, binding_id: int) -> None:
+        """Delete a policy binding scoped to a vhost."""
+        self._get_vhost_or_raise(vhost_id)
+        binding = self._get_policy_binding_or_raise(vhost_id, binding_id)
+        if self._is_default_policy_binding(binding.path_prefix, binding.priority):
+            raise PolicyBindingDefaultManagedByVHostError()
+        self.db.delete(binding)
+        self.db.commit()
+
     def _get_vhost_or_raise(self, vhost_id: int) -> VHost:
         """Return a vhost by primary key or raise a domain error."""
         vhost = self.db.get(VHost, vhost_id)
@@ -193,17 +305,108 @@ class VHostService:
         if policy_id is not None and self.db.get(Policy, policy_id) is None:
             raise VHostPolicyNotFoundError
 
+    def _get_policy_binding_or_raise(
+        self, vhost_id: int, binding_id: int
+    ) -> PolicyBinding:
+        """Return a binding scoped to a vhost or raise a domain error."""
+        binding = (
+            self.db.query(PolicyBinding)
+            .filter(
+                PolicyBinding.vhost_id == vhost_id,
+                PolicyBinding.id == binding_id,
+            )
+            .first()
+        )
+        if binding is None:
+            raise PolicyBindingNotFoundError
+        return binding
+
     def _validate_patch_data(self, patch_data: dict[str, object]) -> None:
         """Reject nulls for fields that must always keep a real value."""
         for field in NON_NULLABLE_PATCH_FIELDS:
             if field in patch_data and patch_data[field] is None:
                 raise VHostFieldCannotBeNullError(field)
 
+    def _sync_default_policy_binding(
+        self, vhost: VHost, policy_id: object
+    ) -> None:
+        """Mirror legacy vhost.policy_id into the default root path binding."""
+        default_binding = (
+            self.db.query(PolicyBinding)
+            .filter(
+                PolicyBinding.vhost_id == vhost.id,
+                PolicyBinding.path_prefix == "/",
+                PolicyBinding.priority == 0,
+            )
+            .first()
+        )
+
+        if policy_id is None:
+            if default_binding is not None:
+                self.db.delete(default_binding)
+            return
+
+        if not isinstance(policy_id, int):
+            raise PolicyBindingFieldCannotBeNullError("policy_id")
+
+        if default_binding is None:
+            self.db.add(
+                PolicyBinding(
+                    vhost_id=vhost.id,
+                    policy_id=policy_id,
+                    path_prefix="/",
+                    priority=0,
+                    comment="Default binding mirrored from vhost.policy_id",
+                )
+            )
+            return
+
+        default_binding.policy_id = policy_id
+        if default_binding.comment is None:
+            default_binding.comment = "Default binding mirrored from vhost.policy_id"
+
+    def _validate_policy_binding_fields(
+        self,
+        *,
+        policy_id: object,
+        path_prefix: object,
+        priority: object,
+    ) -> None:
+        """Validate required policy binding fields before database writes."""
+        if policy_id is None:
+            raise PolicyBindingFieldCannotBeNullError("policy_id")
+        if path_prefix is None:
+            raise PolicyBindingFieldCannotBeNullError("path_prefix")
+        if priority is None:
+            raise PolicyBindingFieldCannotBeNullError("priority")
+        if not isinstance(path_prefix, str) or not path_prefix.startswith("/"):
+            raise PolicyBindingInvalidPathPrefixError
+        if not isinstance(priority, int) or priority < 0:
+            raise PolicyBindingInvalidPriorityError
+
     @staticmethod
     def _is_vhost_domain_unique_violation(error: IntegrityError) -> bool:
         """Detect whether IntegrityError comes from duplicate vhost domain."""
         error_text = str(error.orig).lower()
         return "unique" in error_text and "domain" in error_text
+
+    @staticmethod
+    def _is_policy_binding_unique_violation(error: IntegrityError) -> bool:
+        """Detect whether IntegrityError comes from duplicate policy binding."""
+        error_text = str(error.orig).lower()
+        return (
+            "uq_policy_bindings_vhost_path_priority" in error_text
+            or (
+                "unique" in error_text
+                and "policy_bindings" in error_text
+                and ("path_prefix" in error_text or "vhost_id" in error_text)
+            )
+        )
+
+    @staticmethod
+    def _is_default_policy_binding(path_prefix: str, priority: int) -> bool:
+        """Return whether a binding is the legacy vhost.policy_id mirror."""
+        return path_prefix == "/" and priority == 0
 
     @staticmethod
     def _parse_cert_expiration(cert_pem: str) -> datetime | None:
