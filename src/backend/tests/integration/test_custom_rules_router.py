@@ -116,6 +116,29 @@ def test_create_custom_rule_without_comment_returns_201(
     assert resp.json()["comment"] is None
 
 
+def test_create_custom_rule_response_phase_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Response phases are rejected because the SPOA integration inspects requests only."""
+    policy = _create_policy(client, admin_token, name="Response phase rejected")
+
+    resp = client.post(
+        f"/policies/{policy['id']}/custom-rules",
+        headers=admin_token,
+        json={
+            "rule_id": 9000001,
+            "phase": "response_body",
+            "variables": "RESPONSE_BODY",
+            "operator": "rx",
+            "operator_argument": "secret",
+            "actions": "deny,status:403",
+        },
+    )
+
+    assert resp.status_code == 422
+    assert "request_headers" in str(resp.json()["detail"])
+
+
 def test_create_custom_rule_viewer_forbidden(
     client: TestClient, admin_token: dict[str, str], viewer_token: dict[str, str]
 ) -> None:

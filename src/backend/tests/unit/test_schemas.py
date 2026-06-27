@@ -351,6 +351,18 @@ def test_custom_rule_create_variables_must_not_be_blank() -> None:
         )
 
 
+def test_custom_rule_create_response_phase_invalid() -> None:
+    with pytest.raises(ValidationError, match="only support request_headers"):
+        CustomRuleCreate(
+            rule_id=9000001,
+            phase=RulePhase.RESPONSE_BODY,
+            variables="RESPONSE_BODY",
+            operator=RuleOperator.RX,
+            operator_argument="secret",
+            actions="deny",
+        )
+
+
 def test_custom_rule_update_valid() -> None:
     rule = CustomRuleUpdate(
         phase=RulePhase.REQUEST_BODY,
@@ -361,6 +373,11 @@ def test_custom_rule_update_valid() -> None:
     assert rule.phase == RulePhase.REQUEST_BODY
     assert rule.operator == RuleOperator.CONTAINS
     assert rule.is_active is False
+
+
+def test_custom_rule_update_logging_phase_invalid() -> None:
+    with pytest.raises(ValidationError, match="only support request_headers"):
+        CustomRuleUpdate(phase=RulePhase.LOGGING)
 
 
 def test_custom_rule_update_operator_argument_must_not_be_blank() -> None:

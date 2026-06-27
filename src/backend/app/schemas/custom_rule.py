@@ -28,6 +28,15 @@ def _validate_not_blank(value: str, field_label: str) -> str:
     return value
 
 
+def _validate_request_phase(value: RulePhase) -> RulePhase:
+    """Allow only phases that run in Guard Proxy's request-only SPOA flow."""
+    if value not in {RulePhase.REQUEST_HEADERS, RulePhase.REQUEST_BODY}:
+        raise ValueError(
+            "Custom rules only support request_headers and request_body phases"
+        )
+    return value
+
+
 class CustomRuleCreate(BaseModel):
     """Request body for POST /policies/{id}/custom-rules."""
 
@@ -45,6 +54,12 @@ class CustomRuleCreate(BaseModel):
     def rule_id_in_range(cls, value: int) -> int:
         """Require the rule ID to fall in the reserved custom rule range."""
         return _validate_rule_id_range(value)
+
+    @field_validator("phase")
+    @classmethod
+    def phase_must_be_request_phase(cls, value: RulePhase) -> RulePhase:
+        """Reject response/logging phases because Guard Proxy inspects requests only."""
+        return _validate_request_phase(value)
 
     @field_validator("variables")
     @classmethod
@@ -84,6 +99,14 @@ class CustomRuleUpdate(BaseModel):
         if value is None:
             return None
         return _validate_rule_id_range(value)
+
+    @field_validator("phase")
+    @classmethod
+    def phase_must_be_request_phase(cls, value: RulePhase | None) -> RulePhase | None:
+        """Reject response/logging phases because Guard Proxy inspects requests only."""
+        if value is None:
+            return None
+        return _validate_request_phase(value)
 
     @field_validator("variables")
     @classmethod
