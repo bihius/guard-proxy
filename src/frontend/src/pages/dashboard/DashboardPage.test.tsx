@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthContext } from "@/features/auth/auth-context.shared";
 import type { AuthContextValue } from "@/features/auth/auth-context.types";
 import * as logsApi from "@/features/logs/api";
+import * as policiesApi from "@/features/policies/api";
 import * as vhostsApi from "@/features/vhosts/api";
 
 import { DashboardPage } from "./DashboardPage";
 
 vi.mock("@/features/logs/api");
+vi.mock("@/features/policies/api");
 vi.mock("@/features/vhosts/api");
 vi.mock("@/features/runtime/use-runtime-status", () => ({
   useRuntimeStatus: () => ({ data: null, isLoading: false, error: null, refresh: vi.fn() }),
@@ -33,8 +35,19 @@ function makeAuthContext(overrides: Partial<AuthContextValue> = {}): AuthContext
   };
 }
 
-const mockVHosts = [{ id: 1 }, { id: 2 }];
-const mockPolicies = [{ id: 1 }];
+// 2 protected vhosts (active + assigned), plus records that must be excluded:
+// one inactive, one active-but-unassigned.
+const mockVHosts = [
+  { id: 1, is_active: true, policy_id: 10 },
+  { id: 2, is_active: true, policy_id: 11 },
+  { id: 3, is_active: false, policy_id: 12 },
+  { id: 4, is_active: true, policy_id: null },
+];
+// 1 active policy, plus one inactive that must be excluded.
+const mockPolicies = [
+  { id: 10, is_active: true },
+  { id: 11, is_active: false },
+];
 
 function renderPage() {
   return render(
@@ -47,7 +60,7 @@ function renderPage() {
 describe("DashboardPage StatCards", () => {
   it("shows loading skeletons while all fetches are in-flight", () => {
     vi.mocked(vhostsApi.listVHosts).mockReturnValue(new Promise(() => undefined));
-    vi.mocked(vhostsApi.listPolicies).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(policiesApi.listPolicies).mockReturnValue(new Promise(() => undefined));
     vi.mocked(logsApi.fetchLogTotal).mockReturnValue(new Promise(() => undefined));
 
     renderPage();
@@ -57,7 +70,7 @@ describe("DashboardPage StatCards", () => {
 
   it("renders real counts after data loads", async () => {
     vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts as never);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies as never);
+    vi.mocked(policiesApi.listPolicies).mockResolvedValue(mockPolicies as never);
     vi.mocked(logsApi.fetchLogTotal).mockResolvedValue(42);
 
     renderPage();
@@ -72,7 +85,7 @@ describe("DashboardPage StatCards", () => {
 
   it("shows — only for the card whose endpoint fails, real counts for others", async () => {
     vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts as never);
-    vi.mocked(vhostsApi.listPolicies).mockRejectedValue(new Error("Network error"));
+    vi.mocked(policiesApi.listPolicies).mockRejectedValue(new Error("Network error"));
     vi.mocked(logsApi.fetchLogTotal).mockResolvedValue(7);
 
     renderPage();
@@ -87,7 +100,7 @@ describe("DashboardPage StatCards", () => {
 
   it("shows — for all cards when all endpoints fail", async () => {
     vi.mocked(vhostsApi.listVHosts).mockRejectedValue(new Error("down"));
-    vi.mocked(vhostsApi.listPolicies).mockRejectedValue(new Error("down"));
+    vi.mocked(policiesApi.listPolicies).mockRejectedValue(new Error("down"));
     vi.mocked(logsApi.fetchLogTotal).mockRejectedValue(new Error("down"));
 
     renderPage();
