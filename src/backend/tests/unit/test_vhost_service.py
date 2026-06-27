@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.vhost import VHost
 from app.services.vhost_service import (
     PolicyBindingAlreadyExistsError,
+    PolicyBindingDefaultManagedByVHostError,
     PolicyBindingInvalidPathPrefixError,
     PolicyBindingInvalidPriorityError,
     PolicyBindingNotFoundError,
@@ -469,6 +470,32 @@ def test_create_policy_binding_duplicate_path_priority_raises_error(
         )
 
 
+def test_create_policy_binding_rejects_default_root_binding(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="direct-root-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyBindingDefaultManagedByVHostError):
+        service.create_policy_binding(
+            vhost.id,
+            policy_id=policy.id,
+            path_prefix="/",
+            priority=0,
+            comment=None,
+        )
+
+
 def test_create_policy_binding_invalid_path_raises_error(
     db: Session,
     admin_user: User,
@@ -547,6 +574,31 @@ def test_delete_policy_binding_removes_existing_binding(
     service.delete_policy_binding(vhost.id, binding.id)
 
     assert db.get(PolicyBinding, binding.id) is None
+
+
+def test_delete_policy_binding_rejects_default_root_binding(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="delete-root-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=policy.id,
+        created_by=admin_user.id,
+    )
+    binding = service.list_policy_bindings(vhost.id)[0]
+
+    with pytest.raises(PolicyBindingDefaultManagedByVHostError):
+        service.delete_policy_binding(vhost.id, binding.id)
+
+    refreshed = service.get_vhost(vhost.id)
+    assert refreshed.policy_id == policy.id
+    assert len(service.list_policy_bindings(vhost.id)) == 1
 
 
 def test_delete_policy_binding_missing_raises_not_found(

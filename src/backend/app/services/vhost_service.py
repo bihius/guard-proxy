@@ -56,6 +56,15 @@ class PolicyBindingAlreadyExistsError(VHostError):
     """Raised when a policy binding conflicts with an existing binding."""
 
 
+class PolicyBindingDefaultManagedByVHostError(VHostError):
+    """Raised when callers try to manage the legacy default binding directly."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Default root policy binding is managed through vhost.policy_id"
+        )
+
+
 class PolicyBindingFieldCannotBeNullError(VHostError):
     """Raised when a required policy binding field is null."""
 
@@ -252,6 +261,8 @@ class VHostService:
             path_prefix=path_prefix,
             priority=priority,
         )
+        if self._is_default_policy_binding(path_prefix, priority):
+            raise PolicyBindingDefaultManagedByVHostError()
 
         binding = PolicyBinding(
             vhost_id=vhost_id,
@@ -277,6 +288,8 @@ class VHostService:
         """Delete a policy binding scoped to a vhost."""
         self._get_vhost_or_raise(vhost_id)
         binding = self._get_policy_binding_or_raise(vhost_id, binding_id)
+        if self._is_default_policy_binding(binding.path_prefix, binding.priority):
+            raise PolicyBindingDefaultManagedByVHostError()
         self.db.delete(binding)
         self.db.commit()
 
@@ -389,6 +402,11 @@ class VHostService:
                 and ("path_prefix" in error_text or "vhost_id" in error_text)
             )
         )
+
+    @staticmethod
+    def _is_default_policy_binding(path_prefix: str, priority: int) -> bool:
+        """Return whether a binding is the legacy vhost.policy_id mirror."""
+        return path_prefix == "/" and priority == 0
 
     @staticmethod
     def _parse_cert_expiration(cert_pem: str) -> datetime | None:

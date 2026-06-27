@@ -552,6 +552,30 @@ def test_create_policy_binding_duplicate_returns_409(
     assert second.json()["detail"] == "Policy binding already exists"
 
 
+def test_create_policy_binding_default_root_returns_409(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """The default root binding is managed through PATCH /vhosts/{id}."""
+    policy = _create_policy(client, admin_token, name="Root binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="root-binding-create.example.com",
+    )
+
+    resp = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json={"policy_id": policy["id"], "path_prefix": "/", "priority": 0},
+    )
+    assert resp.status_code == 409
+    assert (
+        resp.json()["detail"]
+        == "Default root policy binding is managed through vhost.policy_id"
+    )
+
+
 def test_delete_policy_binding_admin_returns_204(
     client: TestClient,
     admin_token: dict[str, str],
@@ -582,6 +606,38 @@ def test_delete_policy_binding_admin_returns_204(
     )
     assert list_resp.status_code == 200
     assert list_resp.json() == []
+
+
+def test_delete_policy_binding_default_root_returns_409(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Deleting the default root binding directly would desync vhost.policy_id."""
+    policy = _create_policy(client, admin_token, name="Root delete binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="root-binding-delete.example.com",
+        policy_id=policy["id"],
+    )
+    root_binding = created["policy_bindings"][0]
+
+    resp = client.delete(
+        f"/vhosts/{created['id']}/policy-bindings/{root_binding['id']}",
+        headers=admin_token,
+    )
+    assert resp.status_code == 409
+    assert (
+        resp.json()["detail"]
+        == "Default root policy binding is managed through vhost.policy_id"
+    )
+
+    detail_resp = client.get(f"/vhosts/{created['id']}", headers=admin_token)
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["policy_id"] == policy["id"]
+    assert len(detail["policy_bindings"]) == 1
+    assert detail["policy_bindings"][0]["id"] == root_binding["id"]
 
 
 def test_delete_policy_binding_viewer_forbidden(
