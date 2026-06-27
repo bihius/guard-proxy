@@ -15,6 +15,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+      start_period: 60s
     networks:
       - gp_internal
 
@@ -40,6 +41,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 60s
     volumes:
       - backend_logs:/var/log/guard-proxy
       - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
@@ -62,12 +64,13 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "3000:5173"
+      - "${FRONTEND_PORT:-3000}:5173"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:5173 >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks:
       - gp_edge
       - gp_internal
@@ -93,6 +96,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks:
       - gp_internal
 
@@ -147,6 +151,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks:
       - gp_edge
       - gp_internal
