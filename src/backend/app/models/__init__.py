@@ -5,6 +5,7 @@ For autogenerate to work, EVERY model must be imported here.
 Without this, Alembic generates an empty migration (it does not see tables).
 """
 
+from app.models.custom_rule import CustomRule, RuleOperator, RulePhase
 from app.models.log import Log, LogAction, LogSeverity
 from app.models.policy import Policy, PolicyEnforcementMode
 from app.models.rule_exclusion import RuleExclusion, TargetType
@@ -33,4 +34,7 @@ __all__ = [
     "RuleAction",
     "RuleExclusion",
     "TargetType",
+    "CustomRule",
+    "RulePhase",
+    "RuleOperator",
 ]

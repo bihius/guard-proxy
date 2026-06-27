@@ -12,9 +12,11 @@ from pydantic import ValidationError
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
+from app.models.custom_rule import RuleOperator, RulePhase  # noqa: E402
 from app.models.policy import PolicyEnforcementMode  # noqa: E402
 from app.models.rule_exclusion import TargetType  # noqa: E402
 from app.models.rule_override import RuleAction  # noqa: E402
+from app.schemas.custom_rule import CustomRuleCreate, CustomRuleUpdate  # noqa: E402
 from app.schemas.log import LogIngestRequest  # noqa: E402
 from app.schemas.policy import PolicyCreate, PolicyUpdate  # noqa: E402
 from app.schemas.rule_exclusion import (  # noqa: E402
@@ -295,6 +297,78 @@ def test_rule_exclusion_update_target_value_must_not_be_blank() -> None:
 
 
 # ---------------------------------------------------------------------------
+# CustomRule schemas
+# ---------------------------------------------------------------------------
+
+
+def test_custom_rule_create_valid() -> None:
+    rule = CustomRuleCreate(
+        rule_id=9000001,
+        phase=RulePhase.REQUEST_HEADERS,
+        variables="REQUEST_HEADERS:User-Agent",
+        operator=RuleOperator.RX,
+        operator_argument="(?i)curl",
+        actions="deny,status:403",
+    )
+
+    assert rule.rule_id == 9000001
+    assert rule.is_active is True
+
+
+def test_custom_rule_create_rule_id_below_range_invalid() -> None:
+    with pytest.raises(ValidationError, match="between 9000000 and 9099999"):
+        CustomRuleCreate(
+            rule_id=8999999,
+            phase=RulePhase.REQUEST_HEADERS,
+            variables="ARGS",
+            operator=RuleOperator.RX,
+            operator_argument=".*",
+            actions="deny",
+        )
+
+
+def test_custom_rule_create_rule_id_above_range_invalid() -> None:
+    with pytest.raises(ValidationError, match="between 9000000 and 9099999"):
+        CustomRuleCreate(
+            rule_id=9100000,
+            phase=RulePhase.REQUEST_HEADERS,
+            variables="ARGS",
+            operator=RuleOperator.RX,
+            operator_argument=".*",
+            actions="deny",
+        )
+
+
+def test_custom_rule_create_variables_must_not_be_blank() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        CustomRuleCreate(
+            rule_id=9000001,
+            phase=RulePhase.REQUEST_HEADERS,
+            variables="   ",
+            operator=RuleOperator.RX,
+            operator_argument=".*",
+            actions="deny",
+        )
+
+
+def test_custom_rule_update_valid() -> None:
+    rule = CustomRuleUpdate(
+        phase=RulePhase.REQUEST_BODY,
+        operator=RuleOperator.CONTAINS,
+        is_active=False,
+    )
+
+    assert rule.phase == RulePhase.REQUEST_BODY
+    assert rule.operator == RuleOperator.CONTAINS
+    assert rule.is_active is False
+
+
+def test_custom_rule_update_operator_argument_must_not_be_blank() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        CustomRuleUpdate(operator_argument="   ")
+
+
+# ---------------------------------------------------------------------------
 # VHostCreate
 # ---------------------------------------------------------------------------
 
@@ -347,14 +421,18 @@ def test_vhost_create_backend_url_stripped() -> None:
 
 def test_vhost_create_domain_too_long_is_rejected() -> None:
     """A domain longer than 255 characters should raise ValidationError."""
-    with pytest.raises(ValidationError, match="String should have at most 255 characters"):
+    with pytest.raises(
+        ValidationError, match="String should have at most 255 characters"
+    ):
         VHostCreate(domain="a" * 256, backend_url="http://localhost:8080")
 
 
 def test_vhost_create_backend_url_too_long_is_rejected() -> None:
     """A backend_url longer than 512 characters should raise ValidationError."""
     long_url = "http://backend.internal/" + "a" * 512
-    with pytest.raises(ValidationError, match="String should have at most 512 characters"):
+    with pytest.raises(
+        ValidationError, match="String should have at most 512 characters"
+    ):
         VHostCreate(domain="example.com", backend_url=long_url)
 
 
@@ -367,14 +445,18 @@ def test_vhost_create_domain_at_max_length_is_accepted() -> None:
 
 def test_vhost_update_domain_too_long_is_rejected() -> None:
     """A domain update longer than 255 characters should raise ValidationError."""
-    with pytest.raises(ValidationError, match="String should have at most 255 characters"):
+    with pytest.raises(
+        ValidationError, match="String should have at most 255 characters"
+    ):
         VHostUpdate(domain="a" * 256)
 
 
 def test_vhost_update_backend_url_too_long_is_rejected() -> None:
     """A backend_url update longer than 512 characters should raise ValidationError."""
     long_url = "http://backend.internal/" + "a" * 512
-    with pytest.raises(ValidationError, match="String should have at most 512 characters"):
+    with pytest.raises(
+        ValidationError, match="String should have at most 512 characters"
+    ):
         VHostUpdate(backend_url=long_url)
 
 
