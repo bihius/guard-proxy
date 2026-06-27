@@ -43,15 +43,26 @@ def renew_certificates() -> None:
                     
                     # Need to trigger config generation to write the new certs to disk
                     # This relies on config apply logic.
+                    from app.models.custom_rule import CustomRule
                     from app.models.policy import Policy
+                    from app.models.policy_binding import PolicyBinding
+                    from app.models.rule_exclusion import RuleExclusion
                     from app.models.rule_override import RuleOverride
                     from app.services.config_apply import apply as apply_config
                     from app.services.config_generator import generate
                     try:
                         policies = db.query(Policy).all()
                         rule_overrides = db.query(RuleOverride).all()
+                        rule_exclusions = db.query(RuleExclusion).all()
+                        custom_rules = db.query(CustomRule).all()
+                        policy_bindings = db.query(PolicyBinding).all()
                         generated = generate(
-                            db.query(VHost).all(), policies, rule_overrides
+                            db.query(VHost).all(),
+                            policies,
+                            rule_overrides,
+                            rule_exclusions,
+                            custom_rules,
+                            policy_bindings,
                         )
                         apply_config(generated)
                     except Exception as e:

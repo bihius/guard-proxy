@@ -1,10 +1,29 @@
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 
+from app.models.custom_rule import CustomRule, RuleOperator, RulePhase
 from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.policy_binding import PolicyBinding
+from app.models.rule_exclusion import RuleExclusion, TargetType
 from app.models.rule_override import RuleAction, RuleOverride
 from app.models.vhost import VHost
 from app.services.config_generator import generate
-from app.services.config_renderer import HaproxyBackend, HaproxyRenderContext, HaproxyRoute, render_haproxy_cfg_multi
+from app.services.config_renderer import (
+    HaproxyBackend,
+    HaproxyRenderContext,
+    HaproxyRoute,
+    render_haproxy_cfg_multi,
+)
+
+
+def _repo_root() -> Path:
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "configs/haproxy/coraza.cfg").is_file():
+            return candidate
+    raise RuntimeError("Could not locate repository root")
 
 
 def test_generate_empty_db() -> None:
@@ -15,7 +34,7 @@ def test_generate_empty_db() -> None:
     assert "backend coraza-spoa" in generated.haproxy_cfg
     assert "backend be_" not in generated.haproxy_cfg
     assert "SecRuleEngine DetectionOnly" in generated.crs_setup_conf
-    assert generated.rule_overrides_conf.strip() == "# Guard Proxy CRS rule overrides.\n#\n# Rules are enabled by default through the CRS include. Disabled overrides remove\n# selected CRS rule IDs for the rendered policy."
+    assert "Guard Proxy generated CRS policy tuning" in generated.rule_overrides_conf
 
 
 def test_generate_one_vhost_no_policy() -> None:
@@ -36,6 +55,53 @@ def test_generate_one_vhost_no_policy() -> None:
     assert "use_backend be_vhost_1 if host_vhost_1" in generated.haproxy_cfg
     assert "server srv_vhost_1 backend:8000 check" in generated.haproxy_cfg
     assert "SecRuleEngine DetectionOnly" in generated.crs_setup_conf
+
+
+def test_generated_haproxy_cfg_validates_with_haproxy(tmp_path: Path) -> None:
+    haproxy = shutil.which("haproxy")
+    if haproxy is None:
+        pytest.skip("haproxy binary is not installed")
+    vhost = VHost(
+        id=1,
+        domain="app.local",
+        backend_url="http://backend:8000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=None,
+    )
+    generated = generate(vhosts=[vhost], policies=[], rule_overrides=[])
+    config_path = tmp_path / "haproxy.cfg"
+    repo_coraza_cfg = _repo_root() / "configs/haproxy/coraza.cfg"
+    config_path.write_text(
+        generated.haproxy_cfg.replace(
+            "/usr/local/etc/haproxy/coraza.cfg",
+            str(repo_coraza_cfg),
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [haproxy, "-c", "-f", str(config_path)],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_generate_rejects_backend_url_with_scheme_but_no_host() -> None:
+    vhost = VHost(
+        id=1,
+        domain="broken.example.com",
+        backend_url="http://",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=None,
+    )
+
+    with pytest.raises(ValueError, match="missing host"):
+        generate(vhosts=[vhost], policies=[], rule_overrides=[])
 
 
 def test_generate_one_vhost_with_policy() -> None:
@@ -59,7 +125,10 @@ def test_generate_one_vhost_with_policy() -> None:
 
     generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
 
-    assert "acl host_vhost_5 hdr(host),field(1,:) -i api.example.com" in generated.haproxy_cfg
+    assert (
+        "acl host_vhost_5 hdr(host),field(1,:) -i api.example.com"
+        in generated.haproxy_cfg
+    )
     assert "use_backend be_vhost_5 if host_vhost_5" in generated.haproxy_cfg
     assert "SecRuleEngine On" in generated.crs_setup_conf
     assert "setvar:tx.blocking_paranoia_level=2" in generated.crs_setup_conf
@@ -93,6 +162,150 @@ def test_generate_one_vhost_with_policy_and_overrides() -> None:
     generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[override])
 
     assert "SecRuleRemoveById 942100" in generated.rule_overrides_conf
+
+
+def test_generate_one_vhost_with_policy_exclusion_and_custom_rule() -> None:
+    vhost = VHost(
+        id=1,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+    )
+    exclusion = RuleExclusion(
+        id=42,
+        policy_id=10,
+        rule_id=942100,
+        target_type=TargetType.ARGS,
+        target_value="token",
+        scope_path="/api/login",
+    )
+    custom_rule = CustomRule(
+        id=100,
+        policy_id=10,
+        rule_id=9000001,
+        phase=RulePhase.REQUEST_HEADERS,
+        variables="REQUEST_HEADERS:User-Agent",
+        operator=RuleOperator.RX,
+        operator_argument="(?i)curl",
+        actions="deny,status:403,log",
+        is_active=True,
+    )
+
+    generated = generate(
+        vhosts=[vhost],
+        policies=[policy],
+        rule_overrides=[],
+        rule_exclusions=[exclusion],
+        custom_rules=[custom_rule],
+    )
+
+    assert (
+        'SecRule REQUEST_URI "@beginsWith /api/login" '
+        '"id:9100042,phase:1,pass,nolog,'
+        'ctl:ruleRemoveTargetById=942100;ARGS:token"'
+    ) in generated.rule_overrides_conf
+    assert (
+        'SecRule REQUEST_HEADERS:User-Agent "@rx (?i)curl" '
+        '"id:9000001,phase:1,deny,status:403,log"'
+    ) in generated.rule_overrides_conf
+
+
+def test_generate_uses_policy_from_path_binding() -> None:
+    vhost = VHost(
+        id=1,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=None,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+    )
+    binding = PolicyBinding(
+        id=20,
+        vhost_id=1,
+        policy_id=10,
+        path_prefix="/api",
+        priority=10,
+    )
+    override = RuleOverride(
+        id=100,
+        policy_id=10,
+        rule_id=942100,
+        action=RuleAction.disable,
+    )
+
+    generated = generate(
+        vhosts=[vhost],
+        policies=[policy],
+        rule_overrides=[override],
+        policy_bindings=[binding],
+    )
+
+    assert "SecRuleEngine On" in generated.crs_setup_conf
+    assert "SecRuleRemoveById 942100" in generated.rule_overrides_conf
+
+
+def test_generate_rejects_multiple_effective_path_policies() -> None:
+    vhost = VHost(
+        id=1,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    first_policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+    )
+    second_policy = Policy(
+        id=11,
+        name="Monitor",
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.detect_only,
+        is_active=True,
+    )
+    binding = PolicyBinding(
+        id=20,
+        vhost_id=1,
+        policy_id=11,
+        path_prefix="/monitor",
+        priority=10,
+    )
+
+    with pytest.raises(ValueError, match="one active CRS policy"):
+        generate(
+            vhosts=[vhost],
+            policies=[first_policy, second_policy],
+            rule_overrides=[],
+            policy_bindings=[binding],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +351,10 @@ def test_generate_dot_dash_domain_siblings_do_not_collide() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_single_route_context(acl_name: str, backend_name: str) -> HaproxyRenderContext:
+def _make_single_route_context(
+    acl_name: str,
+    backend_name: str,
+) -> HaproxyRenderContext:
     return HaproxyRenderContext(
         routes=(
             HaproxyRoute(
@@ -155,7 +371,7 @@ def _make_single_route_context(acl_name: str, backend_name: str) -> HaproxyRende
     )
 
 
-def test_render_haproxy_cfg_multi_raises_on_duplicate_acl_name_across_contexts() -> None:
+def test_render_haproxy_cfg_multi_raises_on_duplicate_acl_name_across_contexts() -> None:  # noqa: E501
     ctx_a = _make_single_route_context("host_a", "be_a")
     ctx_b = _make_single_route_context("host_a", "be_b")  # duplicate ACL name
 
@@ -163,7 +379,7 @@ def test_render_haproxy_cfg_multi_raises_on_duplicate_acl_name_across_contexts()
         render_haproxy_cfg_multi([ctx_a, ctx_b])
 
 
-def test_render_haproxy_cfg_multi_raises_on_duplicate_backend_name_across_contexts() -> None:
+def test_render_haproxy_cfg_multi_raises_on_duplicate_backend_name_across_contexts() -> None:  # noqa: E501
     ctx_a = _make_single_route_context("host_a", "be_shared")
     ctx_b = _make_single_route_context("host_b", "be_shared")  # duplicate backend name
 
