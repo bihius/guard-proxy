@@ -23,6 +23,8 @@ ADMIN_PASSWORD = "policy-apply-password-123"
 HOST_HEADER = "app.local"
 SCANNER_USER_AGENT = "nuclei"
 SCANNER_RULE_ID = 913100
+EXCLUSION_RULE_ID = 942100
+CUSTOM_RULE_ID = 9000001
 HTTP_TIMEOUT_SECONDS = 5
 SERVICE_TIMEOUT_SECONDS = 180
 # Coraza's supervisor polls /runtime/current every second before restarting SPOA.
@@ -121,13 +123,53 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
             "policy_id": policy_id,
         },
     )
+    _api_json(
+        compose_stack,
+        "POST",
+        f"/policies/{policy_id}/exclusions",
+        token=token,
+        expected_status=201,
+        payload={
+            "rule_id": EXCLUSION_RULE_ID,
+            "target_type": "args",
+            "target_value": "token",
+            "scope_path": "/api/login",
+            "comment": "E2E proves exclusions reach generated config",
+        },
+    )
+    _api_json(
+        compose_stack,
+        "POST",
+        f"/policies/{policy_id}/custom-rules",
+        token=token,
+        expected_status=201,
+        payload={
+            "rule_id": CUSTOM_RULE_ID,
+            "phase": "request_headers",
+            "variables": "REQUEST_HEADERS:X-Guard-Proxy-E2E",
+            "operator": "streq",
+            "operator_argument": "deny-me",
+            "actions": "deny,status:403,log",
+            "comment": "E2E proves custom rules reach generated config",
+            "is_active": True,
+        },
+    )
 
     applied = _apply_config(compose_stack, token)
     assert "SecRuleEngine On" in applied["generated_config"]["crs_setup_conf"]
     assert f"SecRuleRemoveById {SCANNER_RULE_ID}" not in applied["generated_config"][
         "rule_overrides_conf"
     ]
+    assert (
+        f"ctl:ruleRemoveTargetById={EXCLUSION_RULE_ID};ARGS:token"
+        in applied["generated_config"]["rule_overrides_conf"]
+    )
+    assert (
+        f"id:{CUSTOM_RULE_ID},phase:1,deny,status:403,log"
+        in applied["generated_config"]["rule_overrides_conf"]
+    )
     _assert_coraza_runtime_override(compose_stack, should_exist=False)
+    _assert_coraza_runtime_tuning(compose_stack, should_exist=True)
     _wait_for_scanner_status(compose_stack, 403, "scanner request before override")
 
     override = _api_json(
@@ -353,6 +395,29 @@ def _assert_coraza_runtime_override(stack: ComposeStack, *, should_exist: bool) 
         assert expected in result.stdout
     else:
         assert expected not in result.stdout
+
+
+def _assert_coraza_runtime_tuning(stack: ComposeStack, *, should_exist: bool) -> None:
+    result = _run(
+        stack.command
+        + [
+            "exec",
+            "-T",
+            "coraza",
+            "cat",
+            "/runtime/current/rule-overrides.conf",
+        ],
+        env=stack.env,
+    )
+    expected = [
+        f"ctl:ruleRemoveTargetById={EXCLUSION_RULE_ID};ARGS:token",
+        f"id:{CUSTOM_RULE_ID},phase:1,deny,status:403,log",
+    ]
+    for line in expected:
+        if should_exist:
+            assert line in result.stdout
+        else:
+            assert line not in result.stdout
 
 
 def _api_json(

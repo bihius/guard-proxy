@@ -5,14 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.models.custom_rule import CustomRule
 from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.policy_binding import PolicyBinding
+from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
 from app.models.vhost import VHost
 from app.services.config_renderer import (
     CrsPolicyRenderContext,
+    CustomRuleRenderContext,
     HaproxyBackend,
     HaproxyRenderContext,
     HaproxyRoute,
+    RuleExclusionRenderContext,
     RuleOverrideRenderContext,
     render_crs_setup,
     render_haproxy_cfg_multi,
@@ -34,24 +39,41 @@ def generate(
     vhosts: list[VHost],
     policies: list[Policy],
     rule_overrides: list[RuleOverride],
+    rule_exclusions: list[RuleExclusion] | None = None,
+    custom_rules: list[CustomRule] | None = None,
+    policy_bindings: list[PolicyBinding] | None = None,
 ) -> GeneratedConfig:
     """Generate all runtime config files from already loaded objects."""
+    rule_exclusions = rule_exclusions or []
+    custom_rules = custom_rules or []
+    policy_bindings = policy_bindings or []
     active_vhosts = sorted(
         (vhost for vhost in vhosts if vhost.is_active),
         key=lambda vhost: vhost.domain,
     )
     vhost_contexts = [_to_haproxy_context(vhost) for vhost in active_vhosts]
 
-    active_policy, active_overrides = _pick_active_policy(
-        active_vhosts, policies, rule_overrides
+    active_policy, active_overrides, active_exclusions, active_custom_rules = (
+        _pick_active_policy(
+            active_vhosts,
+            policies,
+            rule_overrides,
+            rule_exclusions,
+            custom_rules,
+            policy_bindings,
+        )
     )
     haproxy_cfg = render_haproxy_cfg_multi(vhost_contexts)
     crs_setup_conf = render_crs_setup(active_policy)
-    rule_overrides_conf = render_rule_overrides(active_overrides)
+    rule_overrides_conf = render_rule_overrides(
+        active_overrides,
+        active_exclusions,
+        active_custom_rules,
+    )
 
     certs = {}
     for vhost in active_vhosts:
-        if vhost.ssl_provider != "none" and vhost.ssl_cert and vhost.ssl_key:
+        if vhost.ssl_enabled and vhost.ssl_cert and vhost.ssl_key:
             certs[vhost.domain] = f"{vhost.ssl_cert}\n{vhost.ssl_key}"
 
     return GeneratedConfig(
@@ -66,21 +88,79 @@ def _pick_active_policy(
     active_vhosts: list[VHost],
     policies: list[Policy],
     rule_overrides: list[RuleOverride],
-) -> tuple[CrsPolicyRenderContext, tuple[RuleOverrideRenderContext, ...]]:
+    rule_exclusions: list[RuleExclusion] | None = None,
+    custom_rules: list[CustomRule] | None = None,
+    policy_bindings: list[PolicyBinding] | None = None,
+) -> tuple[
+    CrsPolicyRenderContext,
+    tuple[RuleOverrideRenderContext, ...],
+    tuple[RuleExclusionRenderContext, ...],
+    tuple[CustomRuleRenderContext, ...],
+]:
+    rule_exclusions = rule_exclusions or []
+    custom_rules = custom_rules or []
+    policy_bindings = policy_bindings or []
     policies_by_id = {policy.id: policy for policy in policies}
     overrides_by_policy_id: dict[int, list[RuleOverride]] = {}
     for override in rule_overrides:
         overrides_by_policy_id.setdefault(override.policy_id, []).append(override)
+    exclusions_by_policy_id: dict[int, list[RuleExclusion]] = {}
+    for exclusion in rule_exclusions:
+        exclusions_by_policy_id.setdefault(exclusion.policy_id, []).append(exclusion)
+    custom_rules_by_policy_id: dict[int, list[CustomRule]] = {}
+    for custom_rule in custom_rules:
+        custom_rules_by_policy_id.setdefault(custom_rule.policy_id, []).append(
+            custom_rule
+        )
+    bindings_by_vhost_id: dict[int, list[PolicyBinding]] = {}
+    for binding in policy_bindings:
+        bindings_by_vhost_id.setdefault(binding.vhost_id, []).append(binding)
 
+    effective_policy_ids: set[int] = set()
     for vhost in active_vhosts:
-        if vhost.policy_id is None:
+        if vhost.policy_id is not None:
+            _add_effective_policy_id(
+                effective_policy_ids,
+                policies_by_id,
+                vhost.policy_id,
+                f"Active vhost {vhost.domain!r}",
+            )
+        if vhost.id is None:
             continue
-        policy = policies_by_id.get(vhost.policy_id)
-        if policy is None or not policy.is_active:
-            continue
+        for binding in bindings_by_vhost_id.get(vhost.id, []):
+            _add_effective_policy_id(
+                effective_policy_ids,
+                policies_by_id,
+                binding.policy_id,
+                (
+                    f"Path binding {binding.path_prefix!r} on active vhost "
+                    f"{vhost.domain!r}"
+                ),
+            )
+
+    if len(effective_policy_ids) > 1:
+        policy_list = ", ".join(
+            str(policy_id) for policy_id in sorted(effective_policy_ids)
+        )
+        raise ValueError(
+            "Generated config supports one active CRS policy for MVP; "
+            f"found effective policies: {policy_list}"
+        )
+
+    effective_policy_id = next(iter(effective_policy_ids), None)
+    if effective_policy_id is not None:
+        policy = policies_by_id[effective_policy_id]
         return (
             _to_crs_policy_context(policy),
-            _to_rule_override_contexts(overrides_by_policy_id.get(policy.id, [])),
+            _to_rule_override_contexts(
+                overrides_by_policy_id.get(effective_policy_id, [])
+            ),
+            _to_rule_exclusion_contexts(
+                exclusions_by_policy_id.get(effective_policy_id, [])
+            ),
+            _to_custom_rule_contexts(
+                custom_rules_by_policy_id.get(effective_policy_id, [])
+            ),
         )
 
     return (
@@ -91,7 +171,25 @@ def _pick_active_policy(
             enforcement_mode=PolicyEnforcementMode.detect_only,
         ),
         (),
+        (),
+        (),
     )
+
+
+def _add_effective_policy_id(
+    effective_policy_ids: set[int],
+    policies_by_id: dict[int, Policy],
+    policy_id: int,
+    owner: str,
+) -> None:
+    policy = policies_by_id.get(policy_id)
+    if policy is None:
+        raise ValueError(f"{owner} references missing policy {policy_id}")
+    if not policy.is_active:
+        raise ValueError(f"{owner} references inactive policy {policy.id}")
+    if policy.id is None:
+        raise ValueError(f"{owner} references unpersisted policy")
+    effective_policy_ids.add(policy.id)
 
 
 def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
@@ -106,9 +204,9 @@ def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
     return HaproxyRenderContext(
         routes=(
             HaproxyRoute(
-        vhost_acl_name=f"host_{suffix}",
+                vhost_acl_name=f"host_{suffix}",
                 vhost_hosts=(vhost.domain,),
-                ssl_provider=vhost.ssl_provider,
+                ssl_provider=vhost.ssl_provider if vhost.ssl_enabled else "none",
                 backend=HaproxyBackend(
                     name=f"be_{suffix}",
                     server_name=f"srv_{suffix}",
@@ -140,11 +238,62 @@ def _to_rule_override_contexts(
     )
 
 
+def _to_rule_exclusion_contexts(
+    exclusions: list[RuleExclusion],
+) -> tuple[RuleExclusionRenderContext, ...]:
+    control_rule_ids = _control_rule_ids_for_scoped_exclusions(exclusions)
+    return tuple(
+        RuleExclusionRenderContext(
+            rule_id=exclusion.rule_id,
+            target_type=exclusion.target_type,
+            target_value=exclusion.target_value,
+            scope_path=exclusion.scope_path,
+            control_rule_id=control_rule_ids.get(id(exclusion)),
+        )
+        for exclusion in exclusions
+    )
+
+
+def _control_rule_ids_for_scoped_exclusions(
+    exclusions: list[RuleExclusion],
+) -> dict[int, int]:
+    assigned: dict[int, int] = {}
+    for exclusion in exclusions:
+        if exclusion.scope_path is None:
+            continue
+        if exclusion.id is None:
+            raise ValueError(
+                "Path-scoped rule exclusion has no persisted id; "
+                "control rule ids require a persisted RuleExclusion"
+            )
+        assigned[id(exclusion)] = 9100000 + exclusion.id
+    return assigned
+
+
+def _to_custom_rule_contexts(
+    custom_rules: list[CustomRule],
+) -> tuple[CustomRuleRenderContext, ...]:
+    return tuple(
+        CustomRuleRenderContext(
+            rule_id=custom_rule.rule_id,
+            phase=custom_rule.phase,
+            variables=custom_rule.variables,
+            operator=custom_rule.operator,
+            operator_argument=custom_rule.operator_argument,
+            actions=custom_rule.actions,
+            is_active=custom_rule.is_active,
+        )
+        for custom_rule in custom_rules
+    )
+
+
 def _extract_backend_address(backend_url: str) -> str:
     parsed = urlparse(backend_url)
     
     if parsed.scheme:
         host = parsed.hostname
+        if host is None:
+            raise ValueError(f"Invalid backend URL {backend_url!r}: missing host")
         port = parsed.port
         if not port:
             port = 443 if parsed.scheme == "https" else 80
