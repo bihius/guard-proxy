@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_admin
+from app.models.custom_rule import CustomRule
 from app.models.policy import Policy
+from app.models.policy_binding import PolicyBinding
+from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
 from app.models.runtime_operation import (
     RuntimeOperation,
@@ -91,8 +94,18 @@ def apply_config(
         vhosts = db.query(VHost).all()
         policies = db.query(Policy).all()
         rule_overrides = db.query(RuleOverride).all()
+        rule_exclusions = db.query(RuleExclusion).all()
+        custom_rules = db.query(CustomRule).all()
+        policy_bindings = db.query(PolicyBinding).all()
 
-        generated = generate(vhosts, policies, rule_overrides)
+        generated = generate(
+            vhosts,
+            policies,
+            rule_overrides,
+            rule_exclusions,
+            custom_rules,
+            policy_bindings,
+        )
         result = _apply(generated)
         _record_runtime_operations(db, result)
 
