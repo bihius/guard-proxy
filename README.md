@@ -4,7 +4,7 @@
 
 Guard Proxy is a WAF solution built for self-hosted environments. It wires HAProxy 3.0 (reverse proxy) to Coraza WAF (OWASP CRS 4.x) via SPOE, and exposes a FastAPI backend and React admin panel to manage vhosts, policies, rule overrides, and live configuration deployment.
 
-Developed as a master's thesis at Wrocław University DSW.
+Developed as a master's thesis project at Wrocław University DSW.
 
 ---
 
