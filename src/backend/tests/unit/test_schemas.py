@@ -13,9 +13,14 @@ from pydantic import ValidationError
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
 from app.models.policy import PolicyEnforcementMode  # noqa: E402
+from app.models.rule_exclusion import TargetType  # noqa: E402
 from app.models.rule_override import RuleAction  # noqa: E402
 from app.schemas.log import LogIngestRequest  # noqa: E402
 from app.schemas.policy import PolicyCreate, PolicyUpdate  # noqa: E402
+from app.schemas.rule_exclusion import (  # noqa: E402
+    RuleExclusionCreate,
+    RuleExclusionUpdate,
+)
 from app.schemas.rule_override import (  # noqa: E402
     RuleOverrideCreate,
     RuleOverrideUpdate,
@@ -226,6 +231,67 @@ def test_rule_override_update_valid() -> None:
 def test_rule_override_update_rule_id_must_be_positive() -> None:
     with pytest.raises(ValidationError, match="greater than 0"):
         RuleOverrideUpdate(rule_id=-1)
+
+
+# ---------------------------------------------------------------------------
+# RuleExclusion schemas
+# ---------------------------------------------------------------------------
+
+
+def test_rule_exclusion_create_valid() -> None:
+    exclusion = RuleExclusionCreate(
+        rule_id=942100,
+        target_type=TargetType.ARGS,
+        target_value="token",
+        scope_path="/api/login",
+        comment=None,
+    )
+    assert exclusion.rule_id == 942100
+    assert exclusion.scope_path == "/api/login"
+    assert exclusion.comment is None
+
+
+def test_rule_exclusion_create_valid_without_scope_path() -> None:
+    exclusion = RuleExclusionCreate(
+        rule_id=942100,
+        target_type=TargetType.ARGS,
+        target_value="token",
+    )
+    assert exclusion.scope_path is None
+
+
+def test_rule_exclusion_create_rule_id_must_be_positive() -> None:
+    with pytest.raises(ValidationError, match="greater than 0"):
+        RuleExclusionCreate(
+            rule_id=0, target_type=TargetType.ARGS, target_value="token"
+        )
+
+
+def test_rule_exclusion_create_target_value_must_not_be_blank() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        RuleExclusionCreate(
+            rule_id=942100, target_type=TargetType.ARGS, target_value="  "
+        )
+
+
+def test_rule_exclusion_update_valid() -> None:
+    exclusion = RuleExclusionUpdate(
+        rule_id=941100,
+        target_type=TargetType.REQUEST_HEADERS,
+        comment=None,
+    )
+    assert exclusion.rule_id == 941100
+    assert exclusion.target_type == TargetType.REQUEST_HEADERS
+
+
+def test_rule_exclusion_update_rule_id_must_be_positive() -> None:
+    with pytest.raises(ValidationError, match="greater than 0"):
+        RuleExclusionUpdate(rule_id=-1)
+
+
+def test_rule_exclusion_update_target_value_must_not_be_blank() -> None:
+    with pytest.raises(ValidationError, match="must not be blank"):
+        RuleExclusionUpdate(target_value="   ")
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ Without this, Alembic generates an empty migration (it does not see tables).
 
 from app.models.log import Log, LogAction, LogSeverity
 from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.rule_exclusion import RuleExclusion, TargetType
 from app.models.rule_override import RuleAction, RuleOverride
 from app.models.runtime_operation import (
     RuntimeOperation,
@@ -30,4 +31,6 @@ __all__ = [
     "RuntimeOperationStatus",
     "RuleOverride",
     "RuleAction",
+    "RuleExclusion",
+    "TargetType",
 ]
