@@ -81,7 +81,15 @@ make users ARGS="list --role admin --active"          # Filtered list
 make users ARGS="update alice@example.com --role admin"  # Promote by email
 make users ARGS="update 3 --deactivate"               # Deactivate by user ID
 make users ARGS="update 3 --password '<new password>'"   # Reset a password
+
+# Bare subcommands (no --flags) can skip ARGS=, e.g.:
+make users list
+make users help
 ```
+
+Note: any argument starting with `-` (e.g. `--role`, `--active`, `-h`) is
+consumed by `make` itself before it reaches the Makefile, so those must be
+passed via `ARGS="..."` as shown above.
 
 Outside Docker (local backend checkout):
 
