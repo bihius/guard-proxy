@@ -93,6 +93,9 @@ def test_create_vhost_admin_returns_201(
     assert body["is_active"] is True
     assert body["policy_id"] == policy["id"]
     assert body["created_by"] == admin_user.id
+    assert len(body["policy_bindings"]) == 1
+    assert body["policy_bindings"][0]["policy_id"] == policy["id"]
+    assert body["policy_bindings"][0]["path_prefix"] == "/"
 
 
 def test_create_vhost_viewer_forbidden(
@@ -217,6 +220,8 @@ def test_get_vhost_returns_detail_with_policy(
     assert body["domain"] == "detail.example.com"
     assert body["policy"]["id"] == policy["id"]
     assert body["policy"]["name"] == "Nested policy"
+    assert len(body["policy_bindings"]) == 1
+    assert body["policy_bindings"][0]["policy_id"] == policy["id"]
 
 
 def test_get_vhost_not_found_returns_404(
@@ -317,6 +322,34 @@ def test_patch_vhost_with_missing_policy_returns_404(
     assert resp.json()["detail"] == "Policy not found"
 
 
+def test_patch_vhost_policy_id_updates_default_binding(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """PATCH policy_id keeps the legacy root binding synchronized."""
+    first_policy = _create_policy(client, admin_token, name="First binding policy")
+    second_policy = _create_policy(client, admin_token, name="Second binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="sync-binding.example.com",
+        policy_id=first_policy["id"],
+    )
+
+    resp = client.patch(
+        f"/vhosts/{created['id']}",
+        headers=admin_token,
+        json={"policy_id": second_policy["id"]},
+    )
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["policy_id"] == second_policy["id"]
+    assert len(body["policy_bindings"]) == 1
+    assert body["policy_bindings"][0]["policy_id"] == second_policy["id"]
+    assert body["policy_bindings"][0]["path_prefix"] == "/"
+
+
 def test_patch_vhost_domain_null_returns_422(
     client: TestClient,
     admin_token: dict[str, str],
@@ -346,6 +379,235 @@ def test_patch_vhost_backend_url_without_protocol_returns_422(
         json={"backend_url": "backend.internal:443"},
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# /vhosts/{vhost_id}/policy-bindings
+# ---------------------------------------------------------------------------
+
+
+def test_list_policy_bindings_returns_default_binding(
+    client: TestClient,
+    admin_token: dict[str, str],
+    viewer_token: dict[str, str],
+) -> None:
+    """Authenticated users can list a vhost's path-scoped policy bindings."""
+    policy = _create_policy(client, admin_token, name="Listed binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="list-bindings.example.com",
+        policy_id=policy["id"],
+    )
+
+    resp = client.get(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=viewer_token,
+    )
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["vhost_id"] == created["id"]
+    assert body[0]["policy_id"] == policy["id"]
+    assert body[0]["path_prefix"] == "/"
+    assert body[0]["priority"] == 0
+
+
+def test_create_policy_binding_admin_returns_201(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Admin can add a path-scoped policy binding to a vhost."""
+    policy = _create_policy(client, admin_token, name="API binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="create-binding.example.com",
+    )
+
+    resp = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json={
+            "policy_id": policy["id"],
+            "path_prefix": "/api",
+            "priority": 10,
+            "comment": "API routes",
+        },
+    )
+    assert resp.status_code == 201
+
+    body = resp.json()
+    assert body["vhost_id"] == created["id"]
+    assert body["policy_id"] == policy["id"]
+    assert body["path_prefix"] == "/api"
+    assert body["priority"] == 10
+    assert body["comment"] == "API routes"
+
+
+def test_create_policy_binding_viewer_forbidden(
+    client: TestClient,
+    admin_token: dict[str, str],
+    viewer_token: dict[str, str],
+) -> None:
+    """Viewer cannot create policy bindings."""
+    policy = _create_policy(client, admin_token, name="Forbidden binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="forbidden-binding.example.com",
+    )
+
+    resp = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=viewer_token,
+        json={"policy_id": policy["id"], "path_prefix": "/api", "priority": 1},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Admin role required"
+
+
+def test_create_policy_binding_missing_vhost_returns_404(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Creating a binding for an unknown vhost returns 404."""
+    policy = _create_policy(client, admin_token, name="Missing vhost binding policy")
+
+    resp = client.post(
+        "/vhosts/99999/policy-bindings",
+        headers=admin_token,
+        json={"policy_id": policy["id"], "path_prefix": "/api", "priority": 1},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "VHost not found"
+
+
+def test_create_policy_binding_missing_policy_returns_404(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Creating a binding with an unknown policy returns 404."""
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="missing-policy-binding.example.com",
+    )
+
+    resp = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json={"policy_id": 99999, "path_prefix": "/api", "priority": 1},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Policy not found"
+
+
+def test_create_policy_binding_invalid_path_returns_422(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Path prefixes must start with a slash."""
+    policy = _create_policy(client, admin_token, name="Invalid path binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="invalid-path-binding.example.com",
+    )
+
+    resp = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json={"policy_id": policy["id"], "path_prefix": "api", "priority": 1},
+    )
+    assert resp.status_code == 422
+
+
+def test_create_policy_binding_duplicate_returns_409(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """A vhost cannot have duplicate bindings for the same path and priority."""
+    policy = _create_policy(client, admin_token, name="Duplicate binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="duplicate-binding.example.com",
+    )
+    payload = {"policy_id": policy["id"], "path_prefix": "/api", "priority": 1}
+    first = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json=payload,
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json=payload,
+    )
+    assert second.status_code == 409
+    assert second.json()["detail"] == "Policy binding already exists"
+
+
+def test_delete_policy_binding_admin_returns_204(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Admin can delete a policy binding."""
+    policy = _create_policy(client, admin_token, name="Delete binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="delete-binding.example.com",
+    )
+    binding = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json={"policy_id": policy["id"], "path_prefix": "/api", "priority": 1},
+    ).json()
+
+    resp = client.delete(
+        f"/vhosts/{created['id']}/policy-bindings/{binding['id']}",
+        headers=admin_token,
+    )
+    assert resp.status_code == 204
+    assert resp.text == ""
+
+    list_resp = client.get(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+    )
+    assert list_resp.status_code == 200
+    assert list_resp.json() == []
+
+
+def test_delete_policy_binding_viewer_forbidden(
+    client: TestClient,
+    admin_token: dict[str, str],
+    viewer_token: dict[str, str],
+) -> None:
+    """Viewer cannot delete policy bindings."""
+    policy = _create_policy(client, admin_token, name="No delete binding policy")
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="no-delete-binding.example.com",
+    )
+    binding = client.post(
+        f"/vhosts/{created['id']}/policy-bindings",
+        headers=admin_token,
+        json={"policy_id": policy["id"], "path_prefix": "/api", "priority": 1},
+    ).json()
+
+    resp = client.delete(
+        f"/vhosts/{created['id']}/policy-bindings/{binding['id']}",
+        headers=viewer_token,
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Admin role required"
 
 
 # ---------------------------------------------------------------------------

@@ -5,10 +5,17 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
+from app.models.policy_binding import PolicyBinding
 from app.models.user import User
 from app.models.vhost import VHost
+from app.schemas.policy_binding import PolicyBindingCreate, PolicyBindingResponse
 from app.schemas.vhost import VHostCreate, VHostDetail, VHostResponse, VHostUpdate
 from app.services.vhost_service import (
+    PolicyBindingAlreadyExistsError,
+    PolicyBindingFieldCannotBeNullError,
+    PolicyBindingInvalidPathPrefixError,
+    PolicyBindingInvalidPriorityError,
+    PolicyBindingNotFoundError,
     VHostDomainAlreadyExistsError,
     VHostFieldCannotBeNullError,
     VHostNotFoundError,
@@ -143,6 +150,104 @@ def delete_vhost(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VHost not found",
+        ) from error
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{vhost_id}/policy-bindings",
+    response_model=list[PolicyBindingResponse],
+)
+def list_policy_bindings(
+    vhost_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[PolicyBinding]:
+    """Return path-scoped policy bindings for a vhost."""
+    service = VHostService(db)
+
+    try:
+        return service.list_policy_bindings(vhost_id)
+    except VHostNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VHost not found",
+        ) from error
+
+
+@router.post(
+    "/{vhost_id}/policy-bindings",
+    response_model=PolicyBindingResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_policy_binding(
+    vhost_id: int,
+    body: PolicyBindingCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> PolicyBinding:
+    """Create a path-scoped policy binding for a vhost."""
+    service = VHostService(db)
+
+    try:
+        return service.create_policy_binding(
+            vhost_id,
+            policy_id=body.policy_id,
+            path_prefix=body.path_prefix,
+            priority=body.priority,
+            comment=body.comment,
+        )
+    except VHostNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VHost not found",
+        ) from error
+    except VHostPolicyNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Policy not found",
+        ) from error
+    except PolicyBindingAlreadyExistsError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Policy binding already exists",
+        ) from error
+    except (
+        PolicyBindingFieldCannotBeNullError,
+        PolicyBindingInvalidPathPrefixError,
+        PolicyBindingInvalidPriorityError,
+    ) as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+
+
+@router.delete(
+    "/{vhost_id}/policy-bindings/{binding_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_policy_binding(
+    vhost_id: int,
+    binding_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> Response:
+    """Delete a path-scoped policy binding from a vhost."""
+    service = VHostService(db)
+
+    try:
+        service.delete_policy_binding(vhost_id, binding_id)
+    except VHostNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VHost not found",
+        ) from error
+    except PolicyBindingNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Policy binding not found",
         ) from error
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)

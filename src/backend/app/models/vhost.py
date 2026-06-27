@@ -20,6 +20,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.policy import Policy
+    from app.models.policy_binding import PolicyBinding
 
 
 class VHost(Base):
@@ -92,6 +93,13 @@ class VHost(Base):
         "Policy",
         foreign_keys=[policy_id],
         back_populates="vhosts",
+    )
+
+    policy_bindings: Mapped[list[PolicyBinding]] = relationship(
+        "PolicyBinding",
+        back_populates="vhost",
+        cascade="all, delete-orphan",
+        order_by="PolicyBinding.priority.asc(), PolicyBinding.id.asc()",
     )
 
     def __repr__(self) -> str:
