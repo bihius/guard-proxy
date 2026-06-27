@@ -33,8 +33,105 @@ export type RuleOverrideUpdate = {
   comment?: string | null;
 };
 
+export type RuleExclusionTargetType =
+  | "request_uri"
+  | "args"
+  | "args_names"
+  | "request_headers";
+
+export type RuleExclusion = {
+  id: number;
+  policy_id: number;
+  rule_id: number;
+  target_type: RuleExclusionTargetType;
+  target_value: string;
+  scope_path: string | null;
+  comment: string | null;
+  created_at: string;
+};
+
+export type RuleExclusionCreate = {
+  rule_id: number;
+  target_type: RuleExclusionTargetType;
+  target_value: string;
+  scope_path?: string | null;
+  comment?: string | null;
+};
+
+export type RuleExclusionUpdate = {
+  rule_id?: number;
+  target_type?: RuleExclusionTargetType;
+  target_value?: string;
+  scope_path?: string | null;
+  comment?: string | null;
+};
+
+export type CustomRulePhase =
+  | "request_headers"
+  | "request_body"
+  | "response_headers"
+  | "response_body"
+  | "logging";
+
+export type CustomRuleOperator =
+  | "rx"
+  | "streq"
+  | "contains"
+  | "begins_with"
+  | "ends_with"
+  | "eq"
+  | "ge"
+  | "gt"
+  | "le"
+  | "lt"
+  | "pm"
+  | "within"
+  | "ip_match";
+
+export const CUSTOM_RULE_ID_MIN = 9000000;
+export const CUSTOM_RULE_ID_MAX = 9099999;
+
+export type CustomRule = {
+  id: number;
+  policy_id: number;
+  rule_id: number;
+  phase: CustomRulePhase;
+  variables: string;
+  operator: CustomRuleOperator;
+  operator_argument: string;
+  actions: string;
+  comment: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomRuleCreate = {
+  rule_id: number;
+  phase: CustomRulePhase;
+  variables: string;
+  operator: CustomRuleOperator;
+  operator_argument: string;
+  actions: string;
+  comment?: string | null;
+  is_active?: boolean;
+};
+
+export type CustomRuleUpdate = {
+  rule_id?: number;
+  phase?: CustomRulePhase;
+  variables?: string;
+  operator?: CustomRuleOperator;
+  operator_argument?: string;
+  actions?: string;
+  comment?: string | null;
+  is_active?: boolean;
+};
+
 export type PolicyDetail = Policy & {
   rule_overrides: RuleOverride[];
+  rule_exclusions: RuleExclusion[];
+  custom_rules: CustomRule[];
 };
 
 export type PolicyCreate = {
