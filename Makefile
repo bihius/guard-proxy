@@ -34,7 +34,7 @@ ifeq (users,$(firstword $(MAKECMDGOALS)))
 endif
 
 users:
-	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(if $(USERS_ARGS),$(USERS_ARGS),$(ARGS))
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(if $(USERS_ARGS),$(patsubst help,--help,$(USERS_ARGS)),$(ARGS))
 
 coraza-build:
 	docker build -f deploy/docker/coraza.Dockerfile -t guard-proxy/coraza-spoa:dev .
