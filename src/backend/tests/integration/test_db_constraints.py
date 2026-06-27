@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.policy import Policy
+from app.models.rule_exclusion import RuleExclusion, TargetType
 from app.models.vhost import VHost
 
 
@@ -70,6 +71,34 @@ def test_policy_negative_outbound_anomaly_threshold_raises_integrity_error(
     ):
         db.commit()
     db.rollback()
+
+
+def test_deleting_policy_cascades_to_rule_exclusions(db: Session) -> None:
+    """Deleting a policy must remove its rule exclusions (ondelete=CASCADE)."""
+    policy = Policy(
+        name="cascade-exclusions",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    db.add(policy)
+    db.flush()
+
+    exclusion = RuleExclusion(
+        policy_id=policy.id,
+        rule_id=942100,
+        target_type=TargetType.ARGS,
+        target_value="token",
+    )
+    db.add(exclusion)
+    db.flush()
+    exclusion_id = exclusion.id
+
+    db.delete(policy)
+    db.commit()
+
+    assert db.get(RuleExclusion, exclusion_id) is None
 
 
 def test_vhost_uppercase_domain_raises_integrity_error(db: Session) -> None:
