@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.policy import PolicyEnforcementMode
+from app.schemas.custom_rule import CustomRuleResponse
 from app.schemas.rule_exclusion import RuleExclusionResponse
 from app.schemas.rule_override import RuleOverrideResponse
 
@@ -77,3 +78,4 @@ class PolicyDetail(PolicyResponse):
 
     rule_overrides: list[RuleOverrideResponse] = []
     rule_exclusions: list[RuleExclusionResponse] = []
+    custom_rules: list[CustomRuleResponse] = []

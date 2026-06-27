@@ -115,6 +115,7 @@ class PolicyService:
             .options(
                 selectinload(Policy.rule_overrides),
                 selectinload(Policy.rule_exclusions),
+                selectinload(Policy.custom_rules),
             )
             .filter(Policy.id == policy_id)
             .first()

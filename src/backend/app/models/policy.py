@@ -22,6 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.custom_rule import CustomRule
     from app.models.rule_exclusion import RuleExclusion
     from app.models.rule_override import RuleOverride
     from app.models.vhost import VHost
@@ -126,6 +127,15 @@ class Policy(Base):
     # cascade="all, delete-orphan" — remove rule_exclusions when deleting policy
     rule_exclusions: Mapped[list[RuleExclusion]] = relationship(
         "RuleExclusion",
+        back_populates="policy",
+        cascade="all, delete-orphan",
+    )
+
+    # ORM relationship for policy.custom_rules instead of manual JOINs.
+    # "CustomRule" is a string to avoid circular imports.
+    # cascade="all, delete-orphan" removes custom_rules when deleting policy.
+    custom_rules: Mapped[list[CustomRule]] = relationship(
+        "CustomRule",
         back_populates="policy",
         cascade="all, delete-orphan",
     )
