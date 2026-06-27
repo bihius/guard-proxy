@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchLogTotal } from "@/features/logs/api";
 import type { LogAction, LogSeverity } from "@/features/logs/types";
-import { listPolicies, listVHosts } from "@/features/vhosts/api";
+import { listVHosts } from "@/features/vhosts/api";
+import { listPolicies } from "@/features/policies/api";
 import { useAuth } from "@/hooks/use-auth";
 
 export type StatValue = {
@@ -60,11 +61,15 @@ export function useDashboardStats(): DashboardStatsState {
       };
 
     listVHosts(accessToken, controller.signal)
-      .then((list) => guard(setVHosts)(ok(list.length)))
+      .then((list) =>
+        guard(setVHosts)(
+          ok(list.filter((v) => v.is_active && v.policy_id != null).length),
+        ),
+      )
       .catch((e) => { if (!isAbortError(e)) guard(setVHosts)(failed()); });
 
     listPolicies(accessToken, controller.signal)
-      .then((list) => guard(setPolicies)(ok(list.length)))
+      .then((list) => guard(setPolicies)(ok(list.filter((p) => p.is_active).length)))
       .catch((e) => { if (!isAbortError(e)) guard(setPolicies)(failed()); });
 
     fetchLogTotal(accessToken, { action: "deny" as LogAction }, controller.signal)
