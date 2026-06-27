@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.custom_rule import CustomRule, RuleOperator, RulePhase
 from app.models.policy import Policy
 from app.models.rule_exclusion import RuleExclusion, TargetType
 from app.models.vhost import VHost
@@ -99,6 +100,139 @@ def test_deleting_policy_cascades_to_rule_exclusions(db: Session) -> None:
     db.commit()
 
     assert db.get(RuleExclusion, exclusion_id) is None
+
+
+def test_deleting_policy_cascades_to_custom_rules(db: Session) -> None:
+    """Deleting a policy must remove its custom rules (ondelete=CASCADE)."""
+    policy = Policy(
+        name="cascade-custom-rules",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    db.add(policy)
+    db.flush()
+
+    custom_rule = CustomRule(
+        policy_id=policy.id,
+        rule_id=9000001,
+        phase=RulePhase.REQUEST_HEADERS,
+        variables="REQUEST_HEADERS:User-Agent",
+        operator=RuleOperator.RX,
+        operator_argument="(?i)curl",
+        actions="deny,status:403",
+    )
+    db.add(custom_rule)
+    db.flush()
+    custom_rule_id = custom_rule.id
+
+    db.delete(policy)
+    db.commit()
+
+    assert db.get(CustomRule, custom_rule_id) is None
+
+
+def test_custom_rule_id_below_reserved_range_raises_integrity_error(
+    db: Session,
+) -> None:
+    """DB must reject custom rule IDs outside the reserved custom range."""
+    policy = Policy(
+        name="invalid-custom-rule-id",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    db.add(policy)
+    db.flush()
+
+    db.add(
+        CustomRule(
+            policy_id=policy.id,
+            rule_id=8999999,
+            phase=RulePhase.REQUEST_HEADERS,
+            variables="ARGS",
+            operator=RuleOperator.RX,
+            operator_argument=".*",
+            actions="deny",
+        )
+    )
+
+    with pytest.raises(
+        IntegrityError,
+        match="ck_custom_rules_rule_id_range|CHECK constraint failed",
+    ):
+        db.commit()
+    db.rollback()
+
+
+def test_custom_rule_rule_id_must_be_unique_per_policy(db: Session) -> None:
+    """DB must reject duplicate custom rule IDs in the same policy."""
+    policy = Policy(
+        name="duplicate-custom-rule-id",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    db.add(policy)
+    db.flush()
+
+    for variables in ["ARGS:first", "ARGS:second"]:
+        db.add(
+            CustomRule(
+                policy_id=policy.id,
+                rule_id=9000001,
+                phase=RulePhase.REQUEST_HEADERS,
+                variables=variables,
+                operator=RuleOperator.RX,
+                operator_argument=".*",
+                actions="deny",
+            )
+        )
+
+    with pytest.raises(
+        IntegrityError,
+        match="uq_custom_rules_policy_id_rule_id|UNIQUE constraint failed",
+    ):
+        db.commit()
+    db.rollback()
+
+
+def test_custom_rule_rule_id_can_repeat_across_policies(db: Session) -> None:
+    """Different policies may reuse the same custom rule ID."""
+    policy_one = Policy(
+        name="policy-one-custom-rule-id",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    policy_two = Policy(
+        name="policy-two-custom-rule-id",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    db.add_all([policy_one, policy_two])
+    db.flush()
+
+    for policy in [policy_one, policy_two]:
+        db.add(
+            CustomRule(
+                policy_id=policy.id,
+                rule_id=9000001,
+                phase=RulePhase.REQUEST_HEADERS,
+                variables="ARGS",
+                operator=RuleOperator.RX,
+                operator_argument=".*",
+                actions="deny",
+            )
+        )
+
+    db.commit()
 
 
 def test_vhost_uppercase_domain_raises_integrity_error(db: Session) -> None:

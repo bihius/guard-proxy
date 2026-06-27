@@ -1,6 +1,11 @@
 """Pydantic schemas used for request validation and API serialization."""
 
 from app.schemas.auth import AccessTokenResponse, LoginRequest, TokenData
+from app.schemas.custom_rule import (
+    CustomRuleCreate,
+    CustomRuleResponse,
+    CustomRuleUpdate,
+)
 from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
 from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, PolicyUpdate
 from app.schemas.rule_exclusion import (
@@ -47,4 +52,8 @@ __all__ = [
     "RuleExclusionCreate",
     "RuleExclusionResponse",
     "RuleExclusionUpdate",
+    # Custom rules
+    "CustomRuleCreate",
+    "CustomRuleResponse",
+    "CustomRuleUpdate",
 ]
