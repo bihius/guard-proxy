@@ -1,256 +1,30 @@
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import type { DataTableColumn } from "@/components/shared/DataTable";
 import { DataTable } from "@/components/shared/DataTable";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
-import { Modal } from "@/components/shared/Modal";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { listRuleOverrides } from "@/features/policies/api";
 import {
-  createRuleOverride,
-  deleteRuleOverride,
-  listRuleOverrides,
-  updateRuleOverride,
-} from "@/features/policies/api";
-import type {
-  RuleOverride,
-  RuleOverrideCreate,
-  RuleOverrideUpdate,
-} from "@/features/policies/types";
+  DeleteRuleOverrideDialog,
+  RuleOverrideFormModal,
+  type RuleOverrideModalState,
+} from "@/features/policies/RuleOverrideModals";
+import type { RuleOverride } from "@/features/policies/types";
 import { getVHost, listPolicies, updateVHost } from "@/features/vhosts/api";
 import type { Policy, VHostDetail } from "@/features/vhosts/types";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
-
-type OverrideModalState =
-  | null
-  | { type: "create"; policyId: number }
-  | { type: "edit"; policyId: number; override: RuleOverride }
-  | { type: "delete"; policyId: number; override: RuleOverride };
-
-type RuleOverrideFormModalProps = {
-  mode: "create" | "edit";
-  policyId: number;
-  override?: RuleOverride;
-  onSuccess: () => void;
-  onClose: () => void;
-};
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function RuleOverrideFormModal({
-  mode,
-  policyId,
-  override,
-  onSuccess,
-  onClose,
-}: RuleOverrideFormModalProps) {
-  const { accessToken } = useAuth();
-  const [ruleId, setRuleId] = useState(String(override?.rule_id ?? ""));
-  const [action, setAction] = useState<"enable" | "disable">(
-    override?.action ?? "disable",
-  );
-  const [comment, setComment] = useState(override?.comment ?? "");
-  const [submitting, setSubmitting] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!accessToken) return;
-
-    const parsedRuleId = Number(ruleId);
-    if (!Number.isInteger(parsedRuleId) || parsedRuleId <= 0) {
-      setServerError("Rule ID must be greater than 0");
-      return;
-    }
-
-    setSubmitting(true);
-    setServerError(null);
-
-    const body: RuleOverrideCreate | RuleOverrideUpdate = {
-      rule_id: parsedRuleId,
-      action,
-      comment: comment || null,
-    };
-
-    try {
-      if (mode === "edit" && override) {
-        await updateRuleOverride(accessToken, policyId, override.id, body);
-      } else {
-        await createRuleOverride(accessToken, policyId, body as RuleOverrideCreate);
-      }
-      onSuccess();
-    } catch (err) {
-      setServerError(
-        err instanceof ApiError ? err.detail : "An unexpected error occurred",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Modal
-      title={mode === "create" ? "Add rule override" : "Edit rule override"}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            form="rule-override-form"
-            disabled={submitting}
-            className="btn-primary px-4 py-2 text-sm"
-          >
-            {submitting ? "Saving..." : "Save"}
-          </button>
-        </>
-      }
-    >
-      <form
-        id="rule-override-form"
-        onSubmit={(e) => void handleSubmit(e)}
-        className="space-y-4"
-      >
-        {serverError && (
-          <div
-            role="alert"
-            aria-live="assertive"
-            className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error"
-          >
-            {serverError}
-          </div>
-        )}
-
-        <div className="space-y-1.5">
-          <label htmlFor="rule-override-rule-id" className="block text-sm font-medium text-fg-muted">
-            Rule ID
-          </label>
-          <input
-            id="rule-override-rule-id"
-            type="number"
-            required
-            min={1}
-            value={ruleId}
-            onChange={(e) => setRuleId(e.target.value)}
-            className="input-field"
-            placeholder="942100"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="rule-override-action" className="block text-sm font-medium text-fg-muted">
-            Action
-          </label>
-          <select
-            id="rule-override-action"
-            value={action}
-            onChange={(e) => setAction(e.target.value as "enable" | "disable")}
-            className="input-field"
-          >
-            <option value="enable">Enable</option>
-            <option value="disable">Disable</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="rule-override-comment" className="block text-sm font-medium text-fg-muted">
-            Comment
-          </label>
-          <input
-            id="rule-override-comment"
-            type="text"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            className="input-field"
-            placeholder="Optional"
-          />
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-type DeleteRuleOverrideDialogProps = {
-  policyId: number;
-  override: RuleOverride;
-  onSuccess: () => void;
-  onClose: () => void;
-};
-
-function DeleteRuleOverrideDialog({
-  policyId,
-  override,
-  onSuccess,
-  onClose,
-}: DeleteRuleOverrideDialogProps) {
-  const { accessToken } = useAuth();
-  const [submitting, setSubmitting] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
-
-  async function handleDelete() {
-    if (!accessToken) return;
-
-    setSubmitting(true);
-    setServerError(null);
-
-    try {
-      await deleteRuleOverride(accessToken, policyId, override.id);
-      onSuccess();
-    } catch (err) {
-      setServerError(
-        err instanceof ApiError ? err.detail : "An unexpected error occurred",
-      );
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Modal
-      title="Delete rule override"
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => void handleDelete()}
-            className="rounded-[var(--radius-md)] bg-error px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-          >
-            {submitting ? "Deleting..." : "Delete"}
-          </button>
-        </>
-      }
-    >
-      {serverError && (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="rounded-[var(--radius-md)] bg-error-soft px-4 py-3 text-sm font-medium text-error"
-        >
-          {serverError}
-        </div>
-      )}
-      <p className="text-sm text-fg">
-        Are you sure you want to delete the override for rule{" "}
-        <span className="font-semibold text-fg">{override.rule_id}</span>?
-        This action cannot be undone.
-      </p>
-    </Modal>
-  );
 }
 
 export function VHostDetailPage() {
@@ -264,7 +38,7 @@ export function VHostDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
-  const [overrideModal, setOverrideModal] = useState<OverrideModalState>(null);
+  const [overrideModal, setOverrideModal] = useState<RuleOverrideModalState>(null);
   const refreshCountRef = useRef(0);
   const isAdmin = hasRole("admin");
 

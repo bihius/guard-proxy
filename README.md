@@ -106,6 +106,7 @@ make clean   # stop containers and remove all volumes
 ## Documentation
 
 - [Architecture](README.architecture.md) — system architecture and data flow
+- [WAF Policy Tuning](README.waf-rules.md) — rule overrides, exclusions, and custom rules
 - [Development Commands](README.commands.md) — all dev commands, including user management
 - [Testing Strategy](README.testing.md) — testing approach and targets
 - [Evaluation Plan](docs/evaluation-plan.md) — thesis benchmark methodology and lab scenarios
