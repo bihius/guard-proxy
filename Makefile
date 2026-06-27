@@ -28,8 +28,13 @@ ps:
 seed:
 	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/seed_admin.py
 
+ifeq (users,$(firstword $(MAKECMDGOALS)))
+  USERS_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  $(eval $(USERS_ARGS):;@:)
+endif
+
 users:
-	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(ARGS)
+	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(if $(USERS_ARGS),$(patsubst help,--help,$(USERS_ARGS)),$(ARGS))
 
 coraza-build:
 	docker build -f deploy/docker/coraza.Dockerfile -t guard-proxy/coraza-spoa:dev .
