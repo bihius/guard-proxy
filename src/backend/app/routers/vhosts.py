@@ -12,6 +12,7 @@ from app.schemas.policy_binding import PolicyBindingCreate, PolicyBindingRespons
 from app.schemas.vhost import VHostCreate, VHostDetail, VHostResponse, VHostUpdate
 from app.services.vhost_service import (
     PolicyBindingAlreadyExistsError,
+    PolicyBindingDefaultManagedByVHostError,
     PolicyBindingFieldCannotBeNullError,
     PolicyBindingInvalidPathPrefixError,
     PolicyBindingInvalidPriorityError,
@@ -213,6 +214,11 @@ def create_policy_binding(
             status_code=status.HTTP_409_CONFLICT,
             detail="Policy binding already exists",
         ) from error
+    except PolicyBindingDefaultManagedByVHostError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
     except (
         PolicyBindingFieldCannotBeNullError,
         PolicyBindingInvalidPathPrefixError,
@@ -248,6 +254,11 @@ def delete_policy_binding(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Policy binding not found",
+        ) from error
+    except PolicyBindingDefaultManagedByVHostError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
         ) from error
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
