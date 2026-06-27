@@ -11,7 +11,9 @@ Glownym celem projektu jest zarzadzanie konfiguracja WAF z poziomu panelu:
 
 - tworzenie i edycja wirtualnych hostow,
 - tworzenie i edycja polityk WAF,
-- przypisywanie polityk do domen (soon),
+- domain policy assignment, including path-scoped bindings,
+- policy tuning through CRS rule overrides, rule target exclusions, and custom
+  rules in the reserved ID range,
 - stosowanie wygenerowanej konfiguracji HAProxy/Coraza,
 - odbieranie i przegladanie logow zdarzen WAF,
 - zabezpieczenie panelu przez logowanie i role uzytkownikow.
@@ -96,6 +98,17 @@ Najwazniejsze endpointy:
 | POST | `/policies/{policy_id}/rules` | Dodanie override'u reguly CRS |
 | PATCH | `/policies/{policy_id}/rules/{id}` | Edycja override'u reguly CRS |
 | DELETE | `/policies/{policy_id}/rules/{id}` | Usuniecie override'u reguly CRS |
+| GET | `/policies/{policy_id}/exclusions` | List CRS rule target exclusions |
+| POST | `/policies/{policy_id}/exclusions` | Add an exclusion (rule_id + target + optional scope_path) |
+| PATCH | `/policies/{policy_id}/exclusions/{id}` | Edit an exclusion |
+| DELETE | `/policies/{policy_id}/exclusions/{id}` | Delete an exclusion |
+| GET | `/policies/{policy_id}/custom-rules` | List custom rules for a policy |
+| POST | `/policies/{policy_id}/custom-rules` | Add a custom rule (rule_id in the 9000000-9099999 range) |
+| PATCH | `/policies/{policy_id}/custom-rules/{id}` | Edit a custom rule |
+| DELETE | `/policies/{policy_id}/custom-rules/{id}` | Delete a custom rule |
+| GET | `/vhosts/{vhost_id}/policy-bindings` | List path-scoped policy bindings for a vhost |
+| POST | `/vhosts/{vhost_id}/policy-bindings` | Add a policy binding for a path prefix |
+| DELETE | `/vhosts/{vhost_id}/policy-bindings/{id}` | Delete a policy binding |
 | GET | `/logs` | Lista logow WAF z filtrami i paginacja |
 | POST | `/logs/ingest` | Przyjmowanie logow z log shippera |
 | POST | `/config/apply` | Wygenerowanie i zastosowanie konfiguracji runtime |
@@ -175,13 +188,21 @@ Najwazniejsze tabele:
 | `vhosts` | Domeny obslugiwane przez HAProxy i ich backendy |
 | `policies` | Polityki WAF: poziom paranoi, progi anomalii, tryb pracy |
 | `rule_overrides` | Wlaczenia/wylaczenia konkretnych reguł OWASP CRS dla polityki |
+| `rule_exclusions` | CRS rule target exclusions, such as ARGS:token, optionally scoped by path |
+| `custom_rules` | Administrator-authored custom rules in the reserved ID range 9000000-9099999 |
+| `policy_bindings` | Path-prefix scoped policy bindings for vhosts |
 | `logs` | Zdarzenia WAF/proxy odebrane przez log shippera |
 | `runtime_operations` | Historia operacji zastosowania konfiguracji runtime |
 
 Glowne relacje:
 
-- `vhosts.policy_id` wskazuje na `policies.id`.
-- `rule_overrides.policy_id` wskazuje na `policies.id`.
+- `vhosts.policy_id` points to `policies.id` as the vhost default policy.
+- `rule_overrides.policy_id`, `rule_exclusions.policy_id`, and
+  `custom_rules.policy_id` point to `policies.id`; deleting a policy cascades
+  to the related records.
+- `policy_bindings.vhost_id` and `policy_bindings.policy_id` point to
+  `vhosts.id` and `policies.id`; deleting a vhost or policy cascades to its
+  bindings.
 - `vhosts.created_by` i `policies.created_by` wskazuja na `users.id`.
 - `logs.vhost_id` i `logs.policy_id` moga wskazywac na powiazany vhost i polityke.
 
@@ -236,6 +257,43 @@ erDiagram
         datetime created_at
     }
 
+    rule_exclusions {
+        int id PK
+        int policy_id FK
+        int rule_id
+        TargetType target_type
+        string target_value
+        string scope_path
+        string comment
+        datetime created_at
+    }
+
+    custom_rules {
+        int id PK
+        int policy_id FK
+        int rule_id
+        RulePhase phase
+        string variables
+        RuleOperator operator
+        string operator_argument
+        string actions
+        string comment
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+
+    policy_bindings {
+        int id PK
+        int vhost_id FK
+        int policy_id FK
+        string path_prefix
+        int priority
+        string comment
+        datetime created_at
+        datetime updated_at
+    }
+
     logs {
         int id PK
         string producer_event_id UK
@@ -271,6 +329,10 @@ erDiagram
     users ||--o{ policies : "created_by"
     policies ||--o{ vhosts : "policy_id"
     policies ||--o{ rule_overrides : "policy_id"
+    policies ||--o{ rule_exclusions : "policy_id"
+    policies ||--o{ custom_rules : "policy_id"
+    vhosts ||--o{ policy_bindings : "vhost_id"
+    policies ||--o{ policy_bindings : "policy_id"
     vhosts ||--o{ logs : "vhost_id"
     policies ||--o{ logs : "policy_id"
 ```
@@ -285,8 +347,9 @@ Projekt spelnia podstawowe wymagania CRUD na centralnej bazie danych:
 
 - `vhosts`: create, read, update, delete,
 - `policies`: create, read, update, delete,
-- `rule_overrides`: create, read, update, delete,
-- `logs`: ingest oraz read z filtrami.
+- `rule_overrides`, `rule_exclusions`, `custom_rules`: create, read, update, delete,
+- `policy_bindings`: create, read, delete,
+- `logs`: ingest and filtered read.
 
 Operacje modyfikujace sa dostepne tylko dla uzytkownikow z rola `admin`.
 Uzytkownik `viewer` moze odczytywac dane, ale nie moze ich zmieniac.
