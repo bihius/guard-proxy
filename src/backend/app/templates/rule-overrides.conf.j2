@@ -1,7 +1,25 @@
-# Guard Proxy CRS rule overrides.
+# Guard Proxy generated CRS policy tuning.
 #
-# Rules are enabled by default through the CRS include. Disabled overrides remove
-# selected CRS rule IDs for the rendered policy.
+# Rules are enabled by default through the CRS include. This file applies the
+# selected policy's disabled rules, target exclusions, scoped exclusions, and
+# administrator-authored custom rules.
+
+# Disabled CRS rules.
 {% for override in disabled_rule_overrides %}
 SecRuleRemoveById {{ override.rule_id }}
+{% endfor %}
+
+# Global target exclusions.
+{% for exclusion in global_exclusions %}
+SecRuleRemoveTargetById {{ exclusion.rule_id }} {{ exclusion.target }}
+{% endfor %}
+
+# Path-scoped target exclusions.
+{% for exclusion in scoped_exclusions %}
+SecRule REQUEST_URI "@beginsWith {{ exclusion.quoted_scope_path }}" "id:{{ exclusion.control_rule_id }},phase:1,pass,nolog,ctl:ruleRemoveTargetById={{ exclusion.rule_id }};{{ exclusion.target }}"
+{% endfor %}
+
+# Custom rules.
+{% for rule in active_custom_rules %}
+SecRule {{ rule.variables }} "@{{ rule.operator_token }} {{ rule.quoted_operator_argument }}" "id:{{ rule.rule_id }},phase:{{ rule.phase_number }},{{ rule.quoted_actions }}"
 {% endfor %}
