@@ -15,6 +15,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+      start_period: 60s
     networks:
       - gp_internal
 
@@ -69,6 +70,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks:
       - gp_edge
       - gp_internal
@@ -94,6 +96,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks:
       - gp_internal
 
@@ -148,6 +151,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
     networks:
       - gp_edge
       - gp_internal
