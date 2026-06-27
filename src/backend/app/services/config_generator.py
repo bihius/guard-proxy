@@ -73,7 +73,7 @@ def generate(
 
     certs = {}
     for vhost in active_vhosts:
-        if vhost.ssl_provider != "none" and vhost.ssl_cert and vhost.ssl_key:
+        if vhost.ssl_enabled and vhost.ssl_cert and vhost.ssl_key:
             certs[vhost.domain] = f"{vhost.ssl_cert}\n{vhost.ssl_key}"
 
     return GeneratedConfig(
@@ -258,29 +258,15 @@ def _control_rule_ids_for_scoped_exclusions(
     exclusions: list[RuleExclusion],
 ) -> dict[int, int]:
     assigned: dict[int, int] = {}
-    used_ids: set[int] = set()
-    fallback_index = 1
-    for exclusion in sorted(
-        (item for item in exclusions if item.scope_path is not None),
-        key=lambda item: (
-            item.id or 0,
-            item.rule_id,
-            item.target_type.value,
-            item.target_value,
-            item.scope_path or "",
-        ),
-    ):
-        if exclusion.id is not None:
-            control_rule_id = 9100000 + exclusion.id
-        else:
-            while 9100000 + fallback_index in used_ids:
-                fallback_index += 1
-            control_rule_id = 9100000 + fallback_index
-            fallback_index += 1
-        while control_rule_id in used_ids:
-            control_rule_id += 1
-        used_ids.add(control_rule_id)
-        assigned[id(exclusion)] = control_rule_id
+    for exclusion in exclusions:
+        if exclusion.scope_path is None:
+            continue
+        if exclusion.id is None:
+            raise ValueError(
+                "Path-scoped rule exclusion has no persisted id; "
+                "control rule ids require a persisted RuleExclusion"
+            )
+        assigned[id(exclusion)] = 9100000 + exclusion.id
     return assigned
 
 
