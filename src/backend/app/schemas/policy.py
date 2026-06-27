@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.policy import PolicyEnforcementMode
+from app.schemas.rule_exclusion import RuleExclusionResponse
 from app.schemas.rule_override import RuleOverrideResponse
 
 
@@ -68,10 +69,11 @@ class PolicyResponse(BaseModel):
 
 
 class PolicyDetail(PolicyResponse):
-    """Response body for GET /policies/{id} — WITH nested rule_overrides.
+    """Response body for GET /policies/{id} — WITH nested overrides and exclusions.
 
-    Inherits from PolicyResponse and adds a list of rule overrides.
+    Inherits from PolicyResponse and adds a list of rule overrides and exclusions.
     Used only in GET /{id}, because loading relations for list would be slow.
     """
 
     rule_overrides: list[RuleOverrideResponse] = []
+    rule_exclusions: list[RuleExclusionResponse] = []
