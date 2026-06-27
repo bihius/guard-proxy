@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.custom_rule import CustomRule, RuleOperator, RulePhase
 from app.models.policy import Policy
+from app.models.policy_binding import PolicyBinding
 from app.models.rule_exclusion import RuleExclusion, TargetType
 from app.models.vhost import VHost
 
@@ -131,6 +132,183 @@ def test_deleting_policy_cascades_to_custom_rules(db: Session) -> None:
     db.commit()
 
     assert db.get(CustomRule, custom_rule_id) is None
+
+
+def test_deleting_policy_cascades_to_policy_bindings(db: Session) -> None:
+    """Deleting a policy must remove path-scoped policy bindings."""
+    policy = Policy(
+        name="cascade-policy-bindings",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    vhost = VHost(
+        domain="cascade-policy-bindings.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+    )
+    db.add_all([policy, vhost])
+    db.flush()
+
+    binding = PolicyBinding(
+        vhost_id=vhost.id,
+        policy_id=policy.id,
+        path_prefix="/",
+        priority=0,
+    )
+    db.add(binding)
+    db.flush()
+    binding_id = binding.id
+
+    db.delete(policy)
+    db.commit()
+
+    assert db.get(PolicyBinding, binding_id) is None
+
+
+def test_deleting_vhost_cascades_to_policy_bindings(db: Session) -> None:
+    """Deleting a vhost must remove its path-scoped policy bindings."""
+    policy = Policy(
+        name="cascade-vhost-policy-bindings",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    vhost = VHost(
+        domain="cascade-vhost-policy-bindings.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+    )
+    db.add_all([policy, vhost])
+    db.flush()
+
+    binding = PolicyBinding(
+        vhost_id=vhost.id,
+        policy_id=policy.id,
+        path_prefix="/",
+        priority=0,
+    )
+    db.add(binding)
+    db.flush()
+    binding_id = binding.id
+
+    db.delete(vhost)
+    db.commit()
+
+    assert db.get(PolicyBinding, binding_id) is None
+
+
+def test_policy_binding_path_prefix_must_start_with_slash(
+    db: Session,
+) -> None:
+    """DB must reject path prefixes that are not URL paths."""
+    policy = Policy(
+        name="invalid-binding-path",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    vhost = VHost(
+        domain="invalid-binding-path.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+    )
+    db.add_all([policy, vhost])
+    db.flush()
+
+    db.add(
+        PolicyBinding(
+            vhost_id=vhost.id,
+            policy_id=policy.id,
+            path_prefix="api",
+            priority=0,
+        )
+    )
+
+    with pytest.raises(
+        IntegrityError,
+        match=(
+            "ck_policy_bindings_path_prefix_starts_with_slash"
+            "|CHECK constraint failed"
+        ),
+    ):
+        db.commit()
+    db.rollback()
+
+
+def test_policy_binding_priority_must_be_non_negative(db: Session) -> None:
+    """DB must reject negative policy binding priorities."""
+    policy = Policy(
+        name="invalid-binding-priority",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    vhost = VHost(
+        domain="invalid-binding-priority.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+    )
+    db.add_all([policy, vhost])
+    db.flush()
+
+    db.add(
+        PolicyBinding(
+            vhost_id=vhost.id,
+            policy_id=policy.id,
+            path_prefix="/api",
+            priority=-1,
+        )
+    )
+
+    with pytest.raises(
+        IntegrityError,
+        match="ck_policy_bindings_priority_non_negative|CHECK constraint failed",
+    ):
+        db.commit()
+    db.rollback()
+
+
+def test_policy_binding_path_priority_must_be_unique_per_vhost(
+    db: Session,
+) -> None:
+    """DB must reject duplicate path and priority bindings for a vhost."""
+    policy = Policy(
+        name="duplicate-binding-policy",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        is_active=True,
+    )
+    vhost = VHost(
+        domain="duplicate-binding.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+    )
+    db.add_all([policy, vhost])
+    db.flush()
+
+    for comment in ["first", "second"]:
+        db.add(
+            PolicyBinding(
+                vhost_id=vhost.id,
+                policy_id=policy.id,
+                path_prefix="/api",
+                priority=1,
+                comment=comment,
+            )
+        )
+
+    with pytest.raises(
+        IntegrityError,
+        match="uq_policy_bindings_vhost_path_priority|UNIQUE constraint failed",
+    ):
+        db.commit()
+    db.rollback()
 
 
 def test_custom_rule_id_below_reserved_range_raises_integrity_error(

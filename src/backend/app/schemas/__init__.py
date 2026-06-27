@@ -8,6 +8,7 @@ from app.schemas.custom_rule import (
 )
 from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
 from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, PolicyUpdate
+from app.schemas.policy_binding import PolicyBindingCreate, PolicyBindingResponse
 from app.schemas.rule_exclusion import (
     RuleExclusionCreate,
     RuleExclusionResponse,
@@ -39,6 +40,8 @@ __all__ = [
     "PolicyUpdate",
     "PolicyResponse",
     "PolicyDetail",
+    "PolicyBindingCreate",
+    "PolicyBindingResponse",
     # VHosts
     "VHostCreate",
     "VHostUpdate",

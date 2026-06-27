@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.policy import PolicyResponse
+from app.schemas.policy_binding import PolicyBindingResponse
 
 
 class VHostCreate(BaseModel):
@@ -122,6 +123,7 @@ class VHostResponse(BaseModel):
     ssl_expires_at: datetime | None = None
     is_active: bool
     policy_id: int | None
+    policy_bindings: list[PolicyBindingResponse] = Field(default_factory=list)
     created_by: int | None
     created_at: datetime
     updated_at: datetime

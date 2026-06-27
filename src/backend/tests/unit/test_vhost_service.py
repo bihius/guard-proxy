@@ -8,9 +8,15 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.models.policy import Policy
+from app.models.policy_binding import PolicyBinding
 from app.models.user import User
 from app.models.vhost import VHost
 from app.services.vhost_service import (
+    PolicyBindingAlreadyExistsError,
+    PolicyBindingDefaultManagedByVHostError,
+    PolicyBindingInvalidPathPrefixError,
+    PolicyBindingInvalidPriorityError,
+    PolicyBindingNotFoundError,
     VHostDomainAlreadyExistsError,
     VHostFieldCannotBeNullError,
     VHostNotFoundError,
@@ -84,6 +90,10 @@ def test_create_vhost_with_existing_policy_succeeds(
     )
 
     assert vhost.policy_id == policy.id
+    assert len(vhost.policy_bindings) == 1
+    assert vhost.policy_bindings[0].policy_id == policy.id
+    assert vhost.policy_bindings[0].path_prefix == "/"
+    assert vhost.policy_bindings[0].priority == 0
 
 
 def test_create_vhost_with_missing_policy_raises_error(
@@ -257,6 +267,54 @@ def test_update_vhost_with_missing_policy_raises_error(
         service.update_vhost(created.id, {"policy_id": 99999})
 
 
+def test_update_vhost_policy_id_syncs_default_binding(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    first_policy = _create_policy_for_test(db, name="First", created_by=admin_user.id)
+    second_policy = _create_policy_for_test(db, name="Second", created_by=admin_user.id)
+    created = service.create_vhost(
+        domain="sync-policy.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=first_policy.id,
+        created_by=admin_user.id,
+    )
+
+    updated = service.update_vhost(created.id, {"policy_id": second_policy.id})
+
+    bindings = service.list_policy_bindings(updated.id)
+    assert updated.policy_id == second_policy.id
+    assert len(bindings) == 1
+    assert bindings[0].policy_id == second_policy.id
+    assert bindings[0].path_prefix == "/"
+
+
+def test_update_vhost_policy_id_null_removes_default_binding(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    created = service.create_vhost(
+        domain="clear-policy.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=policy.id,
+        created_by=admin_user.id,
+    )
+
+    updated = service.update_vhost(created.id, {"policy_id": None})
+
+    assert updated.policy_id is None
+    assert service.list_policy_bindings(updated.id) == []
+
+
 def test_update_vhost_duplicate_domain_raises_error(
     db: Session,
     admin_user: User,
@@ -310,3 +368,253 @@ def test_delete_vhost_missing_raises_not_found(db: Session) -> None:
 
     with pytest.raises(VHostNotFoundError):
         service.delete_vhost(99999)
+
+
+def test_create_policy_binding_persists_values(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+
+    binding = service.create_policy_binding(
+        vhost.id,
+        policy_id=policy.id,
+        path_prefix="/api",
+        priority=10,
+        comment="API policy",
+    )
+
+    assert binding.id > 0
+    assert binding.vhost_id == vhost.id
+    assert binding.policy_id == policy.id
+    assert binding.path_prefix == "/api"
+    assert binding.priority == 10
+    assert binding.comment == "API policy"
+
+
+def test_list_policy_bindings_returns_priority_order(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="ordered-bindings.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+    second = service.create_policy_binding(
+        vhost.id,
+        policy_id=policy.id,
+        path_prefix="/api",
+        priority=20,
+        comment=None,
+    )
+    first = service.create_policy_binding(
+        vhost.id,
+        policy_id=policy.id,
+        path_prefix="/admin",
+        priority=10,
+        comment=None,
+    )
+
+    bindings = service.list_policy_bindings(vhost.id)
+
+    assert [binding.id for binding in bindings] == [first.id, second.id]
+
+
+def test_create_policy_binding_duplicate_path_priority_raises_error(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="duplicate-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+    service.create_policy_binding(
+        vhost.id,
+        policy_id=policy.id,
+        path_prefix="/api",
+        priority=1,
+        comment=None,
+    )
+
+    with pytest.raises(PolicyBindingAlreadyExistsError):
+        service.create_policy_binding(
+            vhost.id,
+            policy_id=policy.id,
+            path_prefix="/api",
+            priority=1,
+            comment=None,
+        )
+
+
+def test_create_policy_binding_rejects_default_root_binding(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="direct-root-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyBindingDefaultManagedByVHostError):
+        service.create_policy_binding(
+            vhost.id,
+            policy_id=policy.id,
+            path_prefix="/",
+            priority=0,
+            comment=None,
+        )
+
+
+def test_create_policy_binding_invalid_path_raises_error(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="invalid-path-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyBindingInvalidPathPrefixError):
+        service.create_policy_binding(
+            vhost.id,
+            policy_id=policy.id,
+            path_prefix="api",
+            priority=1,
+            comment=None,
+        )
+
+
+def test_create_policy_binding_invalid_priority_raises_error(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="invalid-priority-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyBindingInvalidPriorityError):
+        service.create_policy_binding(
+            vhost.id,
+            policy_id=policy.id,
+            path_prefix="/api",
+            priority=-1,
+            comment=None,
+        )
+
+
+def test_delete_policy_binding_removes_existing_binding(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="delete-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+    binding = service.create_policy_binding(
+        vhost.id,
+        policy_id=policy.id,
+        path_prefix="/api",
+        priority=1,
+        comment=None,
+    )
+
+    service.delete_policy_binding(vhost.id, binding.id)
+
+    assert db.get(PolicyBinding, binding.id) is None
+
+
+def test_delete_policy_binding_rejects_default_root_binding(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    policy = _create_policy_for_test(db, created_by=admin_user.id)
+    vhost = service.create_vhost(
+        domain="delete-root-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=policy.id,
+        created_by=admin_user.id,
+    )
+    binding = service.list_policy_bindings(vhost.id)[0]
+
+    with pytest.raises(PolicyBindingDefaultManagedByVHostError):
+        service.delete_policy_binding(vhost.id, binding.id)
+
+    refreshed = service.get_vhost(vhost.id)
+    assert refreshed.policy_id == policy.id
+    assert len(service.list_policy_bindings(vhost.id)) == 1
+
+
+def test_delete_policy_binding_missing_raises_not_found(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = VHostService(db)
+    vhost = service.create_vhost(
+        domain="missing-binding.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyBindingNotFoundError):
+        service.delete_policy_binding(vhost.id, 99999)
