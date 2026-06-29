@@ -2,7 +2,7 @@
 export type ApiResponseType = "json" | "text" | "empty";
 
 export type ApiClientOptions = {
-  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: BodyInit | Record<string, unknown> | null;
   token?: string | null;
   headers?: HeadersInit;
