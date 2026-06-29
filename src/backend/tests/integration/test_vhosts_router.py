@@ -161,7 +161,7 @@ def test_list_vhosts_admin_returns_200(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Admin może pobrać listę vhostów."""
+    """Admin can list vhosts with pagination metadata."""
     _create_vhost(client, admin_token, domain="a.example.com")
     _create_vhost(client, admin_token, domain="b.example.com")
 
@@ -169,10 +169,13 @@ def test_list_vhosts_admin_returns_200(
     assert resp.status_code == 200
 
     body = resp.json()
-    assert isinstance(body, list)
-    assert len(body) == 2
-    assert body[0]["domain"] == "a.example.com"
-    assert body[1]["domain"] == "b.example.com"
+    assert body["total"] == 2
+    assert body["page"] == 1
+    assert body["per_page"] == 50
+    assert [item["domain"] for item in body["items"]] == [
+        "a.example.com",
+        "b.example.com",
+    ]
 
 
 def test_list_vhosts_viewer_returns_200(
@@ -185,13 +188,47 @@ def test_list_vhosts_viewer_returns_200(
 
     resp = client.get("/vhosts", headers=viewer_token)
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()["items"]) == 1
 
 
 def test_list_vhosts_requires_auth(client: TestClient) -> None:
     """Brak tokena -> 401."""
     resp = client.get("/vhosts")
     assert resp.status_code == 401
+
+
+def test_list_vhosts_paginates_with_page_and_per_page(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """page/per_page parameters return a slice of results."""
+    for index in range(3):
+        _create_vhost(client, admin_token, domain=f"host{index}.example.com")
+
+    resp = client.get("/vhosts?page=2&per_page=2", headers=admin_token)
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["total"] == 3
+    assert body["page"] == 2
+    assert body["per_page"] == 2
+    assert [item["domain"] for item in body["items"]] == ["host2.example.com"]
+
+
+def test_list_vhosts_filters_by_q(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """q filters vhosts by a domain substring."""
+    _create_vhost(client, admin_token, domain="app.example.com")
+    _create_vhost(client, admin_token, domain="api.other.com")
+
+    resp = client.get("/vhosts?q=example", headers=admin_token)
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["total"] == 1
+    assert [item["domain"] for item in body["items"]] == ["app.example.com"]
 
 
 # ---------------------------------------------------------------------------

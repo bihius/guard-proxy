@@ -1,22 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listVHosts } from "@/features/vhosts/api";
+import { listAllVHosts } from "@/features/vhosts/api";
 import { useAuth } from "@/hooks/use-auth";
 
 import { listPolicies } from "./api";
 import type { Policy } from "./types";
 
+const PAGE_SIZE = 50;
 type PoliciesState = {
   policies: Policy[];
+  total: number;
+  page: number;
+  pageSize: number;
+  searchQuery: string;
   assignedPolicyIds: Set<number>;
   isLoading: boolean;
   error: string | null;
+  setPage: (page: number) => void;
+  setSearchQuery: (query: string) => void;
   refresh: () => void;
 };
 
 export function usePolicies(): PoliciesState {
   const { accessToken } = useAuth();
   const [policies, setPolicies] = useState<Policy[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPageState] = useState(1);
+  const [searchQuery, setSearchQueryState] = useState("");
   const [assignedPolicyIds, setAssignedPolicyIds] = useState<Set<number>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,12 +42,17 @@ export function usePolicies(): PoliciesState {
     setError(null);
 
     Promise.all([
-      listPolicies(accessToken, controller.signal),
-      listVHosts(accessToken, controller.signal),
+      listPolicies(
+        accessToken,
+        { page, per_page: PAGE_SIZE, q: searchQuery.trim() || undefined },
+        controller.signal,
+      ),
+      listAllVHosts(accessToken, controller.signal),
     ])
       .then(([policyList, vhostList]) => {
         if (generation !== refreshCountRef.current) return;
-        setPolicies(policyList);
+        setPolicies(policyList.items);
+        setTotal(policyList.total);
         const ids = new Set(
           vhostList
             .map((v) => v.policy_id)
@@ -56,7 +71,7 @@ export function usePolicies(): PoliciesState {
     return () => {
       controller.abort();
     };
-  }, [accessToken]);
+  }, [accessToken, page, searchQuery]);
 
   useEffect(() => {
     const cleanup = fetch();
@@ -67,5 +82,26 @@ export function usePolicies(): PoliciesState {
     fetch();
   }, [fetch]);
 
-  return { policies, assignedPolicyIds, isLoading, error, refresh };
+  const setPage = useCallback((nextPage: number) => {
+    setPageState(nextPage);
+  }, []);
+
+  const setSearchQuery = useCallback((query: string) => {
+    setPageState(1);
+    setSearchQueryState(query);
+  }, []);
+
+  return {
+    policies,
+    total,
+    page,
+    pageSize: PAGE_SIZE,
+    searchQuery,
+    assignedPolicyIds,
+    isLoading,
+    error,
+    setPage,
+    setSearchQuery,
+    refresh,
+  };
 }

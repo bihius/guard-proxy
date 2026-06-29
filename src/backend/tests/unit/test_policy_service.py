@@ -15,10 +15,13 @@ from sqlalchemy.orm import Session
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
 from app.models.policy import Policy, PolicyEnforcementMode  # noqa: E402
+from app.models.policy_binding import PolicyBinding  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.models.vhost import VHost  # noqa: E402
 from app.services.policy_service import (  # noqa: E402
     PolicyDisallowedFieldError,
     PolicyFieldCannotBeNullError,
+    PolicyInUseError,
     PolicyNameAlreadyExistsError,
     PolicyNotFoundError,
     PolicyService,
@@ -103,10 +106,59 @@ def test_list_policies_returns_items_sorted_by_id(
         created_by=admin_user.id,
     )
 
-    policies = service.list_policies()
+    policies, total = service.list_policies()
 
+    assert total == 2
     assert [policy.id for policy in policies] == [first.id, second.id]
     assert [policy.name for policy in policies] == ["Alpha", "Beta"]
+
+
+def test_list_policies_paginates_results(db: Session, admin_user: User) -> None:
+    service = PolicyService(db)
+    for index in range(3):
+        service.create_policy(
+            name=f"Policy {index}",
+            description=None,
+            paranoia_level=1,
+            inbound_anomaly_threshold=5,
+            outbound_anomaly_threshold=5,
+            enforcement_mode=PolicyEnforcementMode.block,
+            created_by=admin_user.id,
+        )
+
+    first_page, total = service.list_policies(page=1, per_page=2)
+    second_page, _ = service.list_policies(page=2, per_page=2)
+
+    assert total == 3
+    assert [policy.name for policy in first_page] == ["Policy 0", "Policy 1"]
+    assert [policy.name for policy in second_page] == ["Policy 2"]
+
+
+def test_list_policies_filters_by_name_substring(db: Session, admin_user: User) -> None:
+    service = PolicyService(db)
+    service.create_policy(
+        name="Strict Web App",
+        description=None,
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+    service.create_policy(
+        name="Relaxed API",
+        description=None,
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    policies, total = service.list_policies(q="web")
+
+    assert total == 1
+    assert [policy.name for policy in policies] == ["Strict Web App"]
 
 
 def test_get_policy_returns_existing_policy(db: Session, admin_user: User) -> None:
@@ -228,6 +280,80 @@ def test_delete_policy_removes_existing_policy(db: Session, admin_user: User) ->
     service.delete_policy(created.id)
 
     assert db.get(Policy, created.id) is None
+
+
+def test_delete_policy_assigned_to_vhost_raises_in_use(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Assigned default",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+    db.add(
+        VHost(
+            domain="assigned.example.com",
+            backend_url="http://localhost:8080",
+            ssl_enabled=False,
+            ssl_provider="none",
+            is_active=True,
+            policy_id=created.id,
+            created_by=admin_user.id,
+        ),
+    )
+    db.commit()
+
+    with pytest.raises(PolicyInUseError):
+        service.delete_policy(created.id)
+
+    assert db.get(Policy, created.id) is not None
+
+
+def test_delete_policy_assigned_to_path_binding_raises_in_use(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Assigned binding",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+    vhost = VHost(
+        domain="binding.example.com",
+        backend_url="http://localhost:8080",
+        ssl_enabled=False,
+        ssl_provider="none",
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+    db.add(vhost)
+    db.flush()
+    db.add(
+        PolicyBinding(
+            vhost_id=vhost.id,
+            policy_id=created.id,
+            path_prefix="/api",
+            priority=1,
+        ),
+    )
+    db.commit()
+
+    with pytest.raises(PolicyInUseError):
+        service.delete_policy(created.id)
+
+    assert db.get(Policy, created.id) is not None
 
 
 def test_delete_policy_missing_raises_not_found(db: Session) -> None:

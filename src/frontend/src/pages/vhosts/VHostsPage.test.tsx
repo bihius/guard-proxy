@@ -43,6 +43,18 @@ const mockVHosts = [
 ];
 
 const mockPolicies = [{ id: 1, name: "Default" }];
+const mockVHostListResponse = {
+  items: mockVHosts,
+  total: 1,
+  page: 1,
+  per_page: 50,
+};
+const emptyVHostListResponse = {
+  items: [],
+  total: 0,
+  page: 1,
+  per_page: 50,
+};
 
 function renderPage(authOverrides: Partial<AuthContextValue> = {}) {
   return render(
@@ -60,15 +72,15 @@ function renderPage(authOverrides: Partial<AuthContextValue> = {}) {
 describe("VHostsPage", () => {
   it("shows loading state initially", () => {
     vi.mocked(vhostsApi.listVHosts).mockReturnValue(new Promise(() => undefined));
-    vi.mocked(vhostsApi.listPolicies).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(vhostsApi.listAllPolicies).mockReturnValue(new Promise(() => undefined));
 
     renderPage();
     expect(screen.getByText(/loading virtual hosts/i)).toBeInTheDocument();
   });
 
   it("renders rows from API response", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHostListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
 
@@ -81,7 +93,7 @@ describe("VHostsPage", () => {
 
   it("shows error state and retry button on failure", async () => {
     vi.mocked(vhostsApi.listVHosts).mockRejectedValue(new Error("Network error"));
-    vi.mocked(vhostsApi.listPolicies).mockRejectedValue(new Error("Network error"));
+    vi.mocked(vhostsApi.listAllPolicies).mockRejectedValue(new Error("Network error"));
 
     renderPage();
 
@@ -92,19 +104,19 @@ describe("VHostsPage", () => {
   });
 
   it("shows empty state when no vhosts", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue([]);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue([]);
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(emptyVHostListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue([]);
 
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getByText(/no virtual hosts yet/i)).toBeInTheDocument(),
+      expect(screen.getByText(/no virtual hosts found/i)).toBeInTheDocument(),
     );
   });
 
   it("admin sees New vhost button and Edit/Delete actions", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHostListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage({ hasRole: vi.fn().mockReturnValue(true) });
 
@@ -117,8 +129,8 @@ describe("VHostsPage", () => {
   });
 
   it("viewer does not see New vhost button or Edit/Delete actions", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHostListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage({ hasRole: vi.fn().mockReturnValue(false) });
 
@@ -131,8 +143,8 @@ describe("VHostsPage", () => {
   });
 
   it("navigates to the vhost detail page when a row is clicked", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHostListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
 
@@ -145,8 +157,8 @@ describe("VHostsPage", () => {
   });
 
   it("does not navigate when row action buttons are clicked", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHostListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage({ hasRole: vi.fn().mockReturnValue(true) });
 
@@ -162,8 +174,8 @@ describe("VHostsPage", () => {
   it("retry button calls refresh after error", async () => {
     vi.mocked(vhostsApi.listVHosts)
       .mockRejectedValueOnce(new Error("Network error"))
-      .mockResolvedValue(mockVHosts);
-    vi.mocked(vhostsApi.listPolicies)
+      .mockResolvedValue(mockVHostListResponse);
+    vi.mocked(vhostsApi.listAllPolicies)
       .mockRejectedValueOnce(new Error("Network error"))
       .mockResolvedValue(mockPolicies);
 
@@ -175,6 +187,39 @@ describe("VHostsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));
     await waitFor(() =>
       expect(screen.getByText("app.example.com")).toBeInTheDocument(),
+    );
+  });
+
+  it("requests the next page and filters by domain search", async () => {
+    vi.mocked(vhostsApi.listVHosts).mockResolvedValue({
+      ...mockVHostListResponse,
+      total: 75,
+    });
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("app.example.com")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    await waitFor(() =>
+      expect(vhostsApi.listVHosts).toHaveBeenLastCalledWith(
+        "test-token",
+        { page: 2, per_page: 50, q: undefined },
+        expect.any(AbortSignal),
+      ),
+    );
+
+    await userEvent.type(screen.getByLabelText(/search virtual hosts/i), "api");
+
+    await waitFor(() =>
+      expect(vhostsApi.listVHosts).toHaveBeenLastCalledWith(
+        "test-token",
+        { page: 1, per_page: 50, q: "api" },
+        expect.any(AbortSignal),
+      ),
     );
   });
 });

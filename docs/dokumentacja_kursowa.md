@@ -84,12 +84,12 @@ Najwazniejsze endpointy:
 | POST | `/auth/refresh` | Odnowienie access tokena z refresh cookie |
 | POST | `/auth/logout` | Wylogowanie |
 | GET | `/auth/me` | Dane aktualnie zalogowanego uzytkownika |
-| GET | `/vhosts` | Lista wirtualnych hostow |
+| GET | `/vhosts` | Paginated virtual host list. Query params: `page`, `per_page`, `q` (domain search). Response: `{ items, total, page, per_page }`. |
 | POST | `/vhosts` | Utworzenie wirtualnego hosta |
 | GET | `/vhosts/{id}` | Szczegoly wirtualnego hosta |
 | PATCH | `/vhosts/{id}` | Edycja wirtualnego hosta |
 | DELETE | `/vhosts/{id}` | Usuniecie wirtualnego hosta |
-| GET | `/policies` | Lista polityk WAF |
+| GET | `/policies` | Paginated WAF policy list. Query params: `page`, `per_page`, `q` (name search). Response: `{ items, total, page, per_page }`. |
 | POST | `/policies` | Utworzenie polityki WAF |
 | GET | `/policies/{id}` | Szczegoly polityki WAF |
 | PATCH | `/policies/{id}` | Edycja polityki WAF |

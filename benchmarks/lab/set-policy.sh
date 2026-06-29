@@ -100,7 +100,12 @@ policy_lookup="$(POLICIES="${policies_response}" POLICY_NAME="${TARGET_POLICY_NA
 import json, os, sys
 data = json.loads(os.environ["POLICIES"])
 name = os.environ["POLICY_NAME"]
-items = data if isinstance(data, list) else [data]
+if isinstance(data, dict) and "items" in data:
+    items = data["items"]
+elif isinstance(data, list):
+    items = data
+else:
+    items = [data]
 for item in items:
     if item["name"] == name:
         print(item["id"], item.get("paranoia_level", "?"))
@@ -119,7 +124,8 @@ set_vhost_policy() {
   vhost_id="$(VHOSTS="${vhosts_response}" DOMAIN="${domain}" python3 - <<'PY'
 import json, os, sys
 data = json.loads(os.environ["VHOSTS"]); domain = os.environ["DOMAIN"]
-for item in data:
+items = data["items"] if isinstance(data, dict) and "items" in data else data
+for item in items:
     if item["domain"] == domain:
         print(item["id"]); sys.exit(0)
 sys.exit(f"vhost {domain!r} not found. Run `make lab-up` (setup-lab.sh) first.")

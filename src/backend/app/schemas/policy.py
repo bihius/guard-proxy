@@ -79,3 +79,12 @@ class PolicyDetail(PolicyResponse):
     rule_overrides: list[RuleOverrideResponse] = []
     rule_exclusions: list[RuleExclusionResponse] = []
     custom_rules: list[CustomRuleResponse] = []
+
+
+class PolicyListResponse(BaseModel):
+    """Paginated response returned by GET /policies."""
+
+    items: list[PolicyResponse]
+    total: int
+    page: int
+    per_page: int

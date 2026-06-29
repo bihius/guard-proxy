@@ -137,3 +137,12 @@ class VHostDetail(VHostResponse):
     """
 
     policy: PolicyResponse | None = None
+
+
+class VHostListResponse(BaseModel):
+    """Paginated response returned by GET /vhosts."""
+
+    items: list[VHostResponse]
+    total: int
+    page: int
+    per_page: int
