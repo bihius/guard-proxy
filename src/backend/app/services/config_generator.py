@@ -17,6 +17,7 @@ from app.services.config_renderer import (
     HaproxyBackend,
     HaproxyRenderContext,
     HaproxyRoute,
+    HaproxyServer,
     RuleExclusionRenderContext,
     RuleOverrideRenderContext,
     render_crs_setup,
@@ -200,7 +201,23 @@ def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
     # colliding ACL or backend identifiers.  This matches the strategy used
     # by RuntimeStatusService._to_haproxy_route.
     suffix = f"vhost_{vhost.id}"
-    backend_address = _extract_backend_address(vhost.backend_url)
+    server_payloads = _to_haproxy_servers(vhost, suffix)
+    health_check_path = next(
+        (
+            health_check_path
+            for (
+                _server_name,
+                _address,
+                health_check_path,
+                health_check_enabled,
+                _interval_seconds,
+                _fall,
+                _rise,
+            ) in server_payloads
+            if health_check_enabled
+        ),
+        "/",
+    )
     return HaproxyRenderContext(
         routes=(
             HaproxyRoute(
@@ -209,12 +226,76 @@ def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
                 ssl_provider=vhost.ssl_provider if vhost.ssl_enabled else "none",
                 backend=HaproxyBackend(
                     name=f"be_{suffix}",
-                    server_name=f"srv_{suffix}",
-                    address=backend_address,
+                    health_check_path=health_check_path,
+                    servers=tuple(
+                        HaproxyServer(
+                            server_name=server_name,
+                            address=address,
+                            health_check_enabled=health_check_enabled,
+                            health_check_interval_seconds=interval_seconds,
+                            health_check_fall=fall,
+                            health_check_rise=rise,
+                        )
+                        for (
+                            server_name,
+                            address,
+                            _health_check_path,
+                            health_check_enabled,
+                            interval_seconds,
+                            fall,
+                            rise,
+                        ) in server_payloads
+                    ),
                 ),
             ),
         )
     )
+
+
+def _to_haproxy_servers(
+    vhost: VHost,
+    suffix: str,
+) -> list[tuple[str, str, str, bool, int, int, int]]:
+    all_backends = list(getattr(vhost, "backends", []))
+    active_backends = [backend for backend in all_backends if backend.is_active]
+    if not all_backends and vhost.backend_url:
+        return [
+            (
+                f"srv_{suffix}",
+                _extract_backend_address(vhost.backend_url),
+                "/",
+                True,
+                5,
+                3,
+                2,
+            )
+        ]
+    if not active_backends:
+        raise ValueError(f"Active vhost {vhost.domain!r} has no active backends")
+
+    health_check_paths = {
+        backend.health_check_path
+        for backend in active_backends
+        if backend.health_check_enabled
+    }
+    if len(health_check_paths) > 1:
+        raise ValueError(
+            f"Active vhost {vhost.domain!r} has multiple health check paths; "
+            "HAProxy supports one httpchk path per backend section"
+        )
+
+    return [
+        (
+            f"srv_{suffix}_{index}",
+            _extract_backend_address(backend.url),
+            backend.health_check_path,
+            backend.health_check_enabled,
+            backend.health_check_interval_seconds,
+            backend.health_check_fall,
+            backend.health_check_rise,
+        )
+        for index, backend in enumerate(active_backends, start=1)
+    ]
 
 
 def _to_crs_policy_context(policy: Policy) -> CrsPolicyRenderContext:

@@ -18,6 +18,7 @@ from app.models.runtime_operation import (
 )
 from app.models.user import User, UserRole
 from app.models.vhost import VHost
+from app.models.vhost_backend import VHostBackend
 
 __all__ = [
     "User",
@@ -26,6 +27,7 @@ __all__ = [
     "PolicyEnforcementMode",
     "PolicyBinding",
     "VHost",
+    "VHostBackend",
     "Log",
     "LogAction",
     "LogSeverity",

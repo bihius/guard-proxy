@@ -23,6 +23,7 @@ _HAPROXY_HOST_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # HAProxy backend address (host:port): same allowlist as host values.
 _HAPROXY_ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
+_HAPROXY_HEALTH_PATH_RE = re.compile(r"^[A-Za-z0-9_./:-]+$")
 _MODSEC_LINE_BREAK_RE = re.compile(r"[\r\n]")
 _MODSEC_TARGET_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:/@-]+$")
 _MODSEC_VARIABLES_RE = re.compile(r"^[A-Za-z0-9_.:|@-]+$")
@@ -81,26 +82,61 @@ def _validate_haproxy_host(value: str, field: str) -> None:
 
 
 @dataclass(frozen=True)
-class HaproxyBackend:
-    """Backend server data used by the HAProxy template.
+class HaproxyServer:
+    """One HAProxy server line inside a backend section.
 
     All fields are validated on construction to reject characters that could
     allow HAProxy config injection (e.g. newlines, spaces, shell-special chars).
     """
 
-    name: str
     server_name: str
     address: str
+    health_check_enabled: bool = True
+    health_check_interval_seconds: int = 5
+    health_check_fall: int = 3
+    health_check_rise: int = 2
+
+    def __post_init__(self) -> None:
+        _validate_haproxy_identifier(self.server_name, "HaproxyServer.server_name")
+        if not self.address:
+            raise ValueError("HaproxyServer.address must not be empty")
+        if not _HAPROXY_ADDRESS_RE.match(self.address):
+            raise ValueError(
+                f"HaproxyServer.address {self.address!r} contains characters that are "
+                "unsafe for HAProxy config; only host:port characters are allowed"
+            )
+        if self.health_check_interval_seconds <= 0:
+            raise ValueError(
+                "HaproxyServer.health_check_interval_seconds must be positive"
+            )
+        if self.health_check_fall <= 0:
+            raise ValueError("HaproxyServer.health_check_fall must be positive")
+        if self.health_check_rise <= 0:
+            raise ValueError("HaproxyServer.health_check_rise must be positive")
+
+
+@dataclass(frozen=True)
+class HaproxyBackend:
+    """HAProxy backend section data used by the template."""
+
+    name: str
+    servers: tuple[HaproxyServer, ...]
+    health_check_path: str = "/"
 
     def __post_init__(self) -> None:
         _validate_haproxy_identifier(self.name, "HaproxyBackend.name")
-        _validate_haproxy_identifier(self.server_name, "HaproxyBackend.server_name")
-        if not self.address:
-            raise ValueError("HaproxyBackend.address must not be empty")
-        if not _HAPROXY_ADDRESS_RE.match(self.address):
+        if not self.servers:
+            raise ValueError("HaproxyBackend.servers must not be empty")
+        _ensure_unique(
+            (server.server_name for server in self.servers),
+            "HaproxyBackend.servers.server_name",
+        )
+        if not self.health_check_path.startswith("/"):
+            raise ValueError("HaproxyBackend.health_check_path must start with /")
+        if not _HAPROXY_HEALTH_PATH_RE.match(self.health_check_path):
             raise ValueError(
-                f"HaproxyBackend.address {self.address!r} contains characters that are "
-                "unsafe for HAProxy config; only host:port characters are allowed"
+                "HaproxyBackend.health_check_path contains characters that are "
+                "unsafe for HAProxy config"
             )
 
 
@@ -146,7 +182,11 @@ class HaproxyRenderContext:
             "HaproxyRenderContext.routes.backend.name",
         )
         _ensure_unique(
-            (route.backend.server_name for route in self.routes),
+            (
+                server.server_name
+                for route in self.routes
+                for server in route.backend.servers
+            ),
             "HaproxyRenderContext.routes.backend.server_name",
         )
 
@@ -295,7 +335,11 @@ def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
         "render_haproxy_cfg_multi routes.backend.name",
     )
     _ensure_unique(
-        (route.backend.server_name for route in routes),
+        (
+            server.server_name
+            for route in routes
+            for server in route.backend.servers
+        ),
         "render_haproxy_cfg_multi routes.backend.server_name",
     )
     return _render_haproxy_routes(routes)

@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from typing import TypedDict
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.policy import Policy
 from app.models.policy_binding import PolicyBinding
 from app.models.vhost import VHost
+from app.models.vhost_backend import VHostBackend
 from app.services.certbot_service import CertbotError, CertbotService
 
 logger = logging.getLogger(__name__)
@@ -18,10 +20,23 @@ logger = logging.getLogger(__name__)
 NON_NULLABLE_PATCH_FIELDS = {
     "domain",
     "backend_url",
+    "backends",
     "ssl_enabled",
     "ssl_provider",
     "is_active",
 }
+
+
+class BackendPayload(TypedDict):
+    """Normalized backend server payload used by the service layer."""
+
+    url: str
+    is_active: bool
+    health_check_enabled: bool
+    health_check_path: str
+    health_check_interval_seconds: int
+    health_check_fall: int
+    health_check_rise: int
 
 
 class VHostError(Exception):
@@ -97,7 +112,8 @@ class VHostService:
         self,
         *,
         domain: str,
-        backend_url: str,
+        backend_url: str | None,
+        backends: list[dict[str, object]] | None = None,
         description: str | None,
         ssl_enabled: bool,
         ssl_provider: str = "none",
@@ -110,6 +126,12 @@ class VHostService:
     ) -> VHost:
         """Create and persist a new vhost."""
         self._ensure_policy_exists(policy_id)
+        backend_payloads = self._normalize_backend_payloads(
+            backend_url=backend_url,
+            backends=backends,
+            is_active=is_active,
+        )
+        primary_backend_url = str(backend_payloads[0]["url"])
 
         ssl_expires_at = None
         if ssl_provider == "upload" and ssl_cert:
@@ -128,7 +150,7 @@ class VHostService:
 
         vhost = VHost(
             domain=domain,
-            backend_url=backend_url,
+            backend_url=primary_backend_url,
             description=description,
             ssl_enabled=ssl_enabled,
             ssl_provider=ssl_provider,
@@ -143,6 +165,7 @@ class VHostService:
 
         try:
             self.db.flush()
+            self._replace_backends(vhost, backend_payloads)
             if policy_id is not None:
                 self._sync_default_policy_binding(vhost, policy_id)
             self.db.commit()
@@ -163,7 +186,10 @@ class VHostService:
         q: str | None = None,
     ) -> tuple[list[VHost], int]:
         """Return a page of vhosts sorted by ID, optionally filtered by domain."""
-        query = self.db.query(VHost).options(selectinload(VHost.policy_bindings))
+        query = self.db.query(VHost).options(
+            selectinload(VHost.policy_bindings),
+            selectinload(VHost.backends),
+        )
 
         search = q.strip() if q is not None else None
         if search:
@@ -185,6 +211,7 @@ class VHostService:
             .options(
                 selectinload(VHost.policy),
                 selectinload(VHost.policy_bindings),
+                selectinload(VHost.backends),
             )
             .filter(VHost.id == vhost_id)
             .first()
@@ -206,6 +233,10 @@ class VHostService:
         if "policy_id" in patch_data:
             self._ensure_policy_exists(patch_data["policy_id"])
 
+        backend_payloads = self._backend_payloads_from_patch(vhost, patch_data)
+        if backend_payloads is not None:
+            patch_data["backend_url"] = backend_payloads[0]["url"]
+
         ssl_provider = patch_data.get("ssl_provider", vhost.ssl_provider)
         
         # If cert changes or provider changes to letsencrypt, handle it
@@ -226,8 +257,12 @@ class VHostService:
                     logger.error(f"Failed to provision cert for {domain}: {e}")
                     raise ValueError(f"Let's Encrypt provisioning failed: {e}")
 
+        patch_data.pop("backends", None)
+
         for field, value in patch_data.items():
             setattr(vhost, field, value)
+        if backend_payloads is not None:
+            self._replace_backends(vhost, backend_payloads)
         if "policy_id" in patch_data:
             self._sync_default_policy_binding(vhost, patch_data["policy_id"])
 
@@ -340,6 +375,134 @@ class VHostService:
         for field in NON_NULLABLE_PATCH_FIELDS:
             if field in patch_data and patch_data[field] is None:
                 raise VHostFieldCannotBeNullError(field)
+
+    def _backend_payloads_from_patch(
+        self,
+        vhost: VHost,
+        patch_data: dict[str, object],
+    ) -> list[BackendPayload] | None:
+        """Return replacement backend payloads if PATCH changes backends."""
+        next_is_active = bool(patch_data.get("is_active", vhost.is_active))
+        if "backends" in patch_data:
+            raw_backends = patch_data["backends"]
+            if not isinstance(raw_backends, list):
+                raise ValueError("backends must be a list")
+            return self._normalize_backend_payloads(
+                backend_url=None,
+                backends=raw_backends,
+                is_active=next_is_active,
+            )
+        if "backend_url" in patch_data:
+            return self._normalize_backend_payloads(
+                backend_url=str(patch_data["backend_url"]),
+                backends=None,
+                is_active=next_is_active,
+            )
+        if next_is_active and not any(backend.is_active for backend in vhost.backends):
+            raise ValueError("Active vhosts require at least one active backend")
+        return None
+
+    def _normalize_backend_payloads(
+        self,
+        *,
+        backend_url: str | None,
+        backends: list[dict[str, object]] | None,
+        is_active: bool,
+    ) -> list[BackendPayload]:
+        """Normalize legacy backend_url and new backend list into one shape."""
+        if backends is None:
+            if backend_url is None:
+                raise ValueError("Either backend_url or backends is required")
+            backends = [{"url": backend_url}]
+        if not backends:
+            raise ValueError("At least one backend is required")
+
+        normalized: list[BackendPayload] = []
+        for backend in backends:
+            url = str(backend["url"]).strip()
+            if not url.startswith(("http://", "https://")):
+                raise ValueError("Backend URL must start with http:// or https://")
+            health_check_path = (
+                str(backend.get("health_check_path", "/")).strip() or "/"
+            )
+            if not health_check_path.startswith("/"):
+                raise ValueError("Health check path must start with /")
+            normalized.append(
+                {
+                    "url": url,
+                    "is_active": bool(backend.get("is_active", True)),
+                    "health_check_enabled": bool(
+                        backend.get("health_check_enabled", True)
+                    ),
+                    "health_check_path": health_check_path,
+                    "health_check_interval_seconds": self._positive_int(
+                        backend.get("health_check_interval_seconds", 5),
+                        "health_check_interval_seconds",
+                    ),
+                    "health_check_fall": self._positive_int(
+                        backend.get("health_check_fall", 3),
+                        "health_check_fall",
+                    ),
+                    "health_check_rise": self._positive_int(
+                        backend.get("health_check_rise", 2),
+                        "health_check_rise",
+                    ),
+                }
+            )
+        if is_active and not any(bool(backend["is_active"]) for backend in normalized):
+            raise ValueError("Active vhosts require at least one active backend")
+        self._ensure_single_health_check_path(normalized)
+        return normalized
+
+    @staticmethod
+    def _ensure_single_health_check_path(backends: list[BackendPayload]) -> None:
+        """Reject mixed health paths that HAProxy cannot honor per server."""
+        health_check_paths = {
+            backend["health_check_path"]
+            for backend in backends
+            if backend["is_active"] and backend["health_check_enabled"]
+        }
+        if len(health_check_paths) > 1:
+            raise ValueError(
+                "Backends with health checks enabled must use the same "
+                "health_check_path"
+            )
+
+    def _replace_backends(
+        self,
+        vhost: VHost,
+        backend_payloads: list[BackendPayload],
+    ) -> None:
+        """Replace a vhost's backend server collection."""
+        vhost.backends = [
+            VHostBackend(
+                url=str(backend["url"]),
+                is_active=bool(backend["is_active"]),
+                health_check_enabled=bool(backend["health_check_enabled"]),
+                health_check_path=str(backend["health_check_path"]),
+                health_check_interval_seconds=backend[
+                    "health_check_interval_seconds"
+                ],
+                health_check_fall=backend["health_check_fall"],
+                health_check_rise=backend["health_check_rise"],
+            )
+            for backend in backend_payloads
+        ]
+
+    @staticmethod
+    def _positive_int(value: object, field_name: str) -> int:
+        """Coerce a positive integer from request-derived backend settings."""
+        if isinstance(value, bool):
+            raise ValueError(f"{field_name} must be a positive integer")
+        if isinstance(value, int):
+            result = value
+        elif isinstance(value, str):
+            result = int(value)
+        else:
+            raise ValueError(f"{field_name} must be a positive integer")
+        if result <= 0:
+            raise ValueError(f"{field_name} must be a positive integer")
+        return result
 
     def _sync_default_policy_binding(
         self, vhost: VHost, policy_id: object
