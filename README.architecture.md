@@ -163,6 +163,18 @@ The login handler always runs `bcrypt.verify` against a precomputed dummy hash
 when the requested email does not exist, keeping response time consistent and
 preventing user-enumeration through timing.
 
+### CORS policy
+
+CORS is restricted to the methods and headers the panel actually uses:
+
+- `allow_methods`: `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS`
+- `allow_headers`: `Authorization`, `Content-Type`
+- `allow_credentials`: `true` (required for the HttpOnly refresh cookie)
+- `allow_origins`: driven by `settings.cors_origins` (env var `CORS_ORIGINS`, CSV or JSON
+  array); the built-in default lists only local dev origins
+  (`localhost`/`127.0.0.1` on ports 3000, 5173, 5174) and must be overridden with the
+  production panel origin(s) via environment configuration before deployment.
+
 ## Deployment
 
 ### Health and Readiness Probes

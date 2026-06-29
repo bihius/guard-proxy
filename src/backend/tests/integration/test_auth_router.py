@@ -117,6 +117,52 @@ def test_me_preflight_allows_authorization_header(client: TestClient) -> None:
     assert "authorization" in resp.headers["access-control-allow-headers"].lower()
 
 
+def test_preflight_does_not_advertise_wildcard_methods(client: TestClient) -> None:
+    resp = client.options(
+        "/auth/login",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    allowed_methods = resp.headers["access-control-allow-methods"]
+    assert "*" not in allowed_methods
+    assert {m.strip() for m in allowed_methods.split(",")} == {
+        "GET",
+        "POST",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+    }
+
+
+def test_preflight_does_not_advertise_wildcard_headers(client: TestClient) -> None:
+    resp = client.options(
+        "/auth/me",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+
+    allowed_headers = resp.headers["access-control-allow-headers"].lower()
+    assert "*" not in allowed_headers
+    # Starlette's CORSMiddleware always unions allow_headers with the
+    # CORS-safelisted headers (Accept, Accept-Language, Content-Language,
+    # Content-Type), so those appear even though we only configured
+    # Authorization and Content-Type explicitly.
+    assert {h.strip() for h in allowed_headers.split(",")} == {
+        "accept",
+        "accept-language",
+        "content-language",
+        "content-type",
+        "authorization",
+    }
+
+
 def test_refresh_valid_cookie_returns_new_access_token(
     client: TestClient, admin_user: User
 ) -> None:
