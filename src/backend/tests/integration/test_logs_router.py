@@ -1,6 +1,6 @@
 """Integration tests for log ingestion and log listing APIs."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -851,3 +851,40 @@ def test_ingest_keeps_reported_paranoia_level_when_present(
     )
     assert resp.status_code == 201
     assert resp.json()["paranoia_level"] == 1
+
+
+def test_cleanup_logs_removes_only_rows_older_than_retention(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+) -> None:
+    """Admin-triggered cleanup deletes only rows past the retention threshold."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    old_log = _create_log(db, event_at=now - timedelta(days=31))
+    recent_log = _create_log(db, event_at=now - timedelta(days=1))
+
+    resp = client.post("/logs/cleanup", headers=admin_token)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["deleted"] == 1
+    assert body["retention_days"] == 30
+
+    remaining_ids = {row.id for row in db.query(Log).all()}
+    assert old_log.id not in remaining_ids
+    assert recent_log.id in remaining_ids
+
+
+def test_cleanup_logs_requires_auth(client: TestClient) -> None:
+    """Cleanup is rejected without an Authorization header."""
+    resp = client.post("/logs/cleanup")
+    assert resp.status_code == 401
+
+
+def test_cleanup_logs_requires_admin_role(
+    client: TestClient,
+    viewer_token: dict[str, str],
+) -> None:
+    """Cleanup is rejected for an authenticated non-admin user."""
+    resp = client.post("/logs/cleanup", headers=viewer_token)
+    assert resp.status_code == 403
