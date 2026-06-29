@@ -1,6 +1,6 @@
 """VHosts API router — virtual host CRUD."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,7 +9,13 @@ from app.models.policy_binding import PolicyBinding
 from app.models.user import User
 from app.models.vhost import VHost
 from app.schemas.policy_binding import PolicyBindingCreate, PolicyBindingResponse
-from app.schemas.vhost import VHostCreate, VHostDetail, VHostResponse, VHostUpdate
+from app.schemas.vhost import (
+    VHostCreate,
+    VHostDetail,
+    VHostListResponse,
+    VHostResponse,
+    VHostUpdate,
+)
 from app.services.vhost_service import (
     PolicyBindingAlreadyExistsError,
     PolicyBindingDefaultManagedByVHostError,
@@ -67,14 +73,18 @@ def create_vhost(
         ) from error
 
 
-@router.get("", response_model=list[VHostResponse])
+@router.get("", response_model=VHostListResponse)
 def list_vhosts(
+    page: int = Query(default=1, ge=1, le=10_000),
+    per_page: int = Query(default=50, ge=1, le=500),
+    q: str | None = Query(default=None, min_length=1, max_length=255),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
-) -> list[VHost]:
-    """Returns list of vhosts (admin and viewer)."""
+) -> VHostListResponse:
+    """Returns a paginated list of vhosts, optionally filtered by domain."""
     service = VHostService(db)
-    return service.list_vhosts()
+    items, total = service.list_vhosts(page=page, per_page=per_page, q=q)
+    return VHostListResponse(items=items, total=total, page=page, per_page=per_page)
 
 
 @router.get("/{vhost_id}", response_model=VHostDetail)

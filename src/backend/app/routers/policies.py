@@ -1,17 +1,24 @@
 """Policies API router — WAF policy CRUD."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.policy import Policy
 from app.models.user import User
-from app.schemas.policy import PolicyCreate, PolicyDetail, PolicyResponse, PolicyUpdate
+from app.schemas.policy import (
+    PolicyCreate,
+    PolicyDetail,
+    PolicyListResponse,
+    PolicyResponse,
+    PolicyUpdate,
+)
 from app.services.policy_service import (
     PolicyDatabaseConstraintError,
     PolicyDisallowedFieldError,
     PolicyFieldCannotBeNullError,
+    PolicyInUseError,
     PolicyNameAlreadyExistsError,
     PolicyNotFoundError,
     PolicyService,
@@ -51,14 +58,18 @@ def create_policy(
         ) from error
 
 
-@router.get("", response_model=list[PolicyResponse])
+@router.get("", response_model=PolicyListResponse)
 def list_policies(
+    page: int = Query(default=1, ge=1, le=10_000),
+    per_page: int = Query(default=50, ge=1, le=500),
+    q: str | None = Query(default=None, min_length=1, max_length=255),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
-) -> list[Policy]:
-    """Returns list of WAF policies (admin and viewer)."""
+) -> PolicyListResponse:
+    """Returns a paginated list of WAF policies, optionally filtered by name."""
     service = PolicyService(db)
-    return service.list_policies()
+    items, total = service.list_policies(page=page, per_page=per_page, q=q)
+    return PolicyListResponse(items=items, total=total, page=page, per_page=per_page)
 
 
 @router.get("/{policy_id}", response_model=PolicyDetail)
@@ -134,6 +145,11 @@ def delete_policy(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Policy not found",
+        ) from error
+    except PolicyInUseError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Policy is assigned to a virtual host",
         ) from error
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
