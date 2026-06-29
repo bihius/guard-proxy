@@ -106,6 +106,14 @@ machine-readable degraded reason header.
 5. FastAPI validates and normalizes payloads into the persisted `Log` model.
 6. `GET /logs` exposes stored events for the admin panel log viewer.
 
+### Log Retention
+`LOG_RETENTION_DAYS` (default `30`) controls how long `Log` rows are kept.
+A daily APScheduler job (`purge_old_logs` in
+`src/backend/app/services/scheduler.py`) deletes rows whose `event_at` is
+older than the threshold and logs the deleted count at `INFO`. Admins can
+also trigger an immediate cleanup via `POST /logs/cleanup`. Both paths share
+`purge_logs_older_than` in `src/backend/app/services/log_retention.py`.
+
 **Limitation — one log row per request, even when multiple rules fire.** A
 single Coraza transaction can trigger several CRS rules at once (e.g. an SQL
 injection probe matching `942100`, `942190`, `942270`, and `942360`

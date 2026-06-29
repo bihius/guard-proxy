@@ -76,6 +76,8 @@ class Settings(EnvFileSettings):
     haproxy_validation_timeout_seconds: int = 10
     haproxy_master_socket_path: str = "/var/run/haproxy/master.sock"
     haproxy_reload_timeout_seconds: int = 10
+    log_retention_days: int = 30
+
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_empty(cls, value: str) -> str:
@@ -100,6 +102,13 @@ class Settings(EnvFileSettings):
     def timeout_settings_must_be_positive(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("Runtime timeout settings must be greater than zero.")
+        return value
+
+    @field_validator("log_retention_days")
+    @classmethod
+    def log_retention_days_must_be_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("LOG_RETENTION_DAYS must be greater than zero.")
         return value
 
     # JWT
