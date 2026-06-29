@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.custom_rule import CustomRule
 from app.models.policy import Policy
@@ -51,7 +51,12 @@ class RuntimeStatusService:
         )
 
     def _build_generated_config_status(self) -> RuntimeGeneratedConfigStatus:
-        vhosts = self.db.query(VHost).order_by(VHost.domain.asc()).all()
+        vhosts = (
+            self.db.query(VHost)
+            .options(selectinload(VHost.backends))
+            .order_by(VHost.domain.asc())
+            .all()
+        )
         policies = self.db.query(Policy).order_by(Policy.id.asc()).all()
         rule_overrides = (
             self.db.query(RuleOverride).order_by(RuleOverride.id.asc()).all()
@@ -139,4 +144,3 @@ class RuntimeStatusService:
         digest.update(b"\n---\n")
         digest.update(rule_overrides_conf.encode("utf-8"))
         return digest.hexdigest()
-

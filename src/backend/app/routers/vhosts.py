@@ -46,6 +46,11 @@ def create_vhost(
         return service.create_vhost(
             domain=body.domain,
             backend_url=body.backend_url,
+            backends=(
+                [backend.model_dump() for backend in body.backends]
+                if body.backends is not None
+                else None
+            ),
             description=body.description,
             ssl_enabled=body.ssl_enabled,
             ssl_provider=body.ssl_provider,
