@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 
 import { Modal } from "@/components/shared/Modal";
 import { Alert } from "@/components/ui/alert";
@@ -11,7 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
 
 import { createVHost, updateVHost } from "./api";
-import type { Policy, VHost } from "./types";
+import type { Policy, VHost, VHostBackendInput } from "./types";
 
 type CreateMode = { mode: "create" };
 type EditMode = { mode: "edit"; vhost: VHost };
@@ -22,14 +23,38 @@ type VHostFormModalProps = (CreateMode | EditMode) & {
   onClose: () => void;
 };
 
+function newBackend(url = ""): VHostBackendInput {
+  return {
+    url,
+    is_active: true,
+    health_check_enabled: true,
+    health_check_path: "/",
+    health_check_interval_seconds: 5,
+    health_check_fall: 3,
+    health_check_rise: 2,
+  };
+}
+
 export function VHostFormModal(props: VHostFormModalProps) {
   const { policies, onSuccess, onClose } = props;
   const { accessToken } = useAuth();
 
   const initial = props.mode === "edit" ? props.vhost : null;
+  const initialBackends =
+    initial?.backends && initial.backends.length > 0
+      ? initial.backends.map((backend) => ({
+          url: backend.url,
+          is_active: backend.is_active,
+          health_check_enabled: backend.health_check_enabled,
+          health_check_path: backend.health_check_path,
+          health_check_interval_seconds: backend.health_check_interval_seconds,
+          health_check_fall: backend.health_check_fall,
+          health_check_rise: backend.health_check_rise,
+        }))
+      : [newBackend(initial?.backend_url ?? "")];
 
   const [domain, setDomain] = useState(initial?.domain ?? "");
-  const [backendUrl, setBackendUrl] = useState(initial?.backend_url ?? "");
+  const [backends, setBackends] = useState<VHostBackendInput[]>(initialBackends);
   const [description, setDescription] = useState(initial?.description ?? "");
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [sslEnabled, setSslEnabled] = useState(initial?.ssl_enabled ?? false);
@@ -53,7 +78,8 @@ export function VHostFormModal(props: VHostFormModalProps) {
 
     const body = {
       domain,
-      backend_url: backendUrl,
+      backend_url: backends[0]?.url ?? null,
+      backends,
       description: description || null,
       ssl_enabled: sslEnabled,
       ssl_provider: sslProvider,
@@ -77,6 +103,22 @@ export function VHostFormModal(props: VHostFormModalProps) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function updateBackend(index: number, patch: Partial<VHostBackendInput>) {
+    setBackends((current) =>
+      current.map((backend, candidateIndex) =>
+        candidateIndex === index ? { ...backend, ...patch } : backend,
+      ),
+    );
+  }
+
+  function addBackend() {
+    setBackends((current) => [...current, newBackend()]);
+  }
+
+  function removeBackend(index: number) {
+    setBackends((current) => current.filter((_, candidateIndex) => candidateIndex !== index));
   }
 
   const title = props.mode === "create" ? "New virtual host" : "Edit virtual host";
@@ -123,17 +165,134 @@ export function VHostFormModal(props: VHostFormModalProps) {
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="vhost-backend-url">Backend URL</Label>
-          <Input
-            id="vhost-backend-url"
-            type="url"
-            required
-            maxLength={512}
-            value={backendUrl}
-            onChange={(e) => setBackendUrl(e.target.value)}
-            placeholder="https://backend.internal"
-          />
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label>Backends</Label>
+            <Button type="button" variant="outline" size="sm" onClick={addBackend}>
+              <Plus aria-hidden="true" />
+              Add
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {backends.map((backend, index) => (
+              <div
+                key={index}
+                className="space-y-3 rounded-md border border-border bg-muted/20 p-3"
+              >
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Label htmlFor={`vhost-backend-url-${index}`}>Backend URL</Label>
+                    <Input
+                      id={`vhost-backend-url-${index}`}
+                      type="url"
+                      required
+                      maxLength={512}
+                      value={backend.url}
+                      onChange={(e) => updateBackend(index, { url: e.target.value })}
+                      placeholder="https://backend.internal"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Remove backend"
+                    disabled={backends.length === 1}
+                    onClick={() => removeBackend(index)}
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Label className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={backend.is_active}
+                      onChange={(e) =>
+                        updateBackend(index, { is_active: e.target.checked })
+                      }
+                    />
+                    Active
+                  </Label>
+                  <Label className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={backend.health_check_enabled}
+                      onChange={(e) =>
+                        updateBackend(index, {
+                          health_check_enabled: e.target.checked,
+                        })
+                      }
+                    />
+                    Health checks
+                  </Label>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="space-y-1.5 sm:col-span-1">
+                    <Label htmlFor={`vhost-health-path-${index}`}>Path</Label>
+                    <Input
+                      id={`vhost-health-path-${index}`}
+                      type="text"
+                      maxLength={255}
+                      value={backend.health_check_path}
+                      onChange={(e) =>
+                        updateBackend(index, {
+                          health_check_path: e.target.value,
+                        })
+                      }
+                      disabled={!backend.health_check_enabled}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`vhost-health-interval-${index}`}>Interval</Label>
+                    <Input
+                      id={`vhost-health-interval-${index}`}
+                      type="number"
+                      min={1}
+                      value={backend.health_check_interval_seconds}
+                      onChange={(e) =>
+                        updateBackend(index, {
+                          health_check_interval_seconds: Number(e.target.value),
+                        })
+                      }
+                      disabled={!backend.health_check_enabled}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`vhost-health-fall-${index}`}>Fall</Label>
+                    <Input
+                      id={`vhost-health-fall-${index}`}
+                      type="number"
+                      min={1}
+                      value={backend.health_check_fall}
+                      onChange={(e) =>
+                        updateBackend(index, {
+                          health_check_fall: Number(e.target.value),
+                        })
+                      }
+                      disabled={!backend.health_check_enabled}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`vhost-health-rise-${index}`}>Rise</Label>
+                    <Input
+                      id={`vhost-health-rise-${index}`}
+                      type="number"
+                      min={1}
+                      value={backend.health_check_rise}
+                      onChange={(e) =>
+                        updateBackend(index, {
+                          health_check_rise: Number(e.target.value),
+                        })
+                      }
+                      disabled={!backend.health_check_enabled}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-1.5">
