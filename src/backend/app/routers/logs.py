@@ -10,12 +10,18 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_admin
 from app.models.log import Log, LogAction, LogSeverity
 from app.models.policy import Policy
 from app.models.user import User
 from app.models.vhost import VHost
-from app.schemas.log import LogIngestRequest, LogListResponse, LogResponse
+from app.schemas.log import (
+    LogCleanupResponse,
+    LogIngestRequest,
+    LogListResponse,
+    LogResponse,
+)
+from app.services.log_retention import purge_logs_older_than
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -188,6 +194,19 @@ def list_logs(
         total=total,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.post("/cleanup", response_model=LogCleanupResponse)
+def cleanup_logs(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> LogCleanupResponse:
+    """Delete log events older than the configured retention threshold (admin only)."""
+    deleted = purge_logs_older_than(db, settings.log_retention_days)
+    return LogCleanupResponse(
+        deleted=deleted,
+        retention_days=settings.log_retention_days,
     )
 
 
