@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/hooks/use-auth";
-import { listPolicies } from "@/features/vhosts/api";
+import { listAllPolicies } from "@/features/vhosts/api";
 import type { Policy } from "@/features/vhosts/types";
 
 import { listLogs } from "./api";
@@ -63,7 +63,7 @@ export function useLogs(): LogsState {
         },
         controller.signal,
       ),
-      listPolicies(accessToken, controller.signal),
+      listAllPolicies(accessToken, controller.signal),
     ])
       .then(([logList, policyList]) => {
         if (generation !== refreshCountRef.current) return;

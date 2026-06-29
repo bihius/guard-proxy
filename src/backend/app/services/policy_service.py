@@ -4,6 +4,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.policy_binding import PolicyBinding
+from app.models.vhost import VHost
 
 NON_NULLABLE_PATCH_FIELDS = {
     "name",
@@ -58,6 +60,10 @@ class PolicyDatabaseConstraintError(PolicyError):
     """Raised when an IntegrityError occurs for a reason other than a duplicate name."""
 
 
+class PolicyInUseError(PolicyError):
+    """Raised when a policy is still assigned to a vhost or path binding."""
+
+
 class PolicyService:
     """Encapsulates policy CRUD business rules.
 
@@ -104,9 +110,28 @@ class PolicyService:
         self.db.refresh(policy)
         return policy
 
-    def list_policies(self) -> list[Policy]:
-        """Return all policies sorted by ID."""
-        return self.db.query(Policy).order_by(Policy.id.asc()).all()
+    def list_policies(
+        self,
+        *,
+        page: int = 1,
+        per_page: int = 50,
+        q: str | None = None,
+    ) -> tuple[list[Policy], int]:
+        """Return a page of policies sorted by ID, optionally filtered by name."""
+        query = self.db.query(Policy)
+
+        search = q.strip() if q is not None else None
+        if search:
+            query = query.filter(Policy.name.ilike(f"%{search}%"))
+
+        total = query.count()
+        items = (
+            query.order_by(Policy.id.asc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+        return items, total
 
     def get_policy(self, policy_id: int) -> Policy:
         """Return one policy with related rule overrides and exclusions loaded."""
@@ -146,8 +171,26 @@ class PolicyService:
     def delete_policy(self, policy_id: int) -> None:
         """Delete a policy if it exists."""
         policy = self._get_policy_or_raise(policy_id)
+        if self._policy_is_assigned(policy_id):
+            raise PolicyInUseError
         self.db.delete(policy)
         self.db.commit()
+
+    def _policy_is_assigned(self, policy_id: int) -> bool:
+        """Return whether any vhost or path binding currently uses the policy."""
+        vhost_exists = (
+            self.db.query(VHost.id).filter(VHost.policy_id == policy_id).first()
+            is not None
+        )
+        if vhost_exists:
+            return True
+
+        return (
+            self.db.query(PolicyBinding.id)
+            .filter(PolicyBinding.policy_id == policy_id)
+            .first()
+            is not None
+        )
 
     def _get_policy_or_raise(self, policy_id: int) -> Policy:
         """Return a policy by primary key or raise a domain error."""
