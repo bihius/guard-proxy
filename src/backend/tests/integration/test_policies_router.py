@@ -133,7 +133,7 @@ def test_create_policy_invalid_paranoia_level_returns_422(
 def test_list_policies_admin_returns_200(
     client: TestClient, admin_token: dict[str, str]
 ) -> None:
-    """Admin może pobrać listę polityk."""
+    """Admin can list policies with pagination metadata."""
     _create_policy(client, admin_token, name="P1")
     _create_policy(client, admin_token, name="P2")
 
@@ -141,10 +141,10 @@ def test_list_policies_admin_returns_200(
     assert resp.status_code == 200
 
     body = resp.json()
-    assert isinstance(body, list)
-    assert len(body) == 2
-    assert body[0]["name"] == "P1"
-    assert body[1]["name"] == "P2"
+    assert body["total"] == 2
+    assert body["page"] == 1
+    assert body["per_page"] == 50
+    assert [item["name"] for item in body["items"]] == ["P1", "P2"]
 
 
 def test_list_policies_viewer_returns_200(
@@ -155,13 +155,45 @@ def test_list_policies_viewer_returns_200(
 
     resp = client.get("/policies", headers=viewer_token)
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()["items"]) == 1
 
 
 def test_list_policies_requires_auth(client: TestClient) -> None:
     """Brak tokena -> 401."""
     resp = client.get("/policies")
     assert resp.status_code == 401
+
+
+def test_list_policies_paginates_with_page_and_per_page(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """page/per_page parameters return a slice of results."""
+    for index in range(3):
+        _create_policy(client, admin_token, name=f"Policy {index}")
+
+    resp = client.get("/policies?page=2&per_page=2", headers=admin_token)
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["total"] == 3
+    assert body["page"] == 2
+    assert body["per_page"] == 2
+    assert [item["name"] for item in body["items"]] == ["Policy 2"]
+
+
+def test_list_policies_filters_by_q(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """q filters policies by a name substring."""
+    _create_policy(client, admin_token, name="Strict Web App")
+    _create_policy(client, admin_token, name="Relaxed API")
+
+    resp = client.get("/policies?q=web", headers=admin_token)
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["total"] == 1
+    assert [item["name"] for item in body["items"]] == ["Strict Web App"]
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +373,29 @@ def test_delete_policy_admin_returns_204(
 
     get_resp = client.get(f"/policies/{created['id']}", headers=admin_token)
     assert get_resp.status_code == 404
+
+
+def test_delete_policy_assigned_to_vhost_returns_409(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Assigned policies cannot be deleted."""
+    created = _create_policy(client, admin_token, name="Assigned policy")
+    vhost_resp = client.post(
+        "/vhosts",
+        headers=admin_token,
+        json={
+            "domain": "assigned.example.com",
+            "backend_url": "http://localhost:8080",
+            "policy_id": created["id"],
+        },
+    )
+    assert vhost_resp.status_code == 201
+
+    resp = client.delete(f"/policies/{created['id']}", headers=admin_token)
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Policy is assigned to a virtual host"
 
 
 def test_delete_policy_viewer_forbidden(

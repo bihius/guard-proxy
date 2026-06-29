@@ -118,7 +118,12 @@ ensure_policy() {
 import json, sys, os
 data = json.loads(os.environ["POLICY_RESPONSE"])
 name = os.environ["POLICY_NAME"]
-items = data if isinstance(data, list) else [data]
+if isinstance(data, dict) and "items" in data:
+    items = data["items"]
+elif isinstance(data, list):
+    items = data
+else:
+    items = [data]
 for item in items:
     if item["name"] == name:
         print(item["id"]); sys.exit(0)
@@ -139,7 +144,8 @@ ensure_vhost() {
   vhost_id="$(VHOSTS="${vhosts_response}" DOMAIN="${domain}" python3 - <<'PY'
 import json, os
 data = json.loads(os.environ["VHOSTS"]); domain = os.environ["DOMAIN"]
-for item in data:
+items = data["items"] if isinstance(data, dict) and "items" in data else data
+for item in items:
     if item["domain"] == domain:
         print(item["id"]); exit(0)
 exit(f"vhost {domain!r} not found")

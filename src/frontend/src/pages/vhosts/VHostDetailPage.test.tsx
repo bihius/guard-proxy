@@ -80,7 +80,7 @@ function mockSuccessfulLoad(
   overrides: RuleOverride[] = mockOverrides,
 ) {
   vi.mocked(vhostsApi.getVHost).mockResolvedValue(vhost);
-  vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+  vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
   vi.mocked(policiesApi.listRuleOverrides).mockResolvedValue(overrides);
 }
 
@@ -107,7 +107,7 @@ describe("VHostDetailPage", () => {
 
   it("shows loading state initially", () => {
     vi.mocked(vhostsApi.getVHost).mockReturnValue(new Promise(() => undefined));
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
 
@@ -134,7 +134,7 @@ describe("VHostDetailPage", () => {
     vi.mocked(vhostsApi.getVHost)
       .mockRejectedValueOnce(new Error("Network error"))
       .mockResolvedValue(mockVHost);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
     vi.mocked(policiesApi.listRuleOverrides).mockResolvedValue(mockOverrides);
 
     renderPage();

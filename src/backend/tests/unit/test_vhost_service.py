@@ -165,10 +165,62 @@ def test_list_vhosts_returns_items_sorted_by_id(
         created_by=admin_user.id,
     )
 
-    vhosts = service.list_vhosts()
+    vhosts, total = service.list_vhosts()
 
+    assert total == 2
     assert [vhost.id for vhost in vhosts] == [first.id, second.id]
     assert [vhost.domain for vhost in vhosts] == ["a.example.com", "b.example.com"]
+
+
+def test_list_vhosts_paginates_results(db: Session, admin_user: User) -> None:
+    service = VHostService(db)
+    for index in range(3):
+        service.create_vhost(
+            domain=f"host{index}.example.com",
+            backend_url="http://localhost:8080",
+            description=None,
+            ssl_enabled=False,
+            is_active=True,
+            policy_id=None,
+            created_by=admin_user.id,
+        )
+
+    first_page, total = service.list_vhosts(page=1, per_page=2)
+    second_page, _ = service.list_vhosts(page=2, per_page=2)
+
+    assert total == 3
+    assert [vhost.domain for vhost in first_page] == [
+        "host0.example.com",
+        "host1.example.com",
+    ]
+    assert [vhost.domain for vhost in second_page] == ["host2.example.com"]
+
+
+def test_list_vhosts_filters_by_domain_substring(db: Session, admin_user: User) -> None:
+    service = VHostService(db)
+    service.create_vhost(
+        domain="app.example.com",
+        backend_url="http://localhost:8080",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+    service.create_vhost(
+        domain="api.other.com",
+        backend_url="http://localhost:8081",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+
+    vhosts, total = service.list_vhosts(q="example")
+
+    assert total == 1
+    assert [vhost.domain for vhost in vhosts] == ["app.example.com"]
 
 
 def test_get_vhost_returns_existing_vhost(db: Session, admin_user: User) -> None:

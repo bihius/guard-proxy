@@ -15,7 +15,7 @@ import {
   type RuleOverrideModalState,
 } from "@/features/policies/RuleOverrideModals";
 import type { RuleOverride } from "@/features/policies/types";
-import { getVHost, listPolicies, updateVHost } from "@/features/vhosts/api";
+import { getVHost, listAllPolicies, updateVHost } from "@/features/vhosts/api";
 import type { Policy, VHostDetail } from "@/features/vhosts/types";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
@@ -61,7 +61,7 @@ export function VHostDetailPage() {
 
     Promise.all([
       getVHost(accessToken, parsedVHostId, controller.signal),
-      listPolicies(accessToken, controller.signal),
+      listAllPolicies(accessToken, controller.signal),
     ])
       .then(async ([vhostDetail, policyList]) => {
         let overrides: RuleOverride[] = [];

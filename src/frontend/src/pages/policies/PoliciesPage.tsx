@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DeletePolicyDialog } from "@/features/policies/DeletePolicyDialog";
 import { PolicyFormModal } from "@/features/policies/PolicyFormModal";
 import type { Policy } from "@/features/policies/types";
@@ -25,9 +26,22 @@ type ModalState =
 export function PoliciesPage() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
-  const { policies, assignedPolicyIds, isLoading, error, refresh } = usePolicies();
+  const {
+    policies,
+    total,
+    page,
+    pageSize,
+    searchQuery,
+    assignedPolicyIds,
+    isLoading,
+    error,
+    setPage,
+    setSearchQuery,
+    refresh,
+  } = usePolicies();
   const [modal, setModal] = useState<ModalState>(null);
   const isAdmin = hasRole("admin");
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   function closeAndRefresh() {
     setModal(null);
@@ -147,7 +161,19 @@ export function PoliciesPage() {
         }
       />
 
-      <SectionCard title="Policies" description="All configured WAF policies and their current settings.">
+      <SectionCard
+        title="Policies"
+        description="All configured WAF policies and their current settings."
+        actions={
+          <Input
+            aria-label="Search policies"
+            className="w-full sm:w-72"
+            placeholder="Search names"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        }
+      >
         {isLoading ? (
           <LoadingState label="Loading policies…" />
         ) : error ? (
@@ -165,14 +191,42 @@ export function PoliciesPage() {
             }
           />
         ) : (
-          <DataTable
-            columns={columns}
-            rows={policies}
-            getRowKey={(row) => String(row.id)}
-            emptyTitle="No policies yet"
-            emptyDescription="Create your first WAF policy to start protecting your virtual hosts."
-            onRowClick={(row) => navigate(getPolicyDetailPath(row.id))}
-          />
+          <>
+            <DataTable
+              columns={columns}
+              rows={policies}
+              getRowKey={(row) => String(row.id)}
+              emptyTitle="No policies found"
+              emptyDescription="Create a WAF policy or adjust the search query."
+              onRowClick={(row) => navigate(getPolicyDetailPath(row.id))}
+            />
+
+            {total > 0 && (
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages} · {total} policies
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page <= 1}
+                    variant="outline"
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page >= totalPages}
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </SectionCard>
 

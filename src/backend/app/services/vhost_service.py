@@ -155,14 +155,28 @@ class VHostService:
         self.db.refresh(vhost)
         return vhost
 
-    def list_vhosts(self) -> list[VHost]:
-        """Return all vhosts sorted by ID."""
-        return (
-            self.db.query(VHost)
-            .options(selectinload(VHost.policy_bindings))
-            .order_by(VHost.id.asc())
+    def list_vhosts(
+        self,
+        *,
+        page: int = 1,
+        per_page: int = 50,
+        q: str | None = None,
+    ) -> tuple[list[VHost], int]:
+        """Return a page of vhosts sorted by ID, optionally filtered by domain."""
+        query = self.db.query(VHost).options(selectinload(VHost.policy_bindings))
+
+        search = q.strip() if q is not None else None
+        if search:
+            query = query.filter(VHost.domain.ilike(f"%{search}%"))
+
+        total = query.count()
+        items = (
+            query.order_by(VHost.id.asc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
             .all()
         )
+        return items, total
 
     def get_vhost(self, vhost_id: int) -> VHost:
         """Return one vhost with related policy loaded."""
