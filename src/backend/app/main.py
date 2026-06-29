@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings, validate_runtime_settings
 from app.database import SessionLocal, get_db
@@ -77,7 +77,7 @@ def _seed_runtime_config() -> None:
     """
     db = SessionLocal()
     try:
-        vhosts = db.query(VHost).all()
+        vhosts = db.query(VHost).options(selectinload(VHost.backends)).all()
         policies = db.query(Policy).all()
         rule_overrides = db.query(RuleOverride).all()
         rule_exclusions = db.query(RuleExclusion).all()

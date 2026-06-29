@@ -3,8 +3,10 @@
 from typing import Any
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.models.user import User
+from app.models.vhost_backend import VHostBackend
 
 
 def _create_policy(
@@ -93,9 +95,100 @@ def test_create_vhost_admin_returns_201(
     assert body["is_active"] is True
     assert body["policy_id"] == policy["id"]
     assert body["created_by"] == admin_user.id
+    assert len(body["backends"]) == 1
+    assert body["backends"][0]["url"] == "http://localhost:3000"
+    assert body["backends"][0]["health_check_enabled"] is True
     assert len(body["policy_bindings"]) == 1
     assert body["policy_bindings"][0]["policy_id"] == policy["id"]
     assert body["policy_bindings"][0]["path_prefix"] == "/"
+
+
+def test_create_vhost_with_multiple_backends_returns_201(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Admin can create a vhost backed by multiple health-checked servers."""
+    resp = client.post(
+        "/vhosts",
+        headers=admin_token,
+        json={
+            "domain": "multi.example.com",
+            "backends": [
+                {
+                    "url": "http://backend-a:8000",
+                    "health_check_path": "/ready",
+                    "health_check_interval_seconds": 2,
+                    "health_check_fall": 2,
+                    "health_check_rise": 3,
+                },
+                {
+                    "url": "http://backend-b:8000",
+                    "health_check_path": "/ready",
+                },
+            ],
+        },
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["backend_url"] == "http://backend-a:8000"
+    assert [backend["url"] for backend in body["backends"]] == [
+        "http://backend-a:8000",
+        "http://backend-b:8000",
+    ]
+    assert body["backends"][0]["health_check_path"] == "/ready"
+    assert body["backends"][0]["health_check_interval_seconds"] == 2
+
+
+def test_create_vhost_rejects_mixed_health_check_paths(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """HAProxy supports one health check path per vhost backend section."""
+    resp = client.post(
+        "/vhosts",
+        headers=admin_token,
+        json={
+            "domain": "mixed-health.example.com",
+            "backends": [
+                {
+                    "url": "http://backend-a:8000",
+                    "health_check_path": "/ready",
+                },
+                {
+                    "url": "http://backend-b:8000",
+                    "health_check_path": "/healthz",
+                },
+            ],
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "same health_check_path" in resp.json()["detail"]
+
+
+def test_create_active_vhost_rejects_all_inactive_backends(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """Active vhosts must have at least one active backend."""
+    resp = client.post(
+        "/vhosts",
+        headers=admin_token,
+        json={
+            "domain": "inactive-backends.example.com",
+            "backends": [
+                {
+                    "url": "http://backend-a:8000",
+                    "is_active": False,
+                }
+            ],
+            "is_active": True,
+        },
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Active vhosts require at least one active backend"
 
 
 def test_create_vhost_viewer_forbidden(
@@ -307,6 +400,70 @@ def test_patch_vhost_admin_partial_update(
     assert body["backend_url"] == "https://backend.internal:443"
     assert body["ssl_enabled"] is True
     assert body["is_active"] is True
+
+
+def test_patch_vhost_replaces_backends(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """PATCH can replace the backend server list."""
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="replace-backends.example.com",
+        backend_url="http://old-backend:8000",
+    )
+
+    resp = client.patch(
+        f"/vhosts/{created['id']}",
+        headers=admin_token,
+        json={
+            "backends": [
+                {"url": "http://new-a:8000", "health_check_path": "/ready"},
+                {
+                    "url": "http://new-b:8000",
+                    "health_check_enabled": False,
+                },
+            ]
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["backend_url"] == "http://new-a:8000"
+    assert [backend["url"] for backend in body["backends"]] == [
+        "http://new-a:8000",
+        "http://new-b:8000",
+    ]
+    assert body["backends"][0]["health_check_path"] == "/ready"
+    assert body["backends"][1]["health_check_enabled"] is False
+
+
+def test_patch_vhost_rejects_mixed_health_check_paths(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """PATCH rejects backend lists HAProxy cannot represent correctly."""
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="mixed-patch-health.example.com",
+        backend_url="http://old-backend:8000",
+    )
+
+    resp = client.patch(
+        f"/vhosts/{created['id']}",
+        headers=admin_token,
+        json={
+            "backends": [
+                {"url": "http://new-a:8000", "health_check_path": "/ready"},
+                {"url": "http://new-b:8000", "health_check_path": "/healthz"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "same health_check_path" in resp.json()["detail"]
 
 
 def test_patch_vhost_viewer_forbidden(
@@ -721,6 +878,25 @@ def test_delete_vhost_admin_returns_204(
 
     get_resp = client.get(f"/vhosts/{created['id']}", headers=admin_token)
     assert get_resp.status_code == 404
+
+
+def test_delete_vhost_cascades_backends(
+    client: TestClient,
+    admin_token: dict[str, str],
+    db: Session,
+) -> None:
+    """Deleting a vhost removes its backend rows."""
+    created = _create_vhost(
+        client,
+        admin_token,
+        domain="cascade-backends.example.com",
+    )
+    assert db.query(VHostBackend).count() == 1
+
+    resp = client.delete(f"/vhosts/{created['id']}", headers=admin_token)
+
+    assert resp.status_code == 204
+    assert db.query(VHostBackend).count() == 0
 
 
 def test_delete_vhost_viewer_forbidden(
