@@ -12,6 +12,13 @@ export type Policy = {
   updated_at: string;
 };
 
+export type PolicyListResponse = {
+  items: Policy[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
 export type RuleOverride = {
   id: number;
   policy_id: number;

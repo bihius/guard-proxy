@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DeleteVHostDialog } from "@/features/vhosts/DeleteVHostDialog";
 import { VHostFormModal } from "@/features/vhosts/VHostFormModal";
 import { useVHosts } from "@/features/vhosts/use-vhosts";
@@ -25,9 +26,23 @@ type ModalState =
 export function VHostsPage() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
-  const { vhosts, policies, policyNameById, isLoading, error, refresh } = useVHosts();
+  const {
+    vhosts,
+    total,
+    page,
+    pageSize,
+    searchQuery,
+    policies,
+    policyNameById,
+    isLoading,
+    error,
+    setPage,
+    setSearchQuery,
+    refresh,
+  } = useVHosts();
   const [modal, setModal] = useState<ModalState>(null);
   const isAdmin = hasRole("admin");
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   function closeAndRefresh() {
     setModal(null);
@@ -132,7 +147,19 @@ export function VHostsPage() {
         }
       />
 
-      <SectionCard title="Registered hosts" description="All configured virtual hosts and their current status.">
+      <SectionCard
+        title="Registered hosts"
+        description="All configured virtual hosts and their current status."
+        actions={
+          <Input
+            aria-label="Search virtual hosts"
+            className="w-full sm:w-72"
+            placeholder="Search domains"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        }
+      >
         {isLoading ? (
           <LoadingState label="Loading virtual hosts…" />
         ) : error ? (
@@ -150,14 +177,42 @@ export function VHostsPage() {
             }
           />
         ) : (
-          <DataTable
-            columns={columns}
-            rows={vhosts}
-            getRowKey={(row) => String(row.id)}
-            onRowClick={(row) => navigate(getVHostDetailPath(row.id))}
-            emptyTitle="No virtual hosts yet"
-            emptyDescription="Create your first virtual host to start routing traffic through Guard Proxy."
-          />
+          <>
+            <DataTable
+              columns={columns}
+              rows={vhosts}
+              getRowKey={(row) => String(row.id)}
+              onRowClick={(row) => navigate(getVHostDetailPath(row.id))}
+              emptyTitle="No virtual hosts found"
+              emptyDescription="Create a virtual host or adjust the search query."
+            />
+
+            {total > 0 && (
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages} · {total} virtual hosts
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page <= 1}
+                    variant="outline"
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page >= totalPages}
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </SectionCard>
 
