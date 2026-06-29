@@ -245,30 +245,7 @@ POST /policies/3/exclusions
 
 ---
 
-### Example 3 — a scanner probing sensitive files (do NOT create an exclusion)
 
-You see a block in your logs:
-
-| Field | Value |
-|---|---|
-| Method | `GET` |
-| Request URI | `/.env` |
-| Rule ID | `930130` |
-| Rule message | `Restricted File Access Attempt` |
-
-**Step 1 — What does the rule do?**  
-Rule `930130` is part of the CRS file-access group. It blocks requests for sensitive files such as `.env`, `.git`, `.htaccess`, and backup files.
-
-**Step 2 — Is this a false positive?**  
-Ask yourself: *"Should a legitimate user ever request `/.env`?"*  
-The answer is **no**. `.env` contains secrets (database passwords, API keys). A request for it is almost always a malicious scanner or bot.
-
-**Step 3 — Decision**  
-Do **nothing**. The WAF worked exactly as intended. Creating an exclusion here would open a security hole.
-
-> **Golden rule:** If the blocked request looks like an attack, do not tune the rule — let it block.
-
----
 
 ### Quick checklist for every log
 
