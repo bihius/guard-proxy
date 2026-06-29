@@ -21,6 +21,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.policy import Policy
     from app.models.policy_binding import PolicyBinding
+    from app.models.vhost_backend import VHostBackend
 
 
 class VHost(Base):
@@ -100,6 +101,13 @@ class VHost(Base):
         back_populates="vhost",
         cascade="all, delete-orphan",
         order_by="PolicyBinding.priority.asc(), PolicyBinding.id.asc()",
+    )
+
+    backends: Mapped[list[VHostBackend]] = relationship(
+        "VHostBackend",
+        back_populates="vhost",
+        cascade="all, delete-orphan",
+        order_by="VHostBackend.id.asc()",
     )
 
     def __repr__(self) -> str:

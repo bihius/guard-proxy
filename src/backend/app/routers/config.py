@@ -4,7 +4,7 @@ import threading
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import require_admin
@@ -91,7 +91,7 @@ def apply_config(
             detail="Another config apply is already in progress",
         )
     try:
-        vhosts = db.query(VHost).all()
+        vhosts = db.query(VHost).options(selectinload(VHost.backends)).all()
         policies = db.query(Policy).all()
         rule_overrides = db.query(RuleOverride).all()
         rule_exclusions = db.query(RuleExclusion).all()
