@@ -44,6 +44,13 @@ class LogListResponse(BaseModel):
     page_size: int
 
 
+class LogCleanupResponse(BaseModel):
+    """Result of a retention cleanup run returned by POST /logs/cleanup."""
+
+    deleted: int
+    retention_days: int
+
+
 class LogIngestRequest(BaseModel):
     """Payload accepted from a future runtime log producer."""
 

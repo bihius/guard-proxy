@@ -5,9 +5,11 @@ from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.vhost import VHost
 from app.services.certbot_service import CertbotError, CertbotService
+from app.services.log_retention import purge_logs_older_than
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +72,19 @@ def renew_certificates() -> None:
                 except CertbotError as e:
                     logger.error(f"Failed to renew certificate for {vhost.domain}: {e}")
 
+def purge_old_logs() -> None:
+    """Delete log events older than the configured retention threshold."""
+    with SessionLocal() as db:
+        deleted = purge_logs_older_than(db, settings.log_retention_days)
+        logger.info(
+            f"Log retention cleanup removed {deleted} rows older than "
+            f"{settings.log_retention_days} days"
+        )
+
 def start_scheduler() -> None:
     """Start the background scheduler."""
     scheduler.add_job(renew_certificates, 'interval', days=1, id='renew_certificates')
+    scheduler.add_job(purge_old_logs, 'interval', days=1, id='purge_old_logs')
     scheduler.start()
     logger.info("Background scheduler started")
 
