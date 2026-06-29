@@ -59,8 +59,8 @@ function renderPage() {
 
 describe("DashboardPage StatCards", () => {
   it("shows loading skeletons while all fetches are in-flight", () => {
-    vi.mocked(vhostsApi.listVHosts).mockReturnValue(new Promise(() => undefined));
-    vi.mocked(policiesApi.listPolicies).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(vhostsApi.listAllVHosts).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(policiesApi.listAllPolicies).mockReturnValue(new Promise(() => undefined));
     vi.mocked(logsApi.fetchLogTotal).mockReturnValue(new Promise(() => undefined));
 
     renderPage();
@@ -69,8 +69,8 @@ describe("DashboardPage StatCards", () => {
   });
 
   it("renders real counts after data loads", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts as never);
-    vi.mocked(policiesApi.listPolicies).mockResolvedValue(mockPolicies as never);
+    vi.mocked(vhostsApi.listAllVHosts).mockResolvedValue(mockVHosts as never);
+    vi.mocked(policiesApi.listAllPolicies).mockResolvedValue(mockPolicies as never);
     vi.mocked(logsApi.fetchLogTotal).mockResolvedValue(42);
 
     renderPage();
@@ -84,8 +84,8 @@ describe("DashboardPage StatCards", () => {
   });
 
   it("shows — only for the card whose endpoint fails, real counts for others", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockResolvedValue(mockVHosts as never);
-    vi.mocked(policiesApi.listPolicies).mockRejectedValue(new Error("Network error"));
+    vi.mocked(vhostsApi.listAllVHosts).mockResolvedValue(mockVHosts as never);
+    vi.mocked(policiesApi.listAllPolicies).mockRejectedValue(new Error("Network error"));
     vi.mocked(logsApi.fetchLogTotal).mockResolvedValue(7);
 
     renderPage();
@@ -99,8 +99,8 @@ describe("DashboardPage StatCards", () => {
   });
 
   it("shows — for all cards when all endpoints fail", async () => {
-    vi.mocked(vhostsApi.listVHosts).mockRejectedValue(new Error("down"));
-    vi.mocked(policiesApi.listPolicies).mockRejectedValue(new Error("down"));
+    vi.mocked(vhostsApi.listAllVHosts).mockRejectedValue(new Error("down"));
+    vi.mocked(policiesApi.listAllPolicies).mockRejectedValue(new Error("down"));
     vi.mocked(logsApi.fetchLogTotal).mockRejectedValue(new Error("down"));
 
     renderPage();

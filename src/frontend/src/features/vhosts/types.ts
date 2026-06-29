@@ -13,6 +13,13 @@ export type VHost = {
   updated_at: string;
 };
 
+export type VHostListResponse = {
+  items: VHost[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
 export type VHostAssignedPolicy = {
   id: number;
   name: string;
@@ -58,4 +65,11 @@ export type VHostUpdate = {
 export type Policy = {
   id: number;
   name: string;
+};
+
+export type PolicyListResponse = {
+  items: Policy[];
+  total: number;
+  page: number;
+  per_page: number;
 };

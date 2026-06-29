@@ -66,7 +66,7 @@ function renderPage() {
 describe("LogsPage", () => {
   it("shows loading state initially", () => {
     vi.mocked(logsApi.listLogs).mockReturnValue(new Promise(() => undefined));
-    vi.mocked(vhostsApi.listPolicies).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(vhostsApi.listAllPolicies).mockReturnValue(new Promise(() => undefined));
 
     renderPage();
     expect(screen.getByText(/loading logs/i)).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe("LogsPage", () => {
 
   it("renders log rows from API response", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
 
@@ -88,7 +88,7 @@ describe("LogsPage", () => {
 
   it("shows error state on API failure", async () => {
     vi.mocked(logsApi.listLogs).mockRejectedValue(new Error("Network error"));
-    vi.mocked(vhostsApi.listPolicies).mockRejectedValue(new Error("Network error"));
+    vi.mocked(vhostsApi.listAllPolicies).mockRejectedValue(new Error("Network error"));
 
     renderPage();
 
@@ -100,7 +100,7 @@ describe("LogsPage", () => {
 
   it("shows empty state when no logs match", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(emptyListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue([]);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue([]);
 
     renderPage();
 
@@ -111,7 +111,7 @@ describe("LogsPage", () => {
 
   it("hides filter inputs until the Filters toggle is opened", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -125,7 +125,7 @@ describe("LogsPage", () => {
 
   it("shows an active filter count badge after applying filters", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -141,7 +141,7 @@ describe("LogsPage", () => {
 
   it("labels the allow filter option to clarify it means flagged-but-allowed", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -155,7 +155,7 @@ describe("LogsPage", () => {
 
   it("applying filters re-fetches with filter params", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -175,7 +175,7 @@ describe("LogsPage", () => {
 
   it("applies the new severity, method, source IP, rule ID and min score filters", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -206,7 +206,7 @@ describe("LogsPage", () => {
 
   it("applies from and to date/time filters", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -241,7 +241,7 @@ describe("LogsPage", () => {
 
   it("clearing filters resets to empty params", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -261,7 +261,7 @@ describe("LogsPage", () => {
 
   it("View button opens detail modal with log fields", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
@@ -289,7 +289,7 @@ describe("LogsPage", () => {
         },
       ],
     });
-    vi.mocked(vhostsApi.listPolicies).mockResolvedValue(mockPolicies);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
 
     renderPage();
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
