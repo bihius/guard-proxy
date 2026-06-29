@@ -235,9 +235,21 @@ export function VHostDetailPage() {
                 <dd className="mt-1 font-medium text-fg">{vhost.domain}</dd>
               </div>
               <div>
-                <dt className="font-medium text-fg-muted">Backend URL</dt>
-                <dd className="mt-1 break-all font-mono text-xs text-fg">
-                  {vhost.backend_url}
+                <dt className="font-medium text-fg-muted">Backends</dt>
+                <dd className="mt-1 space-y-2">
+                  {vhost.backends.map((backend) => (
+                    <div key={backend.id} className="space-y-1">
+                      <p className="break-all font-mono text-xs text-fg">
+                        {backend.url}
+                      </p>
+                      <p className="text-xs text-fg-muted">
+                        {backend.is_active ? "Active" : "Inactive"} -{" "}
+                        {backend.health_check_enabled
+                          ? `check ${backend.health_check_path} every ${backend.health_check_interval_seconds}s`
+                          : "health checks disabled"}
+                      </p>
+                    </div>
+                  ))}
                 </dd>
               </div>
               <div>

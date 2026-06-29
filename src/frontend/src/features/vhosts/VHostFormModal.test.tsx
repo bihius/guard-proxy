@@ -47,6 +47,21 @@ describe("VHostFormModal (create)", () => {
       id: 1,
       domain: "new.example.com",
       backend_url: "https://new.internal",
+      backends: [
+        {
+          id: 1,
+          vhost_id: 1,
+          url: "https://new.internal",
+          is_active: true,
+          health_check_enabled: true,
+          health_check_path: "/",
+          health_check_interval_seconds: 5,
+          health_check_fall: 3,
+          health_check_rise: 2,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
       description: null,
       ssl_enabled: false, ssl_provider: "none" as const, ssl_expires_at: null,
       is_active: true,
@@ -69,6 +84,13 @@ describe("VHostFormModal (create)", () => {
       expect.objectContaining({
         domain: "new.example.com",
         backend_url: "https://new.internal",
+        backends: [
+          expect.objectContaining({
+            url: "https://new.internal",
+            health_check_enabled: true,
+            health_check_path: "/",
+          }),
+        ],
       }),
     );
   });

@@ -124,12 +124,14 @@ frontend fe_https
 # --- Application backends ----------------------------------------
 {% for route in routes %}
 backend {{ route.backend.name }}
-    option httpchk GET /
+    option httpchk GET {{ route.backend.health_check_path }}
     # Accept 200-499 so apps without a dedicated health endpoint still pass;
     # only 5xx/connection failures mark a backend down.
     http-check expect status 200-499
     # init-addr lets `haproxy -c` succeed when the DNS name is unresolvable.
-    server {{ route.backend.server_name }} {{ route.backend.address }} check inter 5s fall 3 rise 2 init-addr last,libc,none
+{% for server in route.backend.servers %}
+    server {{ server.server_name }} {{ server.address }}{% if server.health_check_enabled %} check inter {{ server.health_check_interval_seconds }}s fall {{ server.health_check_fall }} rise {{ server.health_check_rise }}{% endif %} init-addr last,libc,none
+{% endfor %}
 
 {% endfor %}
 

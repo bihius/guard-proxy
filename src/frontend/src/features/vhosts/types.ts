@@ -1,7 +1,32 @@
+export type VHostBackend = {
+  id: number;
+  vhost_id: number;
+  url: string;
+  is_active: boolean;
+  health_check_enabled: boolean;
+  health_check_path: string;
+  health_check_interval_seconds: number;
+  health_check_fall: number;
+  health_check_rise: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type VHostBackendInput = {
+  url: string;
+  is_active: boolean;
+  health_check_enabled: boolean;
+  health_check_path: string;
+  health_check_interval_seconds: number;
+  health_check_fall: number;
+  health_check_rise: number;
+};
+
 export type VHost = {
   id: number;
   domain: string;
   backend_url: string;
+  backends: VHostBackend[];
   description: string | null;
   ssl_enabled: boolean;
   ssl_provider: "none" | "upload" | "letsencrypt";
@@ -40,7 +65,8 @@ export type VHostDetail = VHost & {
 
 export type VHostCreate = {
   domain: string;
-  backend_url: string;
+  backend_url?: string | null;
+  backends?: VHostBackendInput[];
   description?: string | null;
   ssl_enabled?: boolean;
   ssl_provider?: "none" | "upload" | "letsencrypt";
@@ -52,7 +78,8 @@ export type VHostCreate = {
 
 export type VHostUpdate = {
   domain?: string;
-  backend_url?: string;
+  backend_url?: string | null;
+  backends?: VHostBackendInput[];
   description?: string | null;
   ssl_enabled?: boolean;
   ssl_provider?: "none" | "upload" | "letsencrypt";

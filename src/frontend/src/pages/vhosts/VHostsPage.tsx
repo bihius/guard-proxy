@@ -57,6 +57,9 @@ export function VHostsPage() {
         <div className="space-y-1">
           <p className="font-medium text-foreground">{row.domain}</p>
           <p className="font-mono text-xs text-muted-foreground">{row.backend_url}</p>
+          <p className="text-xs text-muted-foreground">
+            {row.backends.length} {row.backends.length === 1 ? "backend" : "backends"}
+          </p>
         </div>
       ),
     },
