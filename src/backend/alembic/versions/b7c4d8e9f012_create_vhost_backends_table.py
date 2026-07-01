@@ -67,8 +67,8 @@ def upgrade() -> None:
         SELECT
             id,
             backend_url,
-            1,
-            1,
+            true,
+            true,
             '/',
             5,
             3,
