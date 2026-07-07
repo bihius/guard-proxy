@@ -107,13 +107,22 @@ class CustomRule(Base):
     rule_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Which SecRule processing phase the rule runs in.
-    phase: Mapped[RulePhase] = mapped_column(Enum(RulePhase), nullable=False)
+    phase: Mapped[RulePhase] = mapped_column(
+        Enum(RulePhase, values_callable=lambda enum_cls: [e.value for e in enum_cls]),
+        nullable=False,
+    )
 
     # CRS variables to inspect, for example "ARGS|REQUEST_HEADERS:User-Agent".
     variables: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Operator used to match the variables, for example "rx" or "streq".
-    operator: Mapped[RuleOperator] = mapped_column(Enum(RuleOperator), nullable=False)
+    operator: Mapped[RuleOperator] = mapped_column(
+        Enum(
+            RuleOperator,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=False,
+    )
 
     # The operator's pattern/value, for example the regex used with "@rx".
     operator_argument: Mapped[str] = mapped_column(Text, nullable=False)
