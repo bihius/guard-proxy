@@ -87,6 +87,6 @@ See `benchmarks/lab/` for scenario configs and `docs/evaluation-plan.md` for met
 
 ## Commands
 
-See [README.commands.md](README.commands.md) for all test commands.
+See [commands.md](commands.md) for all test commands.
 
 For frontend work, use `pnpm` as the only package manager.

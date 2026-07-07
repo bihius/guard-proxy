@@ -440,4 +440,4 @@ Inactive rules (`is_active: false`) are skipped entirely — they do not appear 
 - [OWASP CRS Documentation](https://coreruleset.org/docs/) — how the rule set works, paranoia levels, anomaly scoring, and rule numbering.
 - [Coraza Reference](https://coraza.io/docs/seclang/) — SecRule syntax, variables, operators, actions, and phases.
 - [ModSecurity Handbook](https://www.feistyduck.com/books/modsecurity-handbook/) (book) — deep dive into the engine that Coraza is compatible with.
-- Guard Proxy [README.architecture.md](README.architecture.md) — how the generated config reaches HAProxy and Coraza.
+- Guard Proxy [architecture.md](architecture.md) — how the generated config reaches HAProxy and Coraza.

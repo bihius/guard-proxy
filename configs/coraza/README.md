@@ -92,7 +92,7 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env \
 ```
 
 The log-shipper sidecar (`src/log-shipper/`) tails this file and ships each
-event to `POST /logs/ingest` on the backend. See `README.architecture.md` for
+event to `POST /logs/ingest` on the backend. See `docs/architecture.md` for
 the full data-flow description.
 
 ### Event schema and ingest mapping
