@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 
 import { createVHost, updateVHost } from "./api";
 import type { Policy, VHost, VHostBackendInput } from "./types";
@@ -206,7 +207,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Label className="flex cursor-pointer items-center gap-2">
+                  <Label className={cn("flex cursor-pointer items-center gap-2", backend.is_active && "text-foreground")}>
                     <Checkbox
                       checked={backend.is_active}
                       onChange={(e) =>
@@ -215,7 +216,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
                     />
                     Active
                   </Label>
-                  <Label className="flex cursor-pointer items-center gap-2">
+                  <Label className={cn("flex cursor-pointer items-center gap-2", backend.health_check_enabled && "text-foreground")}>
                     <Checkbox
                       checked={backend.health_check_enabled}
                       onChange={(e) =>
@@ -323,7 +324,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
         </div>
 
         <div className="space-y-1.5 pt-2">
-          <Label className="flex cursor-pointer items-center gap-2 font-semibold">
+          <Label className={cn("flex cursor-pointer items-center gap-2 font-semibold", sslEnabled && "text-foreground")}>
             <Checkbox
               checked={sslEnabled}
               onChange={(e) => setSslEnabled(e.target.checked)}
@@ -375,7 +376,7 @@ export function VHostFormModal(props: VHostFormModalProps) {
         </div>
 
         <div className="pt-2">
-          <Label className="flex cursor-pointer items-center gap-2">
+          <Label className={cn("flex cursor-pointer items-center gap-2", isActive && "text-foreground")}>
             <Checkbox
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
