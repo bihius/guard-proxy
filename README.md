@@ -59,8 +59,8 @@ See [README.architecture.md](README.architecture.md) for the full data flow.
 ### Run
 
 ```bash
-cp deploy/docker/.env.example deploy/docker/.env
-# Edit deploy/docker/.env and set your secrets
+cp docker/.env.example docker/.env
+# Edit docker/.env and set your secrets
 
 make run       # normal mode or
 make dev       # HAProxy + Coraza debug logging

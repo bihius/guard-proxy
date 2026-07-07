@@ -32,7 +32,7 @@ jobs:
         run: uv sync --frozen --extra dev
 
       - name: Prepare Docker Compose environment
-        run: cp deploy/docker/.env.example deploy/docker/.env
+        run: cp docker/.env.example docker/.env
 
       - name: Run policy apply e2e test
         working-directory: src/backend

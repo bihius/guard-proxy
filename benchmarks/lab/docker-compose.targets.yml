@@ -2,9 +2,9 @@
 #
 # This is an OVERLAY on top of the real Guard Proxy stack. Run as:
 #   docker compose \
-#     -f deploy/docker/docker-compose.yml \
+#     -f docker/docker-compose.yml \
 #     -f benchmarks/lab/docker-compose.targets.yml \
-#     --env-file deploy/docker/.env \
+#     --env-file docker/.env \
 #     --env-file benchmarks/lab/.env \
 #     up -d --build
 #

@@ -121,7 +121,7 @@ mode uses `info` logging.
 
    ```sh
    make dev
-   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env logs -f haproxy coraza
+   docker-compose -f docker/docker-compose.yml --env-file docker/.env logs -f haproxy coraza
    ```
 
 2. Send a request with an explicit correlation id:
@@ -160,7 +160,7 @@ request. Container-to-container traffic does not normally traverse the
 host `lo` interface:
 
 ```sh
-docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
+docker-compose -f docker/docker-compose.yml --env-file docker/.env \
   exec haproxy tcpdump -i any -A -s 0 port 9000
 ```
 
@@ -190,11 +190,11 @@ The configuration is exercised in two ways:
 2. End-to-end smoke test against the full Docker Compose stack:
 
    ```sh
-   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env up -d --build
-   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env ps
+   docker-compose -f docker/docker-compose.yml --env-file docker/.env up -d --build
+   docker-compose -f docker/docker-compose.yml --env-file docker/.env ps
    curl -i http://localhost:8080/health
    curl -i "http://localhost:8080/?id=1%27%20OR%20%271%27=%271"
-   docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env down
+   docker-compose -f docker/docker-compose.yml --env-file docker/.env down
    ```
 
    All five services should become healthy. The benign `/health` request

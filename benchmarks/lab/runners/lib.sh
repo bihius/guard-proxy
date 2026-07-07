@@ -13,7 +13,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
 LAB_DIR="${REPO_ROOT}/benchmarks/lab"
 RESULTS_BASE="${REPO_ROOT}/benchmarks/results"
 RUN_DIR="${RESULTS_BASE}/run-${RUN_ID}"
-CORE_ENV="${REPO_ROOT}/deploy/docker/.env"
+CORE_ENV="${REPO_ROOT}/docker/.env"
 LAB_ENV="${LAB_DIR}/.env"
 
 # Docker network shared by the real stack and lab targets.
@@ -114,7 +114,7 @@ PY
 compose_container_id() {
   local service="$1"
   docker compose \
-    -f "${REPO_ROOT}/deploy/docker/docker-compose.yml" \
+    -f "${REPO_ROOT}/docker/docker-compose.yml" \
     -f "${LAB_DIR}/docker-compose.targets.yml" \
     --env-file "${CORE_ENV}" \
     --env-file "${LAB_ENV}" \

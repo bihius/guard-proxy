@@ -6,7 +6,7 @@
 # domain through HAProxy via the guard-proxy backend API.
 #
 # Prerequisites:
-#   - deploy/docker/.env (copy from deploy/docker/.env.example)
+#   - docker/.env (copy from docker/.env.example)
 #   - benchmarks/lab/.env (copy from benchmarks/lab/.env.example)
 #   - CRS submodule initialised: git submodule update --init --recursive
 #   - Docker with Docker Compose v2
@@ -17,9 +17,9 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-CORE_COMPOSE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
+CORE_COMPOSE="${REPO_ROOT}/docker/docker-compose.yml"
 TARGETS_COMPOSE="${SCRIPT_DIR}/docker-compose.targets.yml"
-CORE_ENV="${REPO_ROOT}/deploy/docker/.env"
+CORE_ENV="${REPO_ROOT}/docker/.env"
 LAB_ENV="${SCRIPT_DIR}/.env"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-240}"
 SKIP_COMPOSE=false

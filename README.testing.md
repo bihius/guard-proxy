@@ -28,7 +28,7 @@ blocked by Coraza, and then tears the stack down.
 Prerequisites:
 
 - Docker with Docker Compose
-- `deploy/docker/.env` created from `deploy/docker/.env.example`
+- `docker/.env` created from `docker/.env.example`
 - The CRS submodule initialised with `git submodule update --init --recursive`
 
 Run locally:
@@ -62,11 +62,11 @@ Full WAF evaluation with real target apps plus the CRS Albedo backend:
 
 ```sh
 # Prerequisites
-cp deploy/docker/.env.example deploy/docker/.env
+cp docker/.env.example docker/.env
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 git submodule update --init --recursive
 
-# Ensure deploy/docker/.env has ADMIN_EMAIL and ADMIN_PASSWORD set.
+# Ensure docker/.env has ADMIN_EMAIL and ADMIN_PASSWORD set.
 
 # Bring up the lab
 make eval-up

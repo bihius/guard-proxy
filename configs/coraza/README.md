@@ -83,11 +83,11 @@ To inspect audit events while the stack is running:
 
 ```sh
 # tail the audit file inside the container
-docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
+docker compose -f docker/docker-compose.yml --env-file docker/.env \
   exec coraza tail -f /var/log/coraza/audit.log | jq -c .
 
 # SPOA operational logs (stderr)
-docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env \
+docker compose -f docker/docker-compose.yml --env-file docker/.env \
   logs --no-log-prefix coraza
 ```
 
@@ -170,12 +170,12 @@ Parts `ABIJDEFHZ` produce a top-level structure like:
 
 ## Docker Compose mounts
 
-When the stack runs through `deploy/docker/docker-compose.yml`, these files are
+When the stack runs through `docker/docker-compose.yml`, these files are
 mounted into the Coraza container read-only. After editing files in this
 directory, restart the service so `coraza-spoa` reloads them:
 
 ```sh
-docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza
+docker compose -f docker/docker-compose.yml --env-file docker/.env restart coraza
 ```
 
 The Coraza image still ships the same defaults, so it can run outside the
@@ -189,5 +189,5 @@ git -C configs/coraza/crs checkout v4.x.y
 ```
 
 After updating, also change the pinned CRS version in
-`deploy/docker/coraza.Dockerfile`, `configs/coraza/crs-setup.conf`, and this
+`docker/coraza.Dockerfile`, `configs/coraza/crs-setup.conf`, and this
 README.

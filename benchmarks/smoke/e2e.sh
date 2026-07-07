@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-COMPOSE_FILE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
-ENV_FILE="${REPO_ROOT}/deploy/docker/.env"
+COMPOSE_FILE="${REPO_ROOT}/docker/docker-compose.yml"
+ENV_FILE="${REPO_ROOT}/docker/.env"
 CRS_RULES_DIR="${REPO_ROOT}/configs/coraza/crs/rules"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-120}"
 SMOKE_PROJECT="${SMOKE_PROJECT:-guard-proxy-smoke-${RANDOM}-${RANDOM}}"
@@ -18,7 +18,7 @@ export HAPROXY_HTTPS_PORT
 HAPROXY_BASE_URL="http://127.0.0.1:${HAPROXY_HTTP_PORT}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "Missing ${ENV_FILE}. Copy deploy/docker/.env.example to deploy/docker/.env first." >&2
+  echo "Missing ${ENV_FILE}. Copy docker/.env.example to docker/.env first." >&2
   exit 1
 fi
 
@@ -122,7 +122,7 @@ assert_status() {
 # the timeout elapses. Needed right after a config apply: HAProxy reloads its
 # routing ACLs synchronously, but Coraza's supervisor only restarts
 # coraza-spoa with the new crs-setup.conf on its next 1s poll tick (see
-# deploy/docker/coraza-supervisor.sh), so a request fired immediately after
+# docker/coraza-supervisor.sh), so a request fired immediately after
 # /config/apply can still hit the previous (pre-policy, DetectionOnly) engine.
 wait_for_status() {
   local description="$1"

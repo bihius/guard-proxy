@@ -28,9 +28,9 @@ For production, deploy on **Proxmox VE** using LXC containers running Docker.
 ## Current M1 Implementation
 
 M1 implements the full local stack with:
-- `deploy/docker/docker-compose.yml` as the base five-service stack.
-- `deploy/docker/docker-compose.debug.yml` as the debug overlay used by `make dev`.
-- `deploy/docker/coraza.Dockerfile` building from `ghcr.io/corazawaf/coraza-spoa:0.6.1`.
+- `docker/docker-compose.yml` as the base five-service stack.
+- `docker/docker-compose.debug.yml` as the debug overlay used by `make dev`.
+- `docker/coraza.Dockerfile` building from `ghcr.io/corazawaf/coraza-spoa:0.6.1`.
 - `haproxy:3.0-alpine` exposed as host port `8080` and configured from `configs/haproxy/`.
 - `postgres:16-alpine`, backend, frontend, Coraza, and HAProxy health checks.
 - Named volumes for PostgreSQL data, HAProxy logs, Coraza logs, backend logs, and generated config.
@@ -91,10 +91,10 @@ deployment target is reproducible local Docker Compose.
 
 ## Implementation Status
 
-- [x] Create `deploy/docker/docker-compose.yml` with all 5 services
-- [x] Create `deploy/docker/docker-compose.debug.yml` with debug overrides
-- [x] Create `deploy/docker/coraza.Dockerfile` for the pinned Coraza SPOA image
-- [x] Create `deploy/docker/.env.example` with required environment variables
+- [x] Create `docker/docker-compose.yml` with all 5 services
+- [x] Create `docker/docker-compose.debug.yml` with debug overrides
+- [x] Create `docker/coraza.Dockerfile` for the pinned Coraza SPOA image
+- [x] Create `docker/.env.example` with required environment variables
 - [x] Add Makefile targets for local stack operation and troubleshooting
 - [ ] Add production-specific compose overlays when production deployment is in scope
 
@@ -103,7 +103,7 @@ deployment target is reproducible local Docker Compose.
 | Service | Image | Ports | Notes |
 |---------|-------|-------|-------|
 | haproxy | `haproxy:3.0-alpine` | `8080:80` | SPOE filter, WAF enforcement, config mounts |
-| coraza | `ghcr.io/corazawaf/coraza-spoa:0.6.1` via `deploy/docker/coraza.Dockerfile` | `9000` internal | Coraza SPOA with mounted CRS rules |
+| coraza | `ghcr.io/corazawaf/coraza-spoa:0.6.1` via `docker/coraza.Dockerfile` | `9000` internal | Coraza SPOA with mounted CRS rules |
 | backend | custom build from `src/backend/Dockerfile` | `8000` internal | FastAPI + uvicorn |
 | frontend | custom build from `src/frontend/Dockerfile` | `3000:5173` | Vite dev server |
 | postgres | `postgres:16-alpine` | `5432` internal | Policy and log storage |

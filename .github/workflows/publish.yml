@@ -25,7 +25,7 @@ jobs:
             dockerfile: src/frontend/Dockerfile
           - name: coraza
             context: .
-            dockerfile: deploy/docker/coraza.Dockerfile
+            dockerfile: docker/coraza.Dockerfile
           - name: log-shipper
             context: src/log-shipper
             dockerfile: src/log-shipper/Dockerfile
