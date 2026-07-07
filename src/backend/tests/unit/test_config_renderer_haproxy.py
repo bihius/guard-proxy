@@ -269,7 +269,7 @@ def test_rendered_haproxy_template_validates_with_haproxy(tmp_path: Path) -> Non
     rendered = render_haproxy_cfg(_m1_reference_context())
 
     # In production this path is provided by the container image (see
-    # deploy/docker/docker-compose.yml). For local validation, point it at
+    # docker/docker-compose.yml). For local validation, point it at
     # the repo's reference coraza.cfg so `haproxy -c` can resolve it.
     coraza_cfg = REPO_ROOT / "configs/haproxy/coraza.cfg"
     rendered = rendered.replace(

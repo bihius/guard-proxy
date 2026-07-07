@@ -233,10 +233,10 @@ cd /opt/guard-proxy
 git submodule update --init --recursive
 
 # 4. Copy env files
-cp deploy/docker/.env.example deploy/docker/.env
+cp docker/.env.example docker/.env
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 # Edit both .env files if needed (passwords, ports)
-# deploy/docker/.env must include ADMIN_EMAIL and ADMIN_PASSWORD for lab seeding.
+# docker/.env must include ADMIN_EMAIL and ADMIN_PASSWORD for lab seeding.
 
 # 5. Bring up the lab
 make lab-up

@@ -1,7 +1,7 @@
 REPO_ROOT    := $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
-CORE_COMPOSE := $(REPO_ROOT)/deploy/docker/docker-compose.yml
+CORE_COMPOSE := $(REPO_ROOT)/docker/docker-compose.yml
 LAB_COMPOSE  := $(REPO_ROOT)/benchmarks/lab/docker-compose.targets.yml
-CORE_ENV     := $(REPO_ROOT)/deploy/docker/.env
+CORE_ENV     := $(REPO_ROOT)/docker/.env
 LAB_ENV      := $(REPO_ROOT)/benchmarks/lab/.env
 RUNNERS      := $(REPO_ROOT)/benchmarks/lab/runners
 DOCKER_COMPOSE ?= $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose")
@@ -136,7 +136,7 @@ help:
 	@echo "Guard Proxy Evaluation Lab"
 	@echo ""
 	@echo "Setup:"
-	@echo "  cp deploy/docker/.env.example deploy/docker/.env"
+	@echo "  cp docker/.env.example docker/.env"
 	@echo "  cp benchmarks/lab/.env.example benchmarks/lab/.env"
 	@echo "  git submodule update --init --recursive"
 	@echo ""

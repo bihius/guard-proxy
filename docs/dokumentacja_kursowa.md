@@ -403,7 +403,7 @@ Aplikacja jest (prawie) responsywna i korzysta z backendowego REST API przez `fe
 Przygotowanie konfiguracji:
 
 ```bash
-cp deploy/docker/.env.example deploy/docker/.env
+cp docker/.env.example docker/.env
 ```
 
 Uruchomienie pelnego stacka:
@@ -434,7 +434,7 @@ Najwazniejsze adresy:
 
 ## 11. Demo i laboratorium ewaluacyjne
 
-Projekt uruchamia Guard Proxy przez glowny plik `deploy/docker/docker-compose.yml`.
+Projekt uruchamia Guard Proxy przez glowny plik `docker/docker-compose.yml`.
 Laboratorium w `benchmarks/lab` dodaje aplikacje testowe za WAF-em. Pozwala to
 pokazac:
 

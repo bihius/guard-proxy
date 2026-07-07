@@ -1,8 +1,8 @@
 DOCKER_COMPOSE ?= $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose")
 
-COMPOSE_FILE := deploy/docker/docker-compose.yml
-COMPOSE_DEBUG_FILE := deploy/docker/docker-compose.debug.yml
-ENV_FILE := deploy/docker/.env
+COMPOSE_FILE := docker/docker-compose.yml
+COMPOSE_DEBUG_FILE := docker/docker-compose.debug.yml
+ENV_FILE := docker/.env
 
 .PHONY: run dev down clean logs ps seed users coraza-build \
         eval-up eval-down eval-clean eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics eval-all eval-results
@@ -37,7 +37,7 @@ users:
 	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(if $(USERS_ARGS),$(patsubst help,--help,$(USERS_ARGS)),$(ARGS))
 
 coraza-build:
-	docker build -f deploy/docker/coraza.Dockerfile -t guard-proxy/coraza-spoa:dev .
+	docker build -f docker/coraza.Dockerfile -t guard-proxy/coraza-spoa:dev .
 
 # ── Evaluation lab (delegates to benchmarks/Makefile) ─────────────────────
 # See benchmarks/Makefile for full documentation and variable overrides.

@@ -29,13 +29,13 @@ def test_default_coraza_spoa_config_uses_info_logging() -> None:
 
 
 def test_default_docker_compose_does_not_use_debug_flag() -> None:
-    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+    compose = (REPO_ROOT / "docker/docker-compose.yml").read_text()
 
     assert '"-d"' not in compose
 
 
 def test_default_docker_compose_starts_haproxy_before_coraza_is_healthy() -> None:
-    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+    compose = (REPO_ROOT / "docker/docker-compose.yml").read_text()
 
     # Scope the coraza-condition check to the haproxy service block only.
     # log-shipper intentionally uses service_healthy for coraza (also present in the
@@ -48,7 +48,7 @@ def test_default_docker_compose_starts_haproxy_before_coraza_is_healthy() -> Non
 
 
 def test_backend_runtime_config_env_matches_readiness_probe() -> None:
-    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+    compose = (REPO_ROOT / "docker/docker-compose.yml").read_text()
 
     assert "RUNTIME_GENERATED_CONFIG_ROOT: /var/lib/guard-proxy/generated" in compose
 
@@ -63,14 +63,14 @@ def test_backend_entrypoint_seeds_runtime_generated_config_root() -> None:
 
 
 def test_haproxy_master_socket_is_accessible_to_backend_container() -> None:
-    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+    compose = (REPO_ROOT / "docker/docker-compose.yml").read_text()
 
     assert "/var/run/haproxy/master.sock,mode,666,level,operator" in compose
     assert "/var/run/haproxy/master.sock,mode,660" not in compose
 
 
 def test_default_docker_compose_starts_log_shipper_after_coraza_is_healthy() -> None:
-    compose = (REPO_ROOT / "deploy/docker/docker-compose.yml").read_text()
+    compose = (REPO_ROOT / "docker/docker-compose.yml").read_text()
 
     log_shipper_block = compose.split("\n  log-shipper:")[1].split("\n  haproxy:")[0]
     assert "coraza:\n        condition: service_healthy" in log_shipper_block
@@ -84,7 +84,7 @@ def test_debug_coraza_spoa_config_enables_debug_logging() -> None:
 
 
 def test_debug_compose_override_enables_haproxy_debug_flag() -> None:
-    compose = (REPO_ROOT / "deploy/docker/docker-compose.debug.yml").read_text()
+    compose = (REPO_ROOT / "docker/docker-compose.debug.yml").read_text()
 
     assert (
         "exec haproxy -d -W -S "
@@ -94,7 +94,7 @@ def test_debug_compose_override_enables_haproxy_debug_flag() -> None:
 
 
 def test_debug_compose_override_mounts_debug_coraza_config() -> None:
-    compose = (REPO_ROOT / "deploy/docker/docker-compose.debug.yml").read_text()
+    compose = (REPO_ROOT / "docker/docker-compose.debug.yml").read_text()
 
     assert "coraza-spoa.debug.yaml" in compose
 

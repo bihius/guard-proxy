@@ -34,14 +34,14 @@ RELOAD_TIMEOUT_SECONDS = 45
 
 def _find_repo_root() -> Path:
     for candidate in Path(__file__).resolve().parents:
-        if (candidate / "deploy/docker/docker-compose.yml").is_file():
+        if (candidate / "docker/docker-compose.yml").is_file():
             return candidate
     raise RuntimeError("Could not locate repository root")
 
 
 REPO_ROOT = _find_repo_root()
-COMPOSE_FILE = REPO_ROOT / "deploy/docker/docker-compose.yml"
-ENV_FILE = REPO_ROOT / "deploy/docker/.env"
+COMPOSE_FILE = REPO_ROOT / "docker/docker-compose.yml"
+ENV_FILE = REPO_ROOT / "docker/.env"
 CRS_RULES_DIR = REPO_ROOT / "configs/coraza/crs/rules"
 
 

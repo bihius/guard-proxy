@@ -9,9 +9,9 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-CORE_COMPOSE="${REPO_ROOT}/deploy/docker/docker-compose.yml"
+CORE_COMPOSE="${REPO_ROOT}/docker/docker-compose.yml"
 TARGETS_COMPOSE="${SCRIPT_DIR}/docker-compose.targets.yml"
-CORE_ENV="${REPO_ROOT}/deploy/docker/.env"
+CORE_ENV="${REPO_ROOT}/docker/.env"
 LAB_ENV="${SCRIPT_DIR}/.env"
 
 CLEAN=false

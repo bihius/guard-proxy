@@ -44,18 +44,18 @@ pnpm run dev          # Dev server (port 3000)
 ```bash
 haproxy -c -f configs/haproxy/haproxy.cfg  # Validate config
 systemctl reload haproxy                    # Graceful reload (NEVER restart in prod)
-docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env exec haproxy tcpdump -i any -A -s 0 port 9000  # Debug SPOE traffic (inside container)
+docker-compose -f docker/docker-compose.yml --env-file docker/.env exec haproxy tcpdump -i any -A -s 0 port 9000  # Debug SPOE traffic (inside container)
 ```
 
 ## Docker
 
 ```bash
-cp deploy/docker/.env.example deploy/docker/.env                     # Create env file for compose
-docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env config
+cp docker/.env.example docker/.env                     # Create env file for compose
+docker-compose -f docker/docker-compose.yml --env-file docker/.env config
 make run                                                             # Start all services (normal mode)
 make dev                                                             # Start all services with HAProxy -d flag and Coraza debug logging
 make coraza-build                                                    # Build the pinned Coraza SPOA + CRS image
-docker-compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env restart coraza  # Reload mounted Coraza config/rules
+docker-compose -f docker/docker-compose.yml --env-file docker/.env restart coraza  # Reload mounted Coraza config/rules
 docker volume ls | grep guard_proxy                                  # Inspect pgdata, log, and guard_proxy_runtime volumes
 make ps                                                              # Show service status
 make logs                                                            # Follow all service logs
@@ -71,7 +71,7 @@ backend CLI scripts (run inside the backend container via `make`).
 
 ```bash
 # Bootstrap the first admin (idempotent; reads ADMIN_EMAIL / ADMIN_PASSWORD
-# from deploy/docker/.env when --email/--password are omitted)
+# from docker/.env when --email/--password are omitted)
 make seed
 
 # Manage further accounts with the manage_users.py CLI

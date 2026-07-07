@@ -19,7 +19,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-CORE_ENV="${REPO_ROOT}/deploy/docker/.env"
+CORE_ENV="${REPO_ROOT}/docker/.env"
 LAB_ENV="${SCRIPT_DIR}/.env"
 POLICY="${POLICY:-pl1}"
 

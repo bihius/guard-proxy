@@ -21,7 +21,7 @@ services:
 
   backend:
     build:
-      context: ../../src/backend
+      context: ../src/backend
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
@@ -44,7 +44,7 @@ services:
       start_period: 60s
     volumes:
       - backend_logs:/var/log/guard-proxy
-      - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
+      - ../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
       - generated_config:/var/lib/guard-proxy/generated
       - haproxy_runtime:/var/run/haproxy
     networks:
@@ -52,7 +52,7 @@ services:
 
   frontend:
     build:
-      context: ../../src/frontend
+      context: ../src/frontend
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -77,18 +77,18 @@ services:
 
   coraza:
     build:
-      context: ../..
-      dockerfile: deploy/docker/coraza.Dockerfile
+      context: ..
+      dockerfile: docker/coraza.Dockerfile
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
     volumes:
-      - ../../configs/coraza/coraza-spoa.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro
-      - ../../configs/coraza/coraza.conf:/etc/coraza/coraza.conf:ro
-      - ../../configs/coraza/crs-setup.conf:/etc/coraza/crs-setup.conf:ro
-      - ../../configs/coraza/guard-proxy-exceptions.conf:/etc/coraza/guard-proxy-exceptions.conf:ro
-      - ../../configs/coraza/crs:/etc/coraza/crs:ro
+      - ../configs/coraza/coraza-spoa.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro
+      - ../configs/coraza/coraza.conf:/etc/coraza/coraza.conf:ro
+      - ../configs/coraza/crs-setup.conf:/etc/coraza/crs-setup.conf:ro
+      - ../configs/coraza/guard-proxy-exceptions.conf:/etc/coraza/guard-proxy-exceptions.conf:ro
+      - ../configs/coraza/crs:/etc/coraza/crs:ro
       - generated_config:/runtime:ro
       - coraza_audit:/var/log/coraza
     healthcheck:
@@ -102,7 +102,7 @@ services:
 
   log-shipper:
     build:
-      context: ../../src/log-shipper
+      context: ../src/log-shipper
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
@@ -141,8 +141,8 @@ services:
       - "${HAPROXY_HTTP_PORT:-8080}:80"
       - "${HAPROXY_HTTPS_PORT:-8443}:443"
     volumes:
-      - ../../configs/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - ../../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
+      - ../configs/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
       - haproxy_logs:/var/log/haproxy
       - generated_config:/etc/haproxy/generated
       - haproxy_runtime:/var/run/haproxy

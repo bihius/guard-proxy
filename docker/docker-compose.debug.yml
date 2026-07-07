@@ -14,4 +14,4 @@ services:
 
   coraza:
     volumes:
-      - ../../configs/coraza/coraza-spoa.debug.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro
+      - ../configs/coraza/coraza-spoa.debug.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro

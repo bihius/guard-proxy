@@ -56,12 +56,12 @@ machine-readable degraded reason header.
 | Component | Role | Location |
 |-----------|------|----------|
 | **HAProxy** | Reference reverse proxy, host routing, SPOE filter, WAF enforcement, degraded-mode handling | `configs/haproxy/` |
-| **Coraza SPOA + OWASP CRS** | Request-phase WAF inspection, CRS anomaly scoring, JSON audit log | `configs/coraza/`, `deploy/docker/coraza.Dockerfile` |
+| **Coraza SPOA + OWASP CRS** | Request-phase WAF inspection, CRS anomaly scoring, JSON audit log | `configs/coraza/`, `docker/coraza.Dockerfile` |
 | **Log Shipper sidecar** | Tails Coraza's JSON audit file and ships each event to `POST /logs/ingest` with exponential backoff | `src/log-shipper/` |
 | **FastAPI Backend** | Control-plane API for auth, vhosts, policies, rule overrides, logs, and health/readiness probes | `src/backend/` |
 | **React Frontend** | Admin panel SPA built with React, TypeScript, Vite, Tailwind CSS, and pnpm | `src/frontend/` |
-| **PostgreSQL** | Docker Compose database for backend state | `deploy/docker/docker-compose.yml` |
-| **Docker Compose Stack** | Local full-stack orchestration, health checks, networks, logs, and persistent volumes | `deploy/docker/` |
+| **PostgreSQL** | Docker Compose database for backend state | `docker/docker-compose.yml` |
+| **Docker Compose Stack** | Local full-stack orchestration, health checks, networks, logs, and persistent volumes | `docker/` |
 
 ## Data Flow
 
@@ -210,7 +210,7 @@ The Docker Compose `healthcheck` for the `backend` service targets `/ready`. Alm
 
 ### Development (Docker Compose)
 
-The implemented M1 stack lives in `deploy/docker/docker-compose.yml`.
+The implemented M1 stack lives in `docker/docker-compose.yml`.
 
 ```yaml
 services:
@@ -222,7 +222,7 @@ services:
   postgres:     # internal port 5432
 ```
 
-Prepare `deploy/docker/.env` from `deploy/docker/.env.example`, then use
+Prepare `docker/.env` from `docker/.env.example`, then use
 `make run` for the normal stack or `make dev` for HAProxy `-d` output and
 Coraza debug logging. The end-to-end smoke test is
 `benchmarks/smoke/e2e.sh`; it starts the stack, waits for healthy services,
