@@ -34,7 +34,7 @@ graph TB
     BE --> DB[(PostgreSQL)]
 ```
 
-See [README.architecture.md](README.architecture.md) for the full data flow.
+See [docs/architecture.md](docs/architecture.md) for the full data flow.
 
 ## Tech Stack
 
@@ -75,7 +75,7 @@ make users ARGS="create --email alice@example.com --password '<min 12 chars>' --
 make users ARGS="list"
 ```
 
-See [User Management](README.commands.md#user-management) for all commands.
+See [User Management](docs/commands.md#user-management) for all commands.
 
 ### Access
 
@@ -105,10 +105,10 @@ make clean   # stop containers and remove all volumes
 
 ## Documentation
 
-- [Architecture](README.architecture.md) — system architecture and data flow
-- [WAF Policy Tuning](README.waf-rules.md) — rule overrides, exclusions, and custom rules
-- [Development Commands](README.commands.md) — all dev commands, including user management
-- [Testing Strategy](README.testing.md) — testing approach and targets
+- [Architecture](docs/architecture.md) — system architecture and data flow
+- [WAF Policy Tuning](docs/waf-rules.md) — rule overrides, exclusions, and custom rules
+- [Development Commands](docs/commands.md) — all dev commands, including user management
+- [Testing Strategy](docs/testing.md) — testing approach and targets
 - [Evaluation Plan](docs/evaluation-plan.md) — thesis benchmark methodology and lab scenarios
 - [HAProxy configs](configs/haproxy/README.md) — SPOE wiring, degraded mode, troubleshooting
 - [Coraza configs](configs/coraza/README.md) — CRS bundle, audit log mapping

@@ -130,5 +130,5 @@ make eval-results  # Show latest CSV summary
 
 ```bash
 wrk -t4 -c100 -d30s --latency http://localhost:8080/test  # HTTP benchmark
-k6 run benchmarks/scripts/k6_test.js                       # Load testing
+make eval-load                                              # RPS/latency overhead vs. direct backend
 ```

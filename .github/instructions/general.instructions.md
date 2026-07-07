@@ -6,7 +6,7 @@ applyTo: "**"
 
 You are reviewing code and proposing small changes in the **Guard Proxy** repository: a self-hosted Web Application Firewall built on HAProxy + Coraza (OWASP CRS), with a FastAPI backend and a React/TypeScript frontend. This is a master's thesis MVP, so favor simplicity and correctness over speculative features.
 
-Always read `README.md`, `README.architecture.md`, `README.commands.md`, and `README.testing.md` for context before suggesting non-trivial changes. Treat these README files as the canonical high-level project guidance unless a more specific instruction file in this directory says otherwise.
+Always read `README.md`, `docs/architecture.md`, `docs/commands.md`, and `docs/testing.md` for context before suggesting non-trivial changes. Treat these docs as the canonical high-level project guidance unless a more specific instruction file in this directory says otherwise.
 
 ## How to review
 
