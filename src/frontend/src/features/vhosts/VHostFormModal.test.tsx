@@ -110,4 +110,15 @@ describe("VHostFormModal (create)", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("Domain already exists"),
     );
   });
+
+  it("uses foreground text for checked checkbox labels", async () => {
+    renderCreateModal();
+
+    expect(screen.getByText("Health checks")).toHaveClass("text-foreground");
+    expect(screen.getByText("Enable SSL")).not.toHaveClass("text-foreground");
+
+    await userEvent.click(screen.getByLabelText("Enable SSL"));
+
+    expect(screen.getByText("Enable SSL")).toHaveClass("text-foreground");
+  });
 });

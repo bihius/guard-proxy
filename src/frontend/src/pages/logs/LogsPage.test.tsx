@@ -239,6 +239,23 @@ describe("LogsPage", () => {
     );
   });
 
+  it("uses muted text for empty date and time filters", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+
+    expect(screen.getByText("From")).toHaveClass("text-muted-foreground");
+    expect(screen.getByLabelText("From date")).toHaveClass(
+      "text-muted-foreground",
+      "placeholder:text-muted-foreground",
+    );
+    expect(screen.getByLabelText("From time")).toHaveClass("text-muted-foreground");
+  });
+
   it("clearing filters resets to empty params", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
     vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);

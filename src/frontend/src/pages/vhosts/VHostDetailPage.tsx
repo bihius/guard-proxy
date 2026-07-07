@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Select } from "@/components/ui/select";
 import { listRuleOverrides } from "@/features/policies/api";
 import {
   DeleteRuleOverrideDialog,
@@ -313,11 +314,10 @@ export function VHostDetailPage() {
                   <label htmlFor="vhost-policy-assignment" className="block text-sm font-medium text-fg-muted">
                     Policy
                   </label>
-                  <select
+                  <Select
                     id="vhost-policy-assignment"
                     value={selectedPolicyId}
                     onChange={(e) => setSelectedPolicyId(e.target.value)}
-                    className="input-field"
                   >
                     <option value="">None</option>
                     {policies.map((policy) => (
@@ -325,7 +325,7 @@ export function VHostDetailPage() {
                         {policy.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <button
                   type="button"

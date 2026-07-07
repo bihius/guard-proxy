@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 
 import { createPolicy, updatePolicy } from "./api";
 import type { Policy } from "./types";
@@ -185,7 +186,7 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
         </div>
 
         {props.mode === "edit" && (
-          <Label className="flex cursor-pointer items-center gap-2">
+          <Label className={cn("flex cursor-pointer items-center gap-2", isActive && "text-foreground")}>
             <Checkbox
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
