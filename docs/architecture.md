@@ -104,6 +104,10 @@ machine-readable degraded reason header.
    `transaction.id`; the backend returns `200` for a duplicate rather than
    creating a second row.
 5. FastAPI validates and normalizes payloads into the persisted `Log` model.
+   During ingest, the backend resolves the current vhost row by domain and stores
+   nullable `vhost_id` and `policy_id` snapshots on the log row. `GET /logs`
+   policy filtering uses the stored `logs.policy_id`, so results reflect the
+   policy assignment captured at event-ingest time, not a later vhost reassignment.
 6. `GET /logs` exposes stored events for the admin panel log viewer.
 
 ### Log Retention

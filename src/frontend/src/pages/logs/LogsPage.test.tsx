@@ -173,6 +173,26 @@ describe("LogsPage", () => {
     );
   });
 
+  it("selecting a policy filter re-fetches with policy_id", async () => {
+    vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+    vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /filters/i }));
+    await userEvent.selectOptions(screen.getByLabelText(/^policy$/i), "1");
+    await userEvent.click(screen.getByRole("button", { name: /apply/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(logsApi.listLogs)).toHaveBeenCalledWith(
+        "test-token",
+        expect.objectContaining({ policy_id: 1, page: 1 }),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("applies the new severity, method, source IP, rule ID and min score filters", async () => {
     vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
     vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
@@ -248,12 +268,13 @@ describe("LogsPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /filters/i }));
     await userEvent.type(screen.getByLabelText(/vhost/i), "something");
+    await userEvent.selectOptions(screen.getByLabelText(/^policy$/i), "1");
     await userEvent.click(screen.getByRole("button", { name: /clear/i }));
 
     await waitFor(() =>
       expect(vi.mocked(logsApi.listLogs)).toHaveBeenLastCalledWith(
         "test-token",
-        expect.objectContaining({ vhost: undefined, page: 1 }),
+        expect.objectContaining({ vhost: undefined, policy_id: undefined, page: 1 }),
         expect.anything(),
       ),
     );
