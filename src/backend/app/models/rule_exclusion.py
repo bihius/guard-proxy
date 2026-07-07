@@ -55,7 +55,10 @@ class RuleExclusion(Base):
     rule_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Which CRS variable to narrow inspection on.
-    target_type: Mapped[TargetType] = mapped_column(Enum(TargetType), nullable=False)
+    target_type: Mapped[TargetType] = mapped_column(
+        Enum(TargetType, values_callable=lambda enum_cls: [e.value for e in enum_cls]),
+        nullable=False,
+    )
 
     # The specific target, for example an argument name like "token".
     target_value: Mapped[str] = mapped_column(Text, nullable=False)
