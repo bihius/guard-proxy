@@ -22,6 +22,7 @@ import type {
 import { CUSTOM_RULE_ID_MAX, CUSTOM_RULE_ID_MIN } from "@/features/policies/types";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 
 export type CustomRuleModalState =
   | null
@@ -278,7 +279,10 @@ export function CustomRuleFormModal({
             checked={isActive}
             onChange={(e) => setIsActive(e.target.checked)}
           />
-          <Label htmlFor="custom-rule-is-active" className="text-foreground">
+          <Label
+            htmlFor="custom-rule-is-active"
+            className={cn(isActive && "text-foreground")}
+          >
             Active
           </Label>
         </div>
