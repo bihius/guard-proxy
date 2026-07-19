@@ -13,9 +13,8 @@ Usage (local):
     uv run python scripts/manage_users.py update 3 --deactivate
 
 Usage (Docker):
-    docker-compose ... exec backend /app/.venv/bin/python scripts/manage_users.py <cmd>
-    # or via make:
-    make users ARGS="list --json"
+    ./bin/users create --email alice@example.com --password '<password>' --full-name "Alice"
+    ./bin/users list --role admin --active
 
 See `scripts/manage_users.py <cmd> --help` for per-command details.
 """
