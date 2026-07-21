@@ -60,6 +60,18 @@ class Policy(Base):
             "outbound_anomaly_threshold >= 1",
             name="ck_policies_outbound_anomaly_threshold",
         ),
+        CheckConstraint(
+            "rate_limit_requests >= 1",
+            name="ck_policies_rate_limit_requests",
+        ),
+        CheckConstraint(
+            "rate_limit_window_seconds BETWEEN 1 AND 3600",
+            name="ck_policies_rate_limit_window_seconds",
+        ),
+        CheckConstraint(
+            "max_connections_per_ip >= 1",
+            name="ck_policies_max_connections_per_ip",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -96,6 +108,26 @@ class Policy(Base):
         default=PolicyEnforcementMode.block,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # DDoS protection (HAProxy stick-table rate limiting / connection throttling)
+    ddos_protection_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    rate_limit_requests: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,  # max requests per window, per source IP
+    )
+    rate_limit_window_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10,  # rate-limit window length in seconds
+    )
+    max_connections_per_ip: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=20,  # concurrent connection limit per source IP
+    )
 
     # Audit — who created the policy
     # ForeignKey("users.id") = reference to users table, id column

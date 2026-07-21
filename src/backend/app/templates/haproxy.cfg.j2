@@ -16,6 +16,8 @@ defaults
     timeout connect 5s
     timeout client  30s
     timeout server  30s
+    # Slow-loris protection: cap the time allowed to receive a full request.
+    timeout http-request 5s
 
 frontend fe_http
     bind *:80
@@ -49,6 +51,23 @@ frontend fe_http
     # Overwrite client-supplied X-Forwarded-For so the backend rate limiter
     # cannot be bypassed by header spoofing.
     http-request set-header X-Forwarded-For %[src]
+
+{% set has_ddos_http = routes | selectattr("ddos") | list | length > 0 %}
+{% if has_ddos_http %}
+    # Per-vhost DDoS protection: request-rate limiting and connection
+    # throttling via a dedicated stick-table per vhost. Health checks and
+    # ACME HTTP-01 challenges are exempt so they can't be starved by traffic
+    # spikes on the same vhost. http_req_rate(<period>) counts requests
+    # observed during the trailing <period>, not a per-second rate, so
+    # rate_limit_requests is directly "requests per rate_limit_window_seconds".
+{% for route in routes %}
+{% if route.ddos and route.ddos.enabled %}
+    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+{% endif %}
+{% endfor %}
+{% endif %}
 
     # Fail closed (503) when HAProxy has no usable Coraza SPOA server.
     http-request set-var(txn.waf_degraded_reason) str(coraza-unavailable) if !is_health { nbsrv(coraza-spoa) eq 0 }
@@ -98,6 +117,18 @@ frontend fe_https
     http-request set-header X-Forwarded-For %[src]
     http-request set-header X-Forwarded-Proto https
 
+{% set has_ddos_https = routes | selectattr("ddos") | list | length > 0 %}
+{% if has_ddos_https %}
+    # Per-vhost DDoS protection (see fe_http).
+{% for route in routes %}
+{% if route.ddos and route.ddos.enabled %}
+    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+{% endif %}
+{% endfor %}
+{% endif %}
+
     # WAF inspection and fail-closed handling (same as fe_http).
     http-request set-var(txn.waf_degraded_reason) str(coraza-unavailable) if !is_health { nbsrv(coraza-spoa) eq 0 }
     http-request set-log-level err if { var(txn.waf_degraded_reason) -m found }
@@ -121,6 +152,17 @@ frontend fe_https
 
 {% endif %}
 
+{% set has_ddos_backends = routes | selectattr("ddos") | list | length > 0 %}
+{% if has_ddos_backends %}
+# --- DDoS protection stick-tables ---------------------------------
+{% for route in routes %}
+{% if route.ddos and route.ddos.enabled %}
+backend {{ route.ddos.stick_table_name }}
+    stick-table type ipv6 size 100k expire {{ route.ddos.rate_limit_window_seconds }}s store http_req_rate({{ route.ddos.rate_limit_window_seconds }}s),conn_cur
+
+{% endif %}
+{% endfor %}
+{% endif %}
 # --- Application backends ----------------------------------------
 {% for route in routes %}
 backend {{ route.backend.name }}

@@ -44,6 +44,10 @@ def create_policy(
             inbound_anomaly_threshold=body.inbound_anomaly_threshold,
             outbound_anomaly_threshold=body.outbound_anomaly_threshold,
             enforcement_mode=body.enforcement_mode,
+            ddos_protection_enabled=body.ddos_protection_enabled,
+            rate_limit_requests=body.rate_limit_requests,
+            rate_limit_window_seconds=body.rate_limit_window_seconds,
+            max_connections_per_ip=body.max_connections_per_ip,
             created_by=current_user.id,
         )
     except PolicyNameAlreadyExistsError as error:

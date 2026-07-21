@@ -6,6 +6,7 @@ import pytest
 
 from app.services.config_renderer import (
     HaproxyBackend,
+    HaproxyDdos,
     HaproxyRenderContext,
     HaproxyRoute,
     HaproxyServer,
@@ -262,6 +263,209 @@ def test_haproxy_backend_rejects_empty_values(kwargs: dict) -> None:
                 ),
             ),
         )
+
+
+def _ddos(
+    stick_table_name: str = "st_ddos_vhost_1",
+    rate_limit_requests: int = 100,
+    rate_limit_window_seconds: int = 10,
+    max_connections_per_ip: int = 20,
+    enabled: bool = True,
+) -> HaproxyDdos:
+    return HaproxyDdos(
+        enabled=enabled,
+        stick_table_name=stick_table_name,
+        rate_limit_requests=rate_limit_requests,
+        rate_limit_window_seconds=rate_limit_window_seconds,
+        max_connections_per_ip=max_connections_per_ip,
+    )
+
+
+def test_haproxy_template_omits_ddos_blocks_when_disabled() -> None:
+    rendered = render_haproxy_cfg(_m1_reference_context())
+
+    assert "stick-table" not in rendered
+    assert "track-sc0" not in rendered
+    assert "deny_status 429" not in rendered
+
+
+def test_haproxy_template_renders_ddos_blocks_when_enabled() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    ddos=_ddos(
+                        stick_table_name="st_ddos_vhost_1",
+                        rate_limit_requests=100,
+                        rate_limit_window_seconds=10,
+                        max_connections_per_ip=20,
+                    ),
+                ),
+            ),
+        )
+    )
+
+    assert (
+        "backend st_ddos_vhost_1\n"
+        "    stick-table type ipv6 size 100k expire 10s "
+        "store http_req_rate(10s),conn_cur" in rendered
+    )
+    assert (
+        "http-request track-sc0 src table st_ddos_vhost_1 "
+        "if host_api !is_health !is_acme" in rendered
+    )
+    assert (
+        "http-request deny deny_status 429 if host_api !is_health !is_acme "
+        "{ sc_http_req_rate(0,st_ddos_vhost_1) gt 100 }" in rendered
+    )
+    assert (
+        "http-request deny deny_status 429 if host_api !is_health !is_acme "
+        "{ sc_conn_cur(0,st_ddos_vhost_1) gt 20 }" in rendered
+    )
+    assert "timeout http-request 5s" in rendered
+
+
+def test_haproxy_template_omits_ddos_for_disabled_route_only() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_vhost_1",
+                    vhost_hosts=("one.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_one", "srv_one", "one-backend:8000"),
+                    ddos=_ddos(stick_table_name="st_ddos_vhost_1"),
+                ),
+                HaproxyRoute(
+                    vhost_acl_name="host_vhost_2",
+                    vhost_hosts=("two.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_two", "srv_two", "two-backend:8000"),
+                ),
+            )
+        )
+    )
+
+    assert "table st_ddos_vhost_1 if host_vhost_1" in rendered
+    assert "table st_ddos_vhost_1 if host_vhost_2" not in rendered
+    assert "if host_vhost_2 { sc_http_req_rate" not in rendered
+
+
+def test_haproxy_render_context_rejects_duplicate_ddos_table_names() -> None:
+    with pytest.raises(ValueError, match="stick_table_name"):
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_one",
+                    vhost_hosts=("one.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_one", "srv_one", "one-backend:8000"),
+                    ddos=_ddos(stick_table_name="st_dup"),
+                ),
+                HaproxyRoute(
+                    vhost_acl_name="host_two",
+                    vhost_hosts=("two.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_two", "srv_two", "two-backend:8000"),
+                    ddos=_ddos(stick_table_name="st_dup"),
+                ),
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "kwargs"),
+    [
+        (
+            "stick_table_name",
+            {
+                "stick_table_name": "",
+                "rate_limit_requests": 1,
+                "rate_limit_window_seconds": 1,
+                "max_connections_per_ip": 1,
+            },
+        ),
+        (
+            "rate_limit_requests",
+            {
+                "stick_table_name": "st_ddos",
+                "rate_limit_requests": 0,
+                "rate_limit_window_seconds": 1,
+                "max_connections_per_ip": 1,
+            },
+        ),
+        (
+            "rate_limit_window_seconds",
+            {
+                "stick_table_name": "st_ddos",
+                "rate_limit_requests": 1,
+                "rate_limit_window_seconds": 0,
+                "max_connections_per_ip": 1,
+            },
+        ),
+        (
+            "rate_limit_window_seconds_too_large",
+            {
+                "stick_table_name": "st_ddos",
+                "rate_limit_requests": 1,
+                "rate_limit_window_seconds": 3601,
+                "max_connections_per_ip": 1,
+            },
+        ),
+        (
+            "max_connections_per_ip",
+            {
+                "stick_table_name": "st_ddos",
+                "rate_limit_requests": 1,
+                "rate_limit_window_seconds": 1,
+                "max_connections_per_ip": 0,
+            },
+        ),
+    ],
+)
+def test_haproxy_ddos_rejects_invalid_values(field: str, kwargs: dict) -> None:
+    with pytest.raises(ValueError):
+        HaproxyDdos(enabled=True, **kwargs)
+
+
+@pytest.mark.skipif(shutil.which("haproxy") is None, reason="haproxy is not installed")
+def test_rendered_haproxy_template_with_ddos_validates_with_haproxy(
+    tmp_path: Path,
+) -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_app",
+                    vhost_hosts=("app.local",),
+                    ssl_provider="none",
+                    backend=_backend("be_app", "app", "backend:8000"),
+                    ddos=_ddos(stick_table_name="st_ddos_vhost_1"),
+                ),
+            ),
+        )
+    )
+
+    coraza_cfg = REPO_ROOT / "configs/haproxy/coraza.cfg"
+    rendered = rendered.replace(
+        "/usr/local/etc/haproxy/coraza.cfg", str(coraza_cfg)
+    )
+
+    rendered_path = tmp_path / "haproxy.cfg"
+    rendered_path.write_text(rendered)
+
+    result = subprocess.run(
+        ["haproxy", "-c", "-f", str(rendered_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.skipif(shutil.which("haproxy") is None, reason="haproxy is not installed")

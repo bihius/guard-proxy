@@ -15,6 +15,7 @@ from app.services.config_renderer import (
     CrsPolicyRenderContext,
     CustomRuleRenderContext,
     HaproxyBackend,
+    HaproxyDdos,
     HaproxyRenderContext,
     HaproxyRoute,
     HaproxyServer,
@@ -52,7 +53,17 @@ def generate(
         (vhost for vhost in vhosts if vhost.is_active),
         key=lambda vhost: vhost.domain,
     )
-    vhost_contexts = [_to_haproxy_context(vhost) for vhost in active_vhosts]
+    policies_by_id = {policy.id: policy for policy in policies}
+
+    def _policy_for_vhost(vhost: VHost) -> Policy | None:
+        if vhost.policy_id is None:
+            return None
+        return policies_by_id.get(vhost.policy_id)
+
+    vhost_contexts = [
+        _to_haproxy_context(vhost, _policy_for_vhost(vhost))
+        for vhost in active_vhosts
+    ]
 
     active_policy, active_overrides, active_exclusions, active_custom_rules = (
         _pick_active_policy(
@@ -193,7 +204,9 @@ def _add_effective_policy_id(
     effective_policy_ids.add(policy.id)
 
 
-def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
+def _to_haproxy_context(
+    vhost: VHost, policy: Policy | None
+) -> HaproxyRenderContext:
     if vhost.id is None:
         raise ValueError(f"Active vhost {vhost.domain!r} has no persisted id")
     # Use the database id as the naming suffix so that domain names that only
@@ -218,12 +231,25 @@ def _to_haproxy_context(vhost: VHost) -> HaproxyRenderContext:
         ),
         "/",
     )
+    ddos = (
+        HaproxyDdos(
+            enabled=True,
+            stick_table_name=f"st_ddos_{suffix}",
+            rate_limit_requests=policy.rate_limit_requests,
+            rate_limit_window_seconds=policy.rate_limit_window_seconds,
+            max_connections_per_ip=policy.max_connections_per_ip,
+        )
+        if policy is not None and policy.ddos_protection_enabled
+        else None
+    )
+
     return HaproxyRenderContext(
         routes=(
             HaproxyRoute(
                 vhost_acl_name=f"host_{suffix}",
                 vhost_hosts=(vhost.domain,),
                 ssl_provider=vhost.ssl_provider if vhost.ssl_enabled else "none",
+                ddos=ddos,
                 backend=HaproxyBackend(
                     name=f"be_{suffix}",
                     health_check_path=health_check_path,

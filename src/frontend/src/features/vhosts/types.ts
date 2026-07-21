@@ -54,6 +54,10 @@ export type VHostAssignedPolicy = {
   outbound_anomaly_threshold: number;
   enforcement_mode: "block" | "detect_only";
   is_active: boolean;
+  ddos_protection_enabled: boolean;
+  rate_limit_requests: number;
+  rate_limit_window_seconds: number;
+  max_connections_per_ip: number;
   created_by: number | null;
   created_at: string;
   updated_at: string;
