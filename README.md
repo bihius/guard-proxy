@@ -71,8 +71,8 @@ make seed      # add the initial admin user (ADMIN_EMAIL / ADMIN_PASSWORD from .
 Additional accounts are managed with the user CLI, e.g.:
 
 ```bash
-make users ARGS="create --email alice@example.com --password '<min 12 chars>' --full-name 'Alice'"
-make users ARGS="list"
+./bin/users create --email alice@example.com --password '<min 12 chars>' --full-name 'Alice'
+./bin/users list
 ```
 
 See [User Management](docs/commands.md#user-management) for all commands.

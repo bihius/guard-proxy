@@ -4,7 +4,7 @@ COMPOSE_FILE := docker/docker-compose.yml
 COMPOSE_DEBUG_FILE := docker/docker-compose.debug.yml
 ENV_FILE := docker/.env
 
-.PHONY: run dev down clean logs ps seed users coraza-build \
+.PHONY: run dev down clean logs ps seed coraza-build \
         eval-up eval-down eval-clean eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics eval-all eval-results
 
 run:
@@ -27,14 +27,6 @@ ps:
 
 seed:
 	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/seed_admin.py
-
-ifeq (users,$(firstword $(MAKECMDGOALS)))
-  USERS_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-  $(eval $(USERS_ARGS):;@:)
-endif
-
-users:
-	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec backend /app/.venv/bin/python scripts/manage_users.py $(if $(USERS_ARGS),$(patsubst help,--help,$(USERS_ARGS)),$(ARGS))
 
 coraza-build:
 	docker build -f docker/coraza.Dockerfile -t guard-proxy/coraza-spoa:dev .

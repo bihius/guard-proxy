@@ -67,7 +67,7 @@ make seed                                                            # Seed admi
 ## User Management
 
 There is no REST endpoint for managing users; accounts are managed with the
-backend CLI scripts (run inside the backend container via `make`).
+backend CLI (run inside the backend container via `./bin/users`).
 
 ```bash
 # Bootstrap the first admin (idempotent; reads ADMIN_EMAIL / ADMIN_PASSWORD
@@ -75,21 +75,14 @@ backend CLI scripts (run inside the backend container via `make`).
 make seed
 
 # Manage further accounts with the manage_users.py CLI
-make users ARGS="create --email alice@example.com --password '<min 12 chars>' --full-name 'Alice' --role viewer"
-make users ARGS="list"                                # All users (add --json for JSON output)
-make users ARGS="list --role admin --active"          # Filtered list
-make users ARGS="update alice@example.com --role admin"  # Promote by email
-make users ARGS="update 3 --deactivate"               # Deactivate by user ID
-make users ARGS="update 3 --password '<new password>'"   # Reset a password
-
-# Bare subcommands (no --flags) can skip ARGS=, e.g.:
-make users list
-make users help
+./bin/users create --email alice@example.com --password '<min 12 chars>' --full-name 'Alice' --role viewer
+./bin/users list                                # All users (add --json for JSON output)
+./bin/users list --role admin --active          # Filtered list
+./bin/users update alice@example.com --role admin  # Promote by email
+./bin/users update 3 --deactivate               # Deactivate by user ID
+./bin/users update 3 --password '<new password>'   # Reset a password
+./bin/users --help
 ```
-
-Note: any argument starting with `-` (e.g. `--role`, `--active`, `-h`) is
-consumed by `make` itself before it reaches the Makefile, so those must be
-passed via `ARGS="..."` as shown above.
 
 Outside Docker (local backend checkout):
 
