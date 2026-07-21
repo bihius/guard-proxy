@@ -1,4 +1,4 @@
-name: guard-proxy
+name: guard-proxy-release
 
 # Image-only release stack for Guard Proxy beta testers.
 #
