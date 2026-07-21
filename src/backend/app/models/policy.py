@@ -72,6 +72,14 @@ class Policy(Base):
             "max_connections_per_ip >= 1",
             name="ck_policies_max_connections_per_ip",
         ),
+        CheckConstraint(
+            "ban_threshold >= 1",
+            name="ck_policies_ban_threshold",
+        ),
+        CheckConstraint(
+            "ban_duration_seconds BETWEEN 1 AND 86400",
+            name="ck_policies_ban_duration_seconds",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -127,6 +135,22 @@ class Policy(Base):
         Integer,
         nullable=False,
         default=20,  # concurrent connection limit per source IP
+    )
+
+    # Automatic IP banning (config-only; see #275). Only takes effect when
+    # ddos_protection_enabled is also true.
+    auto_ban_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    ban_threshold: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10,  # rate/conn violations before a source IP is banned
+    )
+    ban_duration_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=600,  # ban duration (idle-expiry), in seconds
     )
 
     # Audit — who created the policy

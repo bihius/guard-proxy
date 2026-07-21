@@ -156,6 +156,10 @@ class HaproxyDdos:
     rate_limit_requests: int
     rate_limit_window_seconds: int
     max_connections_per_ip: int
+    auto_ban_enabled: bool = False
+    ban_stick_table_name: str = ""
+    ban_threshold: int = 10
+    ban_duration_seconds: int = 600
 
     def __post_init__(self) -> None:
         _validate_haproxy_identifier(
@@ -169,6 +173,16 @@ class HaproxyDdos:
             )
         if self.max_connections_per_ip < 1:
             raise ValueError("HaproxyDdos.max_connections_per_ip must be positive")
+        if self.auto_ban_enabled:
+            _validate_haproxy_identifier(
+                self.ban_stick_table_name, "HaproxyDdos.ban_stick_table_name"
+            )
+            if self.ban_threshold < 1:
+                raise ValueError("HaproxyDdos.ban_threshold must be positive")
+            if not 1 <= self.ban_duration_seconds <= 86400:
+                raise ValueError(
+                    "HaproxyDdos.ban_duration_seconds must be between 1 and 86400"
+                )
 
 
 @dataclass(frozen=True)
@@ -228,6 +242,14 @@ class HaproxyRenderContext:
                 if route.ddos is not None
             ),
             "HaproxyRenderContext.routes.ddos.stick_table_name",
+        )
+        _ensure_unique(
+            (
+                route.ddos.ban_stick_table_name
+                for route in self.routes
+                if route.ddos is not None and route.ddos.auto_ban_enabled
+            ),
+            "HaproxyRenderContext.routes.ddos.ban_stick_table_name",
         )
 
 

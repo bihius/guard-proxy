@@ -271,6 +271,10 @@ def _ddos(
     rate_limit_window_seconds: int = 10,
     max_connections_per_ip: int = 20,
     enabled: bool = True,
+    auto_ban_enabled: bool = False,
+    ban_stick_table_name: str = "",
+    ban_threshold: int = 10,
+    ban_duration_seconds: int = 600,
 ) -> HaproxyDdos:
     return HaproxyDdos(
         enabled=enabled,
@@ -278,6 +282,10 @@ def _ddos(
         rate_limit_requests=rate_limit_requests,
         rate_limit_window_seconds=rate_limit_window_seconds,
         max_connections_per_ip=max_connections_per_ip,
+        auto_ban_enabled=auto_ban_enabled,
+        ban_stick_table_name=ban_stick_table_name,
+        ban_threshold=ban_threshold,
+        ban_duration_seconds=ban_duration_seconds,
     )
 
 
@@ -353,6 +361,147 @@ def test_haproxy_template_omits_ddos_for_disabled_route_only() -> None:
     assert "table st_ddos_vhost_1 if host_vhost_1" in rendered
     assert "table st_ddos_vhost_1 if host_vhost_2" not in rendered
     assert "if host_vhost_2 { sc_http_req_rate" not in rendered
+
+
+def test_haproxy_template_omits_auto_ban_blocks_when_disabled() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    ddos=_ddos(auto_ban_enabled=False),
+                ),
+            ),
+        )
+    )
+
+    assert "track-sc1" not in rendered
+    assert "sc-inc-gpc0" not in rendered
+    assert "st_ban_" not in rendered
+
+
+def test_haproxy_template_renders_auto_ban_blocks_when_enabled() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    ddos=_ddos(
+                        stick_table_name="st_ddos_vhost_1",
+                        rate_limit_requests=100,
+                        max_connections_per_ip=20,
+                        auto_ban_enabled=True,
+                        ban_stick_table_name="st_ban_vhost_1",
+                        ban_threshold=5,
+                        ban_duration_seconds=600,
+                    ),
+                ),
+            ),
+        )
+    )
+
+    assert (
+        "backend st_ban_vhost_1\n"
+        "    stick-table type ipv6 size 100k expire 600s store gpc0" in rendered
+    )
+    assert (
+        "http-request track-sc1 src table st_ban_vhost_1 "
+        "if host_api !is_health !is_acme" in rendered
+    )
+    assert (
+        "http-request deny deny_status 429 if host_api !is_health !is_acme "
+        "{ sc_get_gpc0(1) gt 5 }" in rendered
+    )
+    assert (
+        "http-request sc-inc-gpc0(1) if host_api !is_health !is_acme "
+        "{ sc_http_req_rate(0,st_ddos_vhost_1) gt 100 }" in rendered
+    )
+    assert (
+        "http-request sc-inc-gpc0(1) if host_api !is_health !is_acme "
+        "{ sc_conn_cur(0,st_ddos_vhost_1) gt 20 }" in rendered
+    )
+
+
+def test_haproxy_render_context_rejects_duplicate_ban_table_names() -> None:
+    with pytest.raises(ValueError, match="ban_stick_table_name"):
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_one",
+                    vhost_hosts=("one.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_one", "srv_one", "one-backend:8000"),
+                    ddos=_ddos(
+                        stick_table_name="st_ddos_one",
+                        auto_ban_enabled=True,
+                        ban_stick_table_name="st_ban_dup",
+                    ),
+                ),
+                HaproxyRoute(
+                    vhost_acl_name="host_two",
+                    vhost_hosts=("two.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_two", "srv_two", "two-backend:8000"),
+                    ddos=_ddos(
+                        stick_table_name="st_ddos_two",
+                        auto_ban_enabled=True,
+                        ban_stick_table_name="st_ban_dup",
+                    ),
+                ),
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "kwargs"),
+    [
+        (
+            "ban_stick_table_name",
+            {"ban_stick_table_name": "", "ban_threshold": 1, "ban_duration_seconds": 1},
+        ),
+        (
+            "ban_threshold",
+            {
+                "ban_stick_table_name": "st_ban",
+                "ban_threshold": 0,
+                "ban_duration_seconds": 1,
+            },
+        ),
+        (
+            "ban_duration_seconds",
+            {
+                "ban_stick_table_name": "st_ban",
+                "ban_threshold": 1,
+                "ban_duration_seconds": 0,
+            },
+        ),
+        (
+            "ban_duration_seconds_too_large",
+            {
+                "ban_stick_table_name": "st_ban",
+                "ban_threshold": 1,
+                "ban_duration_seconds": 86401,
+            },
+        ),
+    ],
+)
+def test_haproxy_ddos_rejects_invalid_ban_values(field: str, kwargs: dict) -> None:
+    with pytest.raises(ValueError):
+        HaproxyDdos(
+            enabled=True,
+            stick_table_name="st_ddos",
+            rate_limit_requests=1,
+            rate_limit_window_seconds=1,
+            max_connections_per_ip=1,
+            auto_ban_enabled=True,
+            **kwargs,
+        )
 
 
 def test_haproxy_render_context_rejects_duplicate_ddos_table_names() -> None:
@@ -445,6 +594,46 @@ def test_rendered_haproxy_template_with_ddos_validates_with_haproxy(
                     ssl_provider="none",
                     backend=_backend("be_app", "app", "backend:8000"),
                     ddos=_ddos(stick_table_name="st_ddos_vhost_1"),
+                ),
+            ),
+        )
+    )
+
+    coraza_cfg = REPO_ROOT / "configs/haproxy/coraza.cfg"
+    rendered = rendered.replace(
+        "/usr/local/etc/haproxy/coraza.cfg", str(coraza_cfg)
+    )
+
+    rendered_path = tmp_path / "haproxy.cfg"
+    rendered_path.write_text(rendered)
+
+    result = subprocess.run(
+        ["haproxy", "-c", "-f", str(rendered_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(shutil.which("haproxy") is None, reason="haproxy is not installed")
+def test_rendered_haproxy_template_with_auto_ban_validates_with_haproxy(
+    tmp_path: Path,
+) -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_app",
+                    vhost_hosts=("app.local",),
+                    ssl_provider="none",
+                    backend=_backend("be_app", "app", "backend:8000"),
+                    ddos=_ddos(
+                        stick_table_name="st_ddos_vhost_1",
+                        auto_ban_enabled=True,
+                        ban_stick_table_name="st_ban_vhost_1",
+                    ),
                 ),
             ),
         )

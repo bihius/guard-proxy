@@ -57,6 +57,9 @@ def test_create_policy_persists_values_and_created_by(
     assert policy.rate_limit_requests == 100
     assert policy.rate_limit_window_seconds == 10
     assert policy.max_connections_per_ip == 20
+    assert policy.auto_ban_enabled is False
+    assert policy.ban_threshold == 10
+    assert policy.ban_duration_seconds == 600
 
 
 def test_create_policy_persists_ddos_protection_settings(
@@ -114,6 +117,60 @@ def test_update_policy_changes_ddos_protection_settings(
     assert updated.rate_limit_requests == 200
     assert updated.rate_limit_window_seconds == 30
     assert updated.max_connections_per_ip == 40
+
+
+def test_create_policy_persists_auto_ban_settings(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+
+    policy = service.create_policy(
+        name="Auto-Ban Hardened",
+        description=None,
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+        ddos_protection_enabled=True,
+        auto_ban_enabled=True,
+        ban_threshold=3,
+        ban_duration_seconds=300,
+    )
+
+    assert policy.auto_ban_enabled is True
+    assert policy.ban_threshold == 3
+    assert policy.ban_duration_seconds == 300
+
+
+def test_update_policy_changes_auto_ban_settings(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Base Auto-Ban",
+        description=None,
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    updated = service.update_policy(
+        created.id,
+        {
+            "auto_ban_enabled": True,
+            "ban_threshold": 7,
+            "ban_duration_seconds": 1200,
+        },
+    )
+
+    assert updated.auto_ban_enabled is True
+    assert updated.ban_threshold == 7
+    assert updated.ban_duration_seconds == 1200
 
 
 def test_create_policy_duplicate_name_raises_error(

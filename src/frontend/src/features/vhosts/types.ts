@@ -58,6 +58,9 @@ export type VHostAssignedPolicy = {
   rate_limit_requests: number;
   rate_limit_window_seconds: number;
   max_connections_per_ip: number;
+  auto_ban_enabled: boolean;
+  ban_threshold: number;
+  ban_duration_seconds: number;
   created_by: number | null;
   created_at: string;
   updated_at: string;

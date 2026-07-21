@@ -23,6 +23,9 @@ class PolicyCreate(BaseModel):
     rate_limit_requests: int = Field(default=100, ge=1)
     rate_limit_window_seconds: int = Field(default=10, ge=1, le=3600)
     max_connections_per_ip: int = Field(default=20, ge=1)
+    auto_ban_enabled: bool = False
+    ban_threshold: int = Field(default=10, ge=1)
+    ban_duration_seconds: int = Field(default=600, ge=1, le=86400)
 
     @field_validator("inbound_anomaly_threshold", "outbound_anomaly_threshold")
     @classmethod
@@ -50,6 +53,9 @@ class PolicyUpdate(BaseModel):
     rate_limit_requests: int | None = Field(default=None, ge=1)
     rate_limit_window_seconds: int | None = Field(default=None, ge=1, le=3600)
     max_connections_per_ip: int | None = Field(default=None, ge=1)
+    auto_ban_enabled: bool | None = None
+    ban_threshold: int | None = Field(default=None, ge=1)
+    ban_duration_seconds: int | None = Field(default=None, ge=1, le=86400)
 
     @field_validator("inbound_anomaly_threshold", "outbound_anomaly_threshold")
     @classmethod
@@ -76,6 +82,9 @@ class PolicyResponse(BaseModel):
     rate_limit_requests: int
     rate_limit_window_seconds: int
     max_connections_per_ip: int
+    auto_ban_enabled: bool
+    ban_threshold: int
+    ban_duration_seconds: int
     created_by: int | None
     created_at: datetime
     updated_at: datetime
