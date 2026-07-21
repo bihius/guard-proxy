@@ -22,9 +22,9 @@ between beta releases yet — back up `pgdata` before upgrading. See
 ## 1. Get the release kit
 
 Download and extract the `guard-proxy-release-v0.1.0-beta.1.tar.gz` asset
-from the [GitHub Releases page](../../releases), or copy this `release/`
-directory if you already have the repository checked out. You should end
-up with:
+from the [GitHub Releases page](https://github.com/bihius/guard-proxy/releases),
+or copy this `release/` directory if you already have the repository
+checked out. You should end up with:
 
 ```
 guard-proxy-release/
@@ -67,12 +67,20 @@ docker compose ps    # wait for all services to report healthy
 ```
 
 Create the first admin account (idempotent — safe to re-run, it skips if
-an admin already exists):
+an admin already exists). Use the `ADMIN_EMAIL`/`ADMIN_PASSWORD` env vars
+rather than `--email`/`--password` flags, so the password isn't written to
+your shell history:
 
 ```sh
-docker compose exec backend /app/.venv/bin/python scripts/seed_admin.py \
-  --email you@example.com --password 'a-strong-password-here'
+docker compose exec \
+  -e ADMIN_EMAIL=you@example.com \
+  -e ADMIN_PASSWORD='a-strong-password-here' \
+  backend /app/.venv/bin/python scripts/seed_admin.py
 ```
+
+If you set `ADMIN_EMAIL`/`ADMIN_PASSWORD` in `.env` instead, remove them
+again after the account is created — they aren't read at container
+startup, so leaving them there only leaves a plaintext password at rest.
 
 Log in to the admin UI at `http://<host>:${FRONTEND_PORT:-3000}` (or
 through HAProxy on port 80/443, once you've added a vhost — see below).
