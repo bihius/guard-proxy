@@ -9,6 +9,7 @@ from app.models.policy import Policy
 from app.models.vhost import VHost
 from app.services import ban_list_service
 from app.services.ban_list_service import (
+    _RUNTIME_API_ERROR_RE,
     BanListService,
     BanTableEntry,
     InvalidIpError,
@@ -77,6 +78,41 @@ class TestParseShowTable:
         raw = "some unrelated garbage line\nkey=only-partial\n"
 
         assert _parse_show_table(raw) == []
+
+
+class TestRuntimeApiErrorRegex:
+    """Mirrors `_RELOAD_ERROR_RE` coverage in test_config_apply.py.
+
+    The Runtime API reports failures as plain text in the command's own
+    response rather than as a socket error, so `_send_runtime_command` must
+    classify replies itself — a real `show table`/`clear table` data line
+    or header must never false-positive as an error.
+    """
+
+    def test_does_not_match_show_table_output(self) -> None:
+        benign_outputs = [
+            "# table: st_ban_vhost_1, type: ip, size:102400, used:1",
+            "0x7f: key=192.0.2.7 use=0 exp=540000 gpc0=15",
+            "",
+            "\n",
+        ]
+        for output in benign_outputs:
+            assert not _RUNTIME_API_ERROR_RE.search(output), (
+                f"Regex incorrectly matched benign output: {output!r}"
+            )
+
+    def test_matches_known_haproxy_error_replies(self) -> None:
+        error_outputs = [
+            "Unknown command. Please enter one of the following commands only:\n",
+            "No such table\n",
+            "Can't find table\n",
+            "Permission denied\n",
+            "Invalid key\n",
+        ]
+        for output in error_outputs:
+            assert _RUNTIME_API_ERROR_RE.search(output), (
+                f"Regex did not match expected error output: {output!r}"
+            )
 
 
 class TestListBanned:
@@ -174,6 +210,22 @@ class TestListBanned:
 
     def test_returns_empty_list_when_no_vhost_qualifies(self, db: Session) -> None:
         assert BanListService(db).list_banned() == []
+
+    def test_raises_runtime_api_error_when_every_table_fails(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        policy = _sample_policy()
+        vhost = _sample_vhost(policy)
+        db.add_all([policy, vhost])
+        db.flush()
+
+        def fake_send(_command: str) -> str:
+            raise RuntimeApiError("connection refused")
+
+        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
+        with pytest.raises(RuntimeApiError):
+            BanListService(db).list_banned()
 
 
 class TestUnban:

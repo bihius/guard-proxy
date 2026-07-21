@@ -23,7 +23,13 @@ def list_banned_ips(
 ) -> BannedIpListResponse:
     """Returns tracked/banned source IPs across auto-ban-enabled vhosts (admin only)."""
     service = BanListService(db)
-    items = service.list_banned()
+    try:
+        items = service.list_banned()
+    except RuntimeApiError as error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to reach HAProxy Runtime API",
+        ) from error
     return BannedIpListResponse(items=items, total=len(items))
 
 

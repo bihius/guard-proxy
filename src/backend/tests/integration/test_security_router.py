@@ -87,6 +87,24 @@ def test_list_banned_ips_returns_empty_when_nothing_tracked(
     assert response.json() == {"items": [], "total": 0}
 
 
+def test_list_banned_ips_returns_502_when_runtime_api_unreachable(
+    client: TestClient,
+    admin_token: dict[str, str],
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _create_banned_vhost(db)
+
+    def fake_send(_command: str) -> str:
+        raise ban_list_service.RuntimeApiError("connection refused")
+
+    monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
+    response = client.get("/security/banned-ips", headers=admin_token)
+
+    assert response.status_code == 502
+
+
 def test_unban_requires_auth(client: TestClient) -> None:
     response = client.delete("/security/banned-ips/203.0.113.5")
 

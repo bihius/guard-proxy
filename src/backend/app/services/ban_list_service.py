@@ -27,6 +27,17 @@ _TABLE_ENTRY_RE = re.compile(
     r"key=(?P<key>\S+).*?exp=(?P<exp>\d+).*?gpc0=(?P<gpc0>\d+)"
 )
 
+# HAProxy's Runtime API reports failures (unknown table, permission denied,
+# unsupported command, ...) as plain text in the command's own response
+# rather than as a socket-level error, so a successful `recv()` does not
+# mean the command succeeded. Anchored to the start of a line, mirroring
+# `config_apply._RELOAD_ERROR_RE`, so a `key=...` data line or the
+# `# table: ...` header can never false-positive.
+_RUNTIME_API_ERROR_RE = re.compile(
+    r"^\s*(unknown|no such|can't find|permission denied|invalid|error)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 
 class BanListError(Exception):
     """Base class for ban-list domain errors."""
@@ -54,7 +65,13 @@ class BanTableEntry:
 
 
 def _send_runtime_command(command: str) -> str:
-    """Send one Runtime API command over the admin stats socket and return output."""
+    """Send one Runtime API command over the admin stats socket and return output.
+
+    Raises `RuntimeApiError` both when the socket itself is unreachable and
+    when HAProxy accepts the connection but replies with an error message
+    (e.g. an unknown table) — the caller cannot otherwise tell a successful
+    `clear`/`show` from one HAProxy silently rejected.
+    """
     socket_path = settings.haproxy_stats_socket_path
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -71,7 +88,11 @@ def _send_runtime_command(command: str) -> str:
     except OSError as error:
         raise RuntimeApiError(str(error)) from error
 
-    return b"".join(output_chunks).decode("utf-8", errors="replace")
+    output = b"".join(output_chunks).decode("utf-8", errors="replace")
+    if _RUNTIME_API_ERROR_RE.search(output):
+        raise RuntimeApiError(output.strip() or "HAProxy Runtime API returned an error")
+
+    return output
 
 
 def _parse_show_table(raw: str) -> list[BanTableEntry]:
@@ -105,9 +126,18 @@ class BanListService:
         self.db = db
 
     def list_banned(self) -> list[BannedIpResponse]:
-        """Return every tracked/banned entry across all auto-ban-enabled vhosts."""
+        """Return every tracked/banned entry across all auto-ban-enabled vhosts.
+
+        Tolerates individual table failures (one dead table must not blank
+        the whole list) but raises `RuntimeApiError` if every attempted
+        table failed, so a fully unreachable Runtime API surfaces as an
+        error instead of an empty list indistinguishable from "nothing
+        tracked" — mirroring `unban`'s all-tables-failed handling below.
+        """
+        tables = self._active_ban_tables()
         results: list[BannedIpResponse] = []
-        for vhost, table_name, ban_threshold in self._active_ban_tables():
+        failures = 0
+        for vhost, table_name, ban_threshold in tables:
             try:
                 raw = _send_runtime_command(f"show table {table_name}")
                 entries = _parse_show_table(raw)
@@ -117,6 +147,7 @@ class BanListService:
                     table_name,
                     vhost.id,
                 )
+                failures += 1
                 continue
 
             for entry in entries:
@@ -131,11 +162,19 @@ class BanListService:
                         expires_in_seconds=entry.expires_in_seconds,
                     )
                 )
+
+        if tables and failures == len(tables):
+            raise RuntimeApiError("Failed to reach HAProxy Runtime API")
+
         return results
 
     def unban(self, ip: str) -> UnbanResponse:
         """Clear an IP from every active ban table; return the number cleared.
 
+        `cleared` counts tables where HAProxy confirmed the `clear table`
+        command (including a no-op when the key was already absent) — not
+        merely tables where the socket write succeeded, since
+        `_send_runtime_command` raises on an HAProxy-reported error too.
         Tolerates individual table failures (one dead table must not block
         clearing the others) but raises `RuntimeApiError` if every attempted
         table failed, so a fully unreachable Runtime API surfaces as an
