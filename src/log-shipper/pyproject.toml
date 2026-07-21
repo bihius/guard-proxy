@@ -1,6 +1,6 @@
 [project]
 name = "guard-proxy-log-shipper"
-version = "0.1.0b1"
+version = "0.1.0b2"
 description = "Guard Proxy — Coraza audit log to ingest endpoint sidecar"
 requires-python = ">=3.13"
 dependencies = []   # runtime: stdlib only
