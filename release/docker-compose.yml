@@ -1,0 +1,164 @@
+name: guard-proxy
+
+# Image-only release stack for Guard Proxy beta testers.
+#
+# This file pulls prebuilt images from GHCR instead of building from
+# source. Set GUARD_PROXY_IMAGE_TAG (see .env.example) to the release
+# you want to run, e.g. v0.1.0-beta.1.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - gp_internal
+
+  backend:
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-backend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      RUNTIME_GENERATED_CONFIG_ROOT: /var/lib/guard-proxy/generated
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=2)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    volumes:
+      - backend_logs:/var/log/guard-proxy
+      - ./haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
+      - generated_config:/var/lib/guard-proxy/generated
+      - haproxy_runtime:/var/run/haproxy
+    networks:
+      - gp_internal
+
+  frontend:
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-frontend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    restart: unless-stopped
+    environment:
+      # Explicit base URL is optional. If unset, the frontend uses relative
+      # paths and expects HAProxy to route /api/v1 to the backend.
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:5173"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:5173 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - gp_edge
+      - gp_internal
+
+  coraza:
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-coraza:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - generated_config:/runtime:ro
+      - coraza_audit:/var/log/coraza
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - gp_internal
+
+  log-shipper:
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-log-shipper:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      INGEST_URL: "http://backend:8000/logs/ingest"
+      CORAZA_AUDIT_LOG: "/var/log/coraza/audit.log"
+      SHIPPER_STATE_FILE: "/var/lib/log-shipper/offset"
+    depends_on:
+      backend:
+        condition: service_healthy
+      coraza:
+        condition: service_healthy
+    volumes:
+      - coraza_audit:/var/log/coraza:ro
+      - shipper_state:/var/lib/log-shipper
+    networks:
+      - gp_internal
+
+  haproxy:
+    image: haproxy:3.0-alpine
+    user: "0:0"
+    command:
+      [
+        "sh",
+        "-c",
+        "set -eu; if [ ! -f /etc/haproxy/generated/current/haproxy.cfg ]; then mkdir -p /etc/haproxy/generated/releases/seed; cp /usr/local/etc/haproxy/haproxy.cfg /etc/haproxy/generated/releases/seed/haproxy.cfg; ln -sfn releases/seed /etc/haproxy/generated/current; fi; exec haproxy -W -S /var/run/haproxy/master.sock,mode,666,level,operator -f /etc/haproxy/generated/current/haproxy.cfg",
+      ]
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      coraza:
+        condition: service_started
+    ports:
+      - "${HAPROXY_HTTP_PORT:-80}:80"
+      - "${HAPROXY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
+      - haproxy_logs:/var/log/haproxy
+      - generated_config:/etc/haproxy/generated
+      - haproxy_runtime:/var/run/haproxy
+    healthcheck:
+      test: ["CMD-SHELL", "haproxy -c -f /etc/haproxy/generated/current/haproxy.cfg"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - gp_edge
+      - gp_internal
+
+networks:
+  gp_edge:
+    driver: bridge
+  gp_internal:
+    driver: bridge
+
+volumes:
+  pgdata:
+  haproxy_logs:
+  haproxy_runtime:
+  backend_logs:
+  generated_config:
+  coraza_audit:
+  shipper_state:
