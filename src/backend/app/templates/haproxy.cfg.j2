@@ -7,6 +7,10 @@ global
     maxconn 2000
     # Operator level avoids exposing administrative Runtime API commands.
     stats socket /tmp/haproxy.sock mode 660 level operator
+    # Admin level, reachable only from the backend over the shared runtime
+    # volume. Needed for `clear table` (unban) — see #276 — which the
+    # operator-level socket above deliberately cannot perform.
+    stats socket /var/run/haproxy/admin.sock mode 660 level admin
 
 defaults
     mode http

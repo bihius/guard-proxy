@@ -76,6 +76,8 @@ class Settings(EnvFileSettings):
     haproxy_validation_timeout_seconds: int = 10
     haproxy_master_socket_path: str = "/var/run/haproxy/master.sock"
     haproxy_reload_timeout_seconds: int = 10
+    haproxy_stats_socket_path: str = "/var/run/haproxy/admin.sock"
+    haproxy_stats_timeout_seconds: int = 10
     log_retention_days: int = 30
 
     @field_validator("database_url")
@@ -87,6 +89,7 @@ class Settings(EnvFileSettings):
         "runtime_generated_config_root",
         "haproxy_validation_binary",
         "haproxy_master_socket_path",
+        "haproxy_stats_socket_path",
     )
     @classmethod
     def runtime_paths_must_not_be_empty(cls, value: str) -> str:
@@ -97,6 +100,7 @@ class Settings(EnvFileSettings):
     @field_validator(
         "haproxy_validation_timeout_seconds",
         "haproxy_reload_timeout_seconds",
+        "haproxy_stats_timeout_seconds",
     )
     @classmethod
     def timeout_settings_must_be_positive(cls, value: int) -> int:

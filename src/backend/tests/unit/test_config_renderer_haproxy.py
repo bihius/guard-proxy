@@ -62,6 +62,13 @@ def test_haproxy_template_renders_m1_reference_modulo_whitespace() -> None:
     assert _normalise_config(rendered) == _normalise_config(reference)
 
 
+def test_haproxy_template_renders_admin_stats_socket_for_runtime_api() -> None:
+    rendered = render_haproxy_cfg(_m1_reference_context())
+
+    assert "stats socket /tmp/haproxy.sock mode 660 level operator" in rendered
+    assert "stats socket /var/run/haproxy/admin.sock mode 660 level admin" in rendered
+
+
 def test_haproxy_template_parameterises_vhost_and_backend() -> None:
     rendered = render_haproxy_cfg(
         HaproxyRenderContext(
