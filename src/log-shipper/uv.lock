@@ -126,7 +126,7 @@ wheels = [
 
 [[package]]
 name = "guard-proxy-log-shipper"
-version = "0.1.0a0"
+version = "0.1.0b1"
 source = { editable = "." }
 
 [package.optional-dependencies]

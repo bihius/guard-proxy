@@ -49,7 +49,8 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/guard-proxy-${{ matrix.image.name }}
           tags: |
             type=ref,event=tag
-            type=raw,value=alpha
+            type=raw,value=alpha,enable=${{ !contains(github.ref, '-beta.') }}
+            type=raw,value=beta,enable=${{ contains(github.ref, '-beta.') }}
             type=sha,format=short
 
       - name: Set up Docker Buildx
@@ -65,3 +66,32 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+
+  release-kit:
+    name: release-kit
+    needs: publish
+    if: contains(github.ref, '-beta.')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Derive release tag
+        id: tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release-kit archive
+        run: |
+          mkdir -p dist
+          tar -czf "dist/guard-proxy-release-${{ steps.tag.outputs.tag }}.tar.gz" \
+            -C release .
+
+      - name: Create GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          prerelease: true
+          files: dist/guard-proxy-release-${{ steps.tag.outputs.tag }}.tar.gz
+          generate_release_notes: true
