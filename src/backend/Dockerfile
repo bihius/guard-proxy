@@ -54,6 +54,10 @@ COPY --chown=app:app alembic alembic
 COPY --chown=app:app app app
 COPY --chown=app:app scripts scripts
 COPY --chown=app:app alembic.ini alembic.ini
+# The project itself isn't installed as a distribution above (--no-install-project),
+# so no dist-info exists for importlib.metadata to read. Ship pyproject.toml so
+# app.main can fall back to parsing the version straight from it.
+COPY --chown=app:app pyproject.toml pyproject.toml
 
 EXPOSE 8000
 
