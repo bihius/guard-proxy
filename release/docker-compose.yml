@@ -4,7 +4,7 @@ name: guard-proxy-release
 #
 # This file pulls prebuilt images from GHCR instead of building from
 # source. Set GUARD_PROXY_IMAGE_TAG (see .env.example) to the release
-# you want to run, e.g. v0.1.0-beta.1.
+# you want to run, e.g. v0.1.0-beta.2.
 
 services:
   postgres:
@@ -26,7 +26,7 @@ services:
       - gp_internal
 
   backend:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-backend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-backend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.2}
     restart: unless-stopped
     env_file:
       - .env
@@ -55,7 +55,7 @@ services:
       - gp_internal
 
   frontend:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-frontend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-frontend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.2}
     restart: unless-stopped
     environment:
       # Explicit base URL is optional. If unset, the frontend uses relative
@@ -77,7 +77,7 @@ services:
       - gp_internal
 
   coraza:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-coraza:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-coraza:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.2}
     restart: unless-stopped
     depends_on:
       backend:
@@ -95,7 +95,7 @@ services:
       - gp_internal
 
   log-shipper:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-log-shipper:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.1}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-log-shipper:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.2}
     restart: unless-stopped
     env_file:
       - .env

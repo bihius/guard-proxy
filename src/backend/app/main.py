@@ -2,6 +2,8 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _package_version
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -37,6 +39,21 @@ from app.services.config_generator import generate
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_app_version() -> str:
+    """Return the installed package version, the single source of truth.
+
+    Falls back gracefully when the app runs from a source tree that has not
+    been installed as a distribution (e.g. some local dev setups).
+    """
+    try:
+        return _package_version("guard-proxy-backend")
+    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
+        return "0.0.0+unknown"
+
+
+APP_VERSION = _resolve_app_version()
 
 
 class _HealthcheckAccessFilter(logging.Filter):
@@ -101,7 +118,7 @@ def _seed_runtime_config() -> None:
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -134,7 +151,7 @@ def health_check() -> dict[str, str]:
     """Liveness probe — always returns 200 if the process is running."""
     return {
         "status": "healthy",
-        "version": "0.1.0",
+        "version": APP_VERSION,
     }
 
 
