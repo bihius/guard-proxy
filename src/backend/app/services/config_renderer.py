@@ -141,6 +141,35 @@ class HaproxyBackend:
 
 
 @dataclass(frozen=True)
+class HaproxyDdos:
+    """Per-vhost DDoS protection settings (rate limiting + connection throttling).
+
+    All fields are validated on construction; ``stick_table_name`` is derived
+    from the vhost's existing ACL suffix so it is guaranteed to be a safe and
+    unique HAProxy identifier.
+    """
+
+    enabled: bool
+    stick_table_name: str
+    rate_limit_requests: int
+    rate_limit_window_seconds: int
+    max_connections_per_ip: int
+
+    def __post_init__(self) -> None:
+        _validate_haproxy_identifier(
+            self.stick_table_name, "HaproxyDdos.stick_table_name"
+        )
+        if self.rate_limit_requests < 1:
+            raise ValueError("HaproxyDdos.rate_limit_requests must be positive")
+        if not 1 <= self.rate_limit_window_seconds <= 3600:
+            raise ValueError(
+                "HaproxyDdos.rate_limit_window_seconds must be between 1 and 3600"
+            )
+        if self.max_connections_per_ip < 1:
+            raise ValueError("HaproxyDdos.max_connections_per_ip must be positive")
+
+
+@dataclass(frozen=True)
 class HaproxyRoute:
     """Prepared HAProxy render input with no database behavior.
 
@@ -153,6 +182,7 @@ class HaproxyRoute:
     vhost_hosts: tuple[str, ...]
     ssl_provider: str
     backend: HaproxyBackend
+    ddos: HaproxyDdos | None = None
 
     def __post_init__(self) -> None:
         _validate_haproxy_identifier(
@@ -188,6 +218,14 @@ class HaproxyRenderContext:
                 for server in route.backend.servers
             ),
             "HaproxyRenderContext.routes.backend.server_name",
+        )
+        _ensure_unique(
+            (
+                route.ddos.stick_table_name
+                for route in self.routes
+                if route.ddos is not None
+            ),
+            "HaproxyRenderContext.routes.ddos.stick_table_name",
         )
 
 

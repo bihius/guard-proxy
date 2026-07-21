@@ -42,6 +42,18 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
   );
   const outboundThreshold = String(initial?.outbound_anomaly_threshold ?? 4);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
+  const [ddosProtectionEnabled, setDdosProtectionEnabled] = useState(
+    initial?.ddos_protection_enabled ?? false,
+  );
+  const [rateLimitRequests, setRateLimitRequests] = useState<string>(
+    String(initial?.rate_limit_requests ?? 100),
+  );
+  const [rateLimitWindowSeconds, setRateLimitWindowSeconds] = useState<string>(
+    String(initial?.rate_limit_window_seconds ?? 10),
+  );
+  const [maxConnectionsPerIp, setMaxConnectionsPerIp] = useState<string>(
+    String(initial?.max_connections_per_ip ?? 20),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -62,6 +74,10 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           inbound_anomaly_threshold: Number(inboundThreshold),
           outbound_anomaly_threshold: Number(outboundThreshold),
           is_active: isActive,
+          ddos_protection_enabled: ddosProtectionEnabled,
+          rate_limit_requests: Number(rateLimitRequests),
+          rate_limit_window_seconds: Number(rateLimitWindowSeconds),
+          max_connections_per_ip: Number(maxConnectionsPerIp),
         });
       } else {
         await createPolicy(accessToken, {
@@ -71,6 +87,10 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           paranoia_level: Number(paranoiaLevel) as 1 | 2 | 3 | 4,
           inbound_anomaly_threshold: Number(inboundThreshold),
           outbound_anomaly_threshold: Number(outboundThreshold),
+          ddos_protection_enabled: ddosProtectionEnabled,
+          rate_limit_requests: Number(rateLimitRequests),
+          rate_limit_window_seconds: Number(rateLimitWindowSeconds),
+          max_connections_per_ip: Number(maxConnectionsPerIp),
         });
       }
       onSuccess();
@@ -183,6 +203,62 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
             value={inboundThreshold}
             onChange={(e) => setInboundThreshold(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-3 rounded-md border border-border p-3">
+          <Label
+            className={cn(
+              "flex cursor-pointer items-center gap-2",
+              ddosProtectionEnabled && "text-foreground",
+            )}
+          >
+            <Checkbox
+              checked={ddosProtectionEnabled}
+              onChange={(e) => setDdosProtectionEnabled(e.target.checked)}
+            />
+            DDoS protection
+            <InfoTooltip label="Enable per-vhost request-rate limiting and connection throttling in the generated HAProxy config." />
+          </Label>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="policy-rate-limit-requests">Rate limit (requests)</Label>
+            <Input
+              id="policy-rate-limit-requests"
+              type="number"
+              required
+              min={1}
+              disabled={!ddosProtectionEnabled}
+              value={rateLimitRequests}
+              onChange={(e) => setRateLimitRequests(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="policy-rate-limit-window">Rate limit window (seconds)</Label>
+            <Input
+              id="policy-rate-limit-window"
+              type="number"
+              required
+              min={1}
+              max={3600}
+              disabled={!ddosProtectionEnabled}
+              value={rateLimitWindowSeconds}
+              onChange={(e) => setRateLimitWindowSeconds(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="policy-max-connections">Max connections per IP</Label>
+            <Input
+              id="policy-max-connections"
+              type="number"
+              required
+              min={1}
+              disabled={!ddosProtectionEnabled}
+              value={maxConnectionsPerIp}
+              onChange={(e) => setMaxConnectionsPerIp(e.target.value)}
+            />
+          </div>
         </div>
 
         {props.mode === "edit" && (

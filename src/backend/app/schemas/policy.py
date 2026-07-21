@@ -19,6 +19,10 @@ class PolicyCreate(BaseModel):
     inbound_anomaly_threshold: int = 5
     outbound_anomaly_threshold: int = 4
     enforcement_mode: PolicyEnforcementMode = PolicyEnforcementMode.block
+    ddos_protection_enabled: bool = False
+    rate_limit_requests: int = Field(default=100, ge=1)
+    rate_limit_window_seconds: int = Field(default=10, ge=1, le=3600)
+    max_connections_per_ip: int = Field(default=20, ge=1)
 
     @field_validator("inbound_anomaly_threshold", "outbound_anomaly_threshold")
     @classmethod
@@ -42,6 +46,10 @@ class PolicyUpdate(BaseModel):
     outbound_anomaly_threshold: int | None = None
     enforcement_mode: PolicyEnforcementMode | None = None
     is_active: bool | None = None
+    ddos_protection_enabled: bool | None = None
+    rate_limit_requests: int | None = Field(default=None, ge=1)
+    rate_limit_window_seconds: int | None = Field(default=None, ge=1, le=3600)
+    max_connections_per_ip: int | None = Field(default=None, ge=1)
 
     @field_validator("inbound_anomaly_threshold", "outbound_anomaly_threshold")
     @classmethod
@@ -64,6 +72,10 @@ class PolicyResponse(BaseModel):
     outbound_anomaly_threshold: int
     enforcement_mode: PolicyEnforcementMode
     is_active: bool
+    ddos_protection_enabled: bool
+    rate_limit_requests: int
+    rate_limit_window_seconds: int
+    max_connections_per_ip: int
     created_by: int | None
     created_at: datetime
     updated_at: datetime

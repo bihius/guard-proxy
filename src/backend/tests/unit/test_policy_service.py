@@ -53,6 +53,67 @@ def test_create_policy_persists_values_and_created_by(
     assert policy.enforcement_mode == PolicyEnforcementMode.detect_only
     assert policy.is_active is True
     assert policy.created_by == admin_user.id
+    assert policy.ddos_protection_enabled is False
+    assert policy.rate_limit_requests == 100
+    assert policy.rate_limit_window_seconds == 10
+    assert policy.max_connections_per_ip == 20
+
+
+def test_create_policy_persists_ddos_protection_settings(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+
+    policy = service.create_policy(
+        name="DDoS Hardened",
+        description=None,
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+        ddos_protection_enabled=True,
+        rate_limit_requests=50,
+        rate_limit_window_seconds=5,
+        max_connections_per_ip=10,
+    )
+
+    assert policy.ddos_protection_enabled is True
+    assert policy.rate_limit_requests == 50
+    assert policy.rate_limit_window_seconds == 5
+    assert policy.max_connections_per_ip == 10
+
+
+def test_update_policy_changes_ddos_protection_settings(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Base",
+        description=None,
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    updated = service.update_policy(
+        created.id,
+        {
+            "ddos_protection_enabled": True,
+            "rate_limit_requests": 200,
+            "rate_limit_window_seconds": 30,
+            "max_connections_per_ip": 40,
+        },
+    )
+
+    assert updated.ddos_protection_enabled is True
+    assert updated.rate_limit_requests == 200
+    assert updated.rate_limit_window_seconds == 30
+    assert updated.max_connections_per_ip == 40
 
 
 def test_create_policy_duplicate_name_raises_error(

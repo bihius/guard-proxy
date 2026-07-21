@@ -244,6 +244,125 @@ def test_generate_one_vhost_with_policy() -> None:
     assert "setvar:tx.blocking_paranoia_level=2" in generated.crs_setup_conf
 
 
+def test_generate_one_vhost_with_ddos_protection_enabled() -> None:
+    vhost = VHost(
+        id=5,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+        ddos_protection_enabled=True,
+        rate_limit_requests=50,
+        rate_limit_window_seconds=5,
+        max_connections_per_ip=10,
+    )
+
+    generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
+
+    assert "backend st_ddos_vhost_5" in generated.haproxy_cfg
+    assert (
+        "stick-table type ipv6 size 100k expire 5s store "
+        "http_req_rate(5s),conn_cur" in generated.haproxy_cfg
+    )
+    assert (
+        "http-request track-sc0 src table st_ddos_vhost_5 if host_vhost_5"
+        in generated.haproxy_cfg
+    )
+    assert (
+        "http-request deny deny_status 429 if host_vhost_5 "
+        "{ sc_http_req_rate(0,st_ddos_vhost_5) gt 50 }" in generated.haproxy_cfg
+    )
+    assert (
+        "http-request deny deny_status 429 if host_vhost_5 "
+        "{ sc_conn_cur(0,st_ddos_vhost_5) gt 10 }" in generated.haproxy_cfg
+    )
+
+
+def test_generate_one_vhost_with_ddos_protection_disabled_emits_nothing() -> None:
+    vhost = VHost(
+        id=5,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+        ddos_protection_enabled=False,
+    )
+
+    generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
+
+    assert "stick-table" not in generated.haproxy_cfg
+    assert "track-sc0" not in generated.haproxy_cfg
+    assert "deny_status 429" not in generated.haproxy_cfg
+
+
+def test_generated_haproxy_cfg_with_ddos_validates_with_haproxy(
+    tmp_path: Path,
+) -> None:
+    haproxy = shutil.which("haproxy")
+    if haproxy is None:
+        pytest.skip("haproxy binary is not installed")
+    vhost = VHost(
+        id=1,
+        domain="app.local",
+        backend_url="http://backend:8000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+        ddos_protection_enabled=True,
+        rate_limit_requests=100,
+        rate_limit_window_seconds=10,
+        max_connections_per_ip=20,
+    )
+    generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
+    config_path = tmp_path / "haproxy.cfg"
+    repo_coraza_cfg = _repo_root() / "configs/haproxy/coraza.cfg"
+    config_path.write_text(
+        generated.haproxy_cfg.replace(
+            "/usr/local/etc/haproxy/coraza.cfg",
+            str(repo_coraza_cfg),
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [haproxy, "-c", "-f", str(config_path)],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_generate_one_vhost_with_policy_and_overrides() -> None:
     vhost = VHost(
         id=1,

@@ -14,6 +14,10 @@ NON_NULLABLE_PATCH_FIELDS = {
     "outbound_anomaly_threshold",
     "enforcement_mode",
     "is_active",
+    "ddos_protection_enabled",
+    "rate_limit_requests",
+    "rate_limit_window_seconds",
+    "max_connections_per_ip",
 }
 
 # description is intentionally included: it is nullable and may be set to None.
@@ -25,6 +29,10 @@ PATCHABLE_FIELDS = {
     "outbound_anomaly_threshold",
     "enforcement_mode",
     "is_active",
+    "ddos_protection_enabled",
+    "rate_limit_requests",
+    "rate_limit_window_seconds",
+    "max_connections_per_ip",
 }
 
 
@@ -85,6 +93,10 @@ class PolicyService:
         outbound_anomaly_threshold: int,
         enforcement_mode: PolicyEnforcementMode,
         created_by: int | None,
+        ddos_protection_enabled: bool = False,
+        rate_limit_requests: int = 100,
+        rate_limit_window_seconds: int = 10,
+        max_connections_per_ip: int = 20,
     ) -> Policy:
         """Create and persist a new policy."""
         policy = Policy(
@@ -94,6 +106,10 @@ class PolicyService:
             inbound_anomaly_threshold=inbound_anomaly_threshold,
             outbound_anomaly_threshold=outbound_anomaly_threshold,
             enforcement_mode=enforcement_mode,
+            ddos_protection_enabled=ddos_protection_enabled,
+            rate_limit_requests=rate_limit_requests,
+            rate_limit_window_seconds=rate_limit_window_seconds,
+            max_connections_per_ip=max_connections_per_ip,
             is_active=True,
             created_by=created_by,
         )

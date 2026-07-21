@@ -125,6 +125,81 @@ def test_create_policy_invalid_paranoia_level_returns_422(
     assert resp.status_code == 422
 
 
+def test_create_policy_default_ddos_settings(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """A policy created without DDoS fields gets safe, protection-off defaults."""
+    body = _create_policy(client, admin_token, name="No DDoS overrides")
+
+    assert body["ddos_protection_enabled"] is False
+    assert body["rate_limit_requests"] == 100
+    assert body["rate_limit_window_seconds"] == 10
+    assert body["max_connections_per_ip"] == 20
+
+
+def test_create_policy_with_ddos_settings_returns_201(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """DDoS fields round-trip through creation."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "DDoS Hardened",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "ddos_protection_enabled": True,
+            "rate_limit_requests": 50,
+            "rate_limit_window_seconds": 5,
+            "max_connections_per_ip": 10,
+        },
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["ddos_protection_enabled"] is True
+    assert body["rate_limit_requests"] == 50
+    assert body["rate_limit_window_seconds"] == 5
+    assert body["max_connections_per_ip"] == 10
+
+
+def test_create_policy_invalid_rate_limit_requests_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Out-of-range rate_limit_requests should be rejected at router validation."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Invalid rate limit",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "rate_limit_requests": 0,
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_create_policy_invalid_rate_limit_window_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Out-of-range rate_limit_window_seconds is rejected at router validation."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Invalid window",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "rate_limit_window_seconds": 3601,
+        },
+    )
+    assert resp.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # GET /policies
 # ---------------------------------------------------------------------------
@@ -260,6 +335,31 @@ def test_patch_policy_admin_partial_update(
     assert body["inbound_anomaly_threshold"] == 5
     assert body["outbound_anomaly_threshold"] == 5
     assert body["is_active"] is False
+
+
+def test_patch_policy_updates_ddos_settings(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """PATCH updates DDoS protection fields."""
+    created = _create_policy(client, admin_token, name="Patch DDoS")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json={
+            "ddos_protection_enabled": True,
+            "rate_limit_requests": 200,
+            "rate_limit_window_seconds": 30,
+            "max_connections_per_ip": 40,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ddos_protection_enabled"] is True
+    assert body["rate_limit_requests"] == 200
+    assert body["rate_limit_window_seconds"] == 30
+    assert body["max_connections_per_ip"] == 40
 
 
 def test_patch_policy_viewer_forbidden(
