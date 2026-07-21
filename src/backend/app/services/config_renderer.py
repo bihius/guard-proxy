@@ -144,9 +144,11 @@ class HaproxyBackend:
 class HaproxyDdos:
     """Per-vhost DDoS protection settings (rate limiting + connection throttling).
 
-    All fields are validated on construction; ``stick_table_name`` is derived
-    from the vhost's existing ACL suffix so it is guaranteed to be a safe and
-    unique HAProxy identifier.
+    ``stick_table_name`` must be a valid HAProxy identifier; this class only
+    validates its format. Deriving it from the vhost's ACL suffix and
+    enforcing uniqueness across routes is the caller's responsibility (see
+    :func:`app.services.config_generator._to_haproxy_context` and the
+    uniqueness check in :class:`HaproxyRenderContext`).
     """
 
     enabled: bool

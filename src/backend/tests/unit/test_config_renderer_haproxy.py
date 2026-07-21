@@ -315,14 +315,15 @@ def test_haproxy_template_renders_ddos_blocks_when_enabled() -> None:
         "store http_req_rate(10s),conn_cur" in rendered
     )
     assert (
-        "http-request track-sc0 src table st_ddos_vhost_1 if host_api" in rendered
+        "http-request track-sc0 src table st_ddos_vhost_1 "
+        "if host_api !is_health !is_acme" in rendered
     )
     assert (
-        "http-request deny deny_status 429 if host_api "
+        "http-request deny deny_status 429 if host_api !is_health !is_acme "
         "{ sc_http_req_rate(0,st_ddos_vhost_1) gt 100 }" in rendered
     )
     assert (
-        "http-request deny deny_status 429 if host_api "
+        "http-request deny deny_status 429 if host_api !is_health !is_acme "
         "{ sc_conn_cur(0,st_ddos_vhost_1) gt 20 }" in rendered
     )
     assert "timeout http-request 5s" in rendered

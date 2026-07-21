@@ -55,12 +55,16 @@ frontend fe_http
 {% set has_ddos_http = routes | selectattr("ddos") | list | length > 0 %}
 {% if has_ddos_http %}
     # Per-vhost DDoS protection: request-rate limiting and connection
-    # throttling via a dedicated stick-table per vhost.
+    # throttling via a dedicated stick-table per vhost. Health checks and
+    # ACME HTTP-01 challenges are exempt so they can't be starved by traffic
+    # spikes on the same vhost. http_req_rate(<period>) counts requests
+    # observed during the trailing <period>, not a per-second rate, so
+    # rate_limit_requests is directly "requests per rate_limit_window_seconds".
 {% for route in routes %}
 {% if route.ddos and route.ddos.enabled %}
-    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }}
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
 {% endfor %}
 {% endif %}
@@ -118,9 +122,9 @@ frontend fe_https
     # Per-vhost DDoS protection (see fe_http).
 {% for route in routes %}
 {% if route.ddos and route.ddos.enabled %}
-    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }}
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
 {% endfor %}
 {% endif %}
