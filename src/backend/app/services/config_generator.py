@@ -238,6 +238,10 @@ def _to_haproxy_context(
             rate_limit_requests=policy.rate_limit_requests,
             rate_limit_window_seconds=policy.rate_limit_window_seconds,
             max_connections_per_ip=policy.max_connections_per_ip,
+            auto_ban_enabled=policy.auto_ban_enabled,
+            ban_stick_table_name=f"st_ban_{suffix}",
+            ban_threshold=policy.ban_threshold,
+            ban_duration_seconds=policy.ban_duration_seconds,
         )
         if policy is not None and policy.ddos_protection_enabled
         else None

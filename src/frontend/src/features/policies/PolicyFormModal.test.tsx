@@ -40,6 +40,9 @@ const editPolicy: Policy = {
   rate_limit_requests: 100,
   rate_limit_window_seconds: 10,
   max_connections_per_ip: 20,
+  auto_ban_enabled: false,
+  ban_threshold: 10,
+  ban_duration_seconds: 600,
   created_by: 1,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
@@ -125,6 +128,84 @@ describe("PolicyFormModal DDoS protection fields", () => {
         rate_limit_requests: 100,
         rate_limit_window_seconds: 10,
         max_connections_per_ip: 20,
+      }),
+    );
+  });
+});
+
+describe("PolicyFormModal automatic IP banning fields", () => {
+  it("disables the auto-ban toggle and numeric fields until DDoS protection is enabled", () => {
+    renderCreateModal();
+
+    expect(
+      screen.getByRole("checkbox", { name: /automatic ip banning/i }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Ban threshold (violations)")).toBeDisabled();
+    expect(screen.getByLabelText("Ban duration (seconds)")).toBeDisabled();
+  });
+
+  it("keeps the ban numeric fields disabled until both DDoS and auto-ban are enabled", async () => {
+    renderCreateModal();
+
+    await userEvent.click(screen.getByText("DDoS protection"));
+
+    expect(
+      screen.getByRole("checkbox", { name: /automatic ip banning/i }),
+    ).toBeEnabled();
+    expect(screen.getByLabelText("Ban threshold (violations)")).toBeDisabled();
+    expect(screen.getByLabelText("Ban duration (seconds)")).toBeDisabled();
+
+    await userEvent.click(screen.getByText("Automatic IP banning"));
+
+    expect(screen.getByLabelText("Ban threshold (violations)")).toBeEnabled();
+    expect(screen.getByLabelText("Ban duration (seconds)")).toBeEnabled();
+  });
+
+  it("submits auto-ban fields on create", async () => {
+    vi.mocked(api.createPolicy).mockResolvedValue({ ...editPolicy, id: 2 });
+
+    const onSuccess = vi.fn();
+    renderCreateModal(onSuccess);
+
+    await userEvent.type(screen.getByLabelText("Name"), "Hardened");
+    await userEvent.click(screen.getByText("DDoS protection"));
+    await userEvent.click(screen.getByText("Automatic IP banning"));
+
+    const banThresholdInput = screen.getByLabelText("Ban threshold (violations)");
+    await userEvent.clear(banThresholdInput);
+    await userEvent.type(banThresholdInput, "3");
+
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+    expect(api.createPolicy).toHaveBeenCalledWith(
+      "test-token",
+      expect.objectContaining({
+        auto_ban_enabled: true,
+        ban_threshold: 3,
+        ban_duration_seconds: 600,
+      }),
+    );
+  });
+
+  it("submits auto-ban fields on update", async () => {
+    vi.mocked(api.updatePolicy).mockResolvedValue(editPolicy);
+
+    const onSuccess = vi.fn();
+    renderEditModal(onSuccess);
+
+    await userEvent.click(screen.getByText("DDoS protection"));
+    await userEvent.click(screen.getByText("Automatic IP banning"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+    expect(api.updatePolicy).toHaveBeenCalledWith(
+      "test-token",
+      editPolicy.id,
+      expect.objectContaining({
+        auto_ban_enabled: true,
+        ban_threshold: 10,
+        ban_duration_seconds: 600,
       }),
     );
   });

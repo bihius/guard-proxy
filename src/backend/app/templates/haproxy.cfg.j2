@@ -63,6 +63,17 @@ frontend fe_http
 {% for route in routes %}
 {% if route.ddos and route.ddos.enabled %}
     http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+{% if route.ddos.auto_ban_enabled %}
+    # Automatic IP banning: repeated rate/conn violations trip a ban that
+    # lifts after ban_duration_seconds of inactivity (track-sc1 refreshes
+    # the entry's expiry on every request, so a persistent attacker stays
+    # banned). Ban tracking/increment must run before the rate/conn deny
+    # rules below, since `deny` stops rule evaluation for the request.
+    http-request track-sc1 src table {{ route.ddos.ban_stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_get_gpc0(1) gt {{ route.ddos.ban_threshold }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+{% endif %}
     http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
     http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
@@ -123,6 +134,12 @@ frontend fe_https
 {% for route in routes %}
 {% if route.ddos and route.ddos.enabled %}
     http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+{% if route.ddos.auto_ban_enabled %}
+    http-request track-sc1 src table {{ route.ddos.ban_stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_get_gpc0(1) gt {{ route.ddos.ban_threshold }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+{% endif %}
     http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
     http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
@@ -160,6 +177,11 @@ frontend fe_https
 backend {{ route.ddos.stick_table_name }}
     stick-table type ipv6 size 100k expire {{ route.ddos.rate_limit_window_seconds }}s store http_req_rate({{ route.ddos.rate_limit_window_seconds }}s),conn_cur
 
+{% if route.ddos.auto_ban_enabled %}
+backend {{ route.ddos.ban_stick_table_name }}
+    stick-table type ipv6 size 100k expire {{ route.ddos.ban_duration_seconds }}s store gpc0
+
+{% endif %}
 {% endif %}
 {% endfor %}
 {% endif %}

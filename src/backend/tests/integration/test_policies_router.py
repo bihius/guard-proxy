@@ -135,6 +135,9 @@ def test_create_policy_default_ddos_settings(
     assert body["rate_limit_requests"] == 100
     assert body["rate_limit_window_seconds"] == 10
     assert body["max_connections_per_ip"] == 20
+    assert body["auto_ban_enabled"] is False
+    assert body["ban_threshold"] == 10
+    assert body["ban_duration_seconds"] == 600
 
 
 def test_create_policy_with_ddos_settings_returns_201(
@@ -162,6 +165,68 @@ def test_create_policy_with_ddos_settings_returns_201(
     assert body["rate_limit_requests"] == 50
     assert body["rate_limit_window_seconds"] == 5
     assert body["max_connections_per_ip"] == 10
+
+
+def test_create_policy_with_auto_ban_settings_returns_201(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Auto-ban fields round-trip through creation."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Auto-Ban Hardened",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "ddos_protection_enabled": True,
+            "auto_ban_enabled": True,
+            "ban_threshold": 3,
+            "ban_duration_seconds": 300,
+        },
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["auto_ban_enabled"] is True
+    assert body["ban_threshold"] == 3
+    assert body["ban_duration_seconds"] == 300
+
+
+def test_create_policy_invalid_ban_threshold_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Out-of-range ban_threshold is rejected at router validation."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Invalid ban threshold",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "ban_threshold": 0,
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_create_policy_invalid_ban_duration_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Out-of-range ban_duration_seconds is rejected at router validation."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Invalid ban duration",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "ban_duration_seconds": 86401,
+        },
+    )
+    assert resp.status_code == 422
 
 
 def test_create_policy_invalid_rate_limit_requests_returns_422(
@@ -360,6 +425,29 @@ def test_patch_policy_updates_ddos_settings(
     assert body["rate_limit_requests"] == 200
     assert body["rate_limit_window_seconds"] == 30
     assert body["max_connections_per_ip"] == 40
+
+
+def test_patch_policy_updates_auto_ban_settings(
+    client: TestClient,
+    admin_token: dict[str, str],
+) -> None:
+    """PATCH updates auto-ban fields."""
+    created = _create_policy(client, admin_token, name="Patch Auto-Ban")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json={
+            "auto_ban_enabled": True,
+            "ban_threshold": 7,
+            "ban_duration_seconds": 1200,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["auto_ban_enabled"] is True
+    assert body["ban_threshold"] == 7
+    assert body["ban_duration_seconds"] == 1200
 
 
 def test_patch_policy_viewer_forbidden(

@@ -363,6 +363,139 @@ def test_generated_haproxy_cfg_with_ddos_validates_with_haproxy(
     assert result.returncode == 0, result.stderr
 
 
+def test_generate_one_vhost_with_auto_ban_enabled() -> None:
+    vhost = VHost(
+        id=5,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+        ddos_protection_enabled=True,
+        rate_limit_requests=50,
+        rate_limit_window_seconds=5,
+        max_connections_per_ip=10,
+        auto_ban_enabled=True,
+        ban_threshold=3,
+        ban_duration_seconds=300,
+    )
+
+    generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
+
+    assert "backend st_ban_vhost_5" in generated.haproxy_cfg
+    assert (
+        "stick-table type ipv6 size 100k expire 300s store gpc0"
+        in generated.haproxy_cfg
+    )
+    assert (
+        "http-request track-sc1 src table st_ban_vhost_5 "
+        "if host_vhost_5 !is_health !is_acme" in generated.haproxy_cfg
+    )
+    assert (
+        "http-request deny deny_status 429 if host_vhost_5 !is_health !is_acme "
+        "{ sc_get_gpc0(1) gt 3 }" in generated.haproxy_cfg
+    )
+    assert (
+        "http-request sc-inc-gpc0(1) if host_vhost_5 !is_health !is_acme "
+        "{ sc_http_req_rate(0,st_ddos_vhost_5) gt 50 }" in generated.haproxy_cfg
+    )
+    assert (
+        "http-request sc-inc-gpc0(1) if host_vhost_5 !is_health !is_acme "
+        "{ sc_conn_cur(0,st_ddos_vhost_5) gt 10 }" in generated.haproxy_cfg
+    )
+
+
+def test_generate_one_vhost_with_auto_ban_disabled_emits_nothing() -> None:
+    vhost = VHost(
+        id=5,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+        ddos_protection_enabled=True,
+        rate_limit_requests=50,
+        rate_limit_window_seconds=5,
+        max_connections_per_ip=10,
+        auto_ban_enabled=False,
+    )
+
+    generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
+
+    assert "track-sc1" not in generated.haproxy_cfg
+    assert "sc-inc-gpc0" not in generated.haproxy_cfg
+    assert "st_ban_" not in generated.haproxy_cfg
+
+
+def test_generated_haproxy_cfg_with_auto_ban_validates_with_haproxy(
+    tmp_path: Path,
+) -> None:
+    haproxy = shutil.which("haproxy")
+    if haproxy is None:
+        pytest.skip("haproxy binary is not installed")
+    vhost = VHost(
+        id=1,
+        domain="app.local",
+        backend_url="http://backend:8000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+        ddos_protection_enabled=True,
+        rate_limit_requests=100,
+        rate_limit_window_seconds=10,
+        max_connections_per_ip=20,
+        auto_ban_enabled=True,
+        ban_threshold=10,
+        ban_duration_seconds=600,
+    )
+    generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
+    config_path = tmp_path / "haproxy.cfg"
+    repo_coraza_cfg = _repo_root() / "configs/haproxy/coraza.cfg"
+    config_path.write_text(
+        generated.haproxy_cfg.replace(
+            "/usr/local/etc/haproxy/coraza.cfg",
+            str(repo_coraza_cfg),
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [haproxy, "-c", "-f", str(config_path)],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_generate_one_vhost_with_policy_and_overrides() -> None:
     vhost = VHost(
         id=1,

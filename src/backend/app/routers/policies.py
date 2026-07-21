@@ -48,6 +48,9 @@ def create_policy(
             rate_limit_requests=body.rate_limit_requests,
             rate_limit_window_seconds=body.rate_limit_window_seconds,
             max_connections_per_ip=body.max_connections_per_ip,
+            auto_ban_enabled=body.auto_ban_enabled,
+            ban_threshold=body.ban_threshold,
+            ban_duration_seconds=body.ban_duration_seconds,
             created_by=current_user.id,
         )
     except PolicyNameAlreadyExistsError as error:

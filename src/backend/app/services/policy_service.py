@@ -18,6 +18,9 @@ NON_NULLABLE_PATCH_FIELDS = {
     "rate_limit_requests",
     "rate_limit_window_seconds",
     "max_connections_per_ip",
+    "auto_ban_enabled",
+    "ban_threshold",
+    "ban_duration_seconds",
 }
 
 # description is intentionally included: it is nullable and may be set to None.
@@ -33,6 +36,9 @@ PATCHABLE_FIELDS = {
     "rate_limit_requests",
     "rate_limit_window_seconds",
     "max_connections_per_ip",
+    "auto_ban_enabled",
+    "ban_threshold",
+    "ban_duration_seconds",
 }
 
 
@@ -97,6 +103,9 @@ class PolicyService:
         rate_limit_requests: int = 100,
         rate_limit_window_seconds: int = 10,
         max_connections_per_ip: int = 20,
+        auto_ban_enabled: bool = False,
+        ban_threshold: int = 10,
+        ban_duration_seconds: int = 600,
     ) -> Policy:
         """Create and persist a new policy."""
         policy = Policy(
@@ -110,6 +119,9 @@ class PolicyService:
             rate_limit_requests=rate_limit_requests,
             rate_limit_window_seconds=rate_limit_window_seconds,
             max_connections_per_ip=max_connections_per_ip,
+            auto_ban_enabled=auto_ban_enabled,
+            ban_threshold=ban_threshold,
+            ban_duration_seconds=ban_duration_seconds,
             is_active=True,
             created_by=created_by,
         )
