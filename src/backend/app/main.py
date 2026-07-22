@@ -1,5 +1,6 @@
 import logging
 import os
+import tomllib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
@@ -43,15 +44,26 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_app_version() -> str:
-    """Return the installed package version, the single source of truth.
+    """Return the app version, reading from a single source of truth.
 
-    Falls back gracefully when the app runs from a source tree that has not
-    been installed as a distribution (e.g. some local dev setups).
+    Prefers installed package metadata (present in dev venvs where the
+    project is installed editable). The production Docker image installs
+    only dependencies as a distinct layer and copies app source on top
+    without installing the project itself, so no dist-info exists there —
+    fall back to parsing `pyproject.toml` directly in that case.
     """
     try:
         return _package_version("guard-proxy-backend")
-    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
-        return "0.0.0+unknown"
+    except PackageNotFoundError:
+        pyproject_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        try:
+            with pyproject_path.open("rb") as f:
+                version = tomllib.load(f)["project"]["version"]
+            if not isinstance(version, str):
+                raise KeyError("project.version is not a string")
+            return version
+        except (OSError, KeyError):  # pragma: no cover - defensive fallback
+            return "0.0.0+unknown"
 
 
 APP_VERSION = _resolve_app_version()
