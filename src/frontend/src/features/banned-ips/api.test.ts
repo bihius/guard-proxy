@@ -52,4 +52,17 @@ describe("banned-ips API", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/security/banned-ips/203.0.113.10");
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("DELETE");
   });
+
+  it("URI-encodes IPv6 literals in the delete path", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse({ ip: "2001:db8::1", cleared: 1 }));
+
+    await unbanIp("token", "2001:db8::1");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/v1/security/banned-ips/2001%3Adb8%3A%3A1",
+    );
+  });
 });

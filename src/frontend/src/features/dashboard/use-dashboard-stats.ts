@@ -37,7 +37,8 @@ function isAbortError(e: unknown): boolean {
 }
 
 export function useDashboardStats(): DashboardStatsState {
-  const { accessToken } = useAuth();
+  const { accessToken, hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [vhosts, setVHosts] = useState<StatValue>(LOADING);
   const [policies, setPolicies] = useState<StatValue>(LOADING);
   const [blocked, setBlocked] = useState<StatValue>(LOADING);
@@ -86,14 +87,21 @@ export function useDashboardStats(): DashboardStatsState {
       .then((total) => guard(setAlerts)(ok(total)))
       .catch((e) => { if (!isAbortError(e)) guard(setAlerts)(failed()); });
 
-    listBannedIps(accessToken, controller.signal)
-      .then((response) =>
-        guard(setBannedIps)(ok(response.items.filter((item) => item.banned).length)),
-      )
-      .catch((e) => { if (!isAbortError(e)) guard(setBannedIps)(failed()); });
+    // The banned-IPs endpoint is admin-only, so only admins fetch and see this
+    // card. Count unique source IPs (an IP can be banned on several vhosts).
+    if (isAdmin) {
+      listBannedIps(accessToken, controller.signal)
+        .then((response) => {
+          const uniqueBanned = new Set(
+            response.items.filter((item) => item.banned).map((item) => item.ip),
+          );
+          guard(setBannedIps)(ok(uniqueBanned.size));
+        })
+        .catch((e) => { if (!isAbortError(e)) guard(setBannedIps)(failed()); });
+    }
 
     return () => controller.abort();
-  }, [accessToken]);
+  }, [accessToken, isAdmin]);
 
   useEffect(() => {
     const cleanup = load();

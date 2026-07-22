@@ -129,7 +129,7 @@ export function BannedIpsPage() {
             <DataTable
               columns={columns}
               rows={items}
-              getRowKey={(row) => row.ip}
+              getRowKey={(row) => `${row.vhost_id}:${row.ip}`}
               emptyTitle="No banned IPs"
               emptyDescription="No source IPs are currently banned."
             />
@@ -137,7 +137,8 @@ export function BannedIpsPage() {
             {total > 0 && (
               <div className="mt-4 flex items-center justify-between gap-4">
                 <span className="text-sm text-muted-foreground">
-                  Page {page} of {totalPages} · {total} banned IPs
+                  Page {page} of {totalPages} · {total}{" "}
+                  {total === 1 ? "ban entry" : "ban entries"}
                 </span>
                 <div className="flex gap-2">
                   <Button

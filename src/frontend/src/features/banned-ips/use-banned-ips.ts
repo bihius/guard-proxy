@@ -80,13 +80,17 @@ export function useBannedIps(): BannedIpsState {
     : bannedIps;
 
   const total = filtered.length;
-  const start = (page - 1) * PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Clamp the page so a shrinking list (after unban/expiry) can't strand the
+  // user on an out-of-range page showing the empty state.
+  const clampedPage = Math.min(page, totalPages);
+  const start = (clampedPage - 1) * PAGE_SIZE;
   const items = filtered.slice(start, start + PAGE_SIZE);
 
   return {
     items,
     total,
-    page,
+    page: clampedPage,
     pageSize: PAGE_SIZE,
     searchQuery,
     isLoading,

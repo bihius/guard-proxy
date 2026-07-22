@@ -98,12 +98,15 @@ describe("BannedIpsPage", () => {
     await waitFor(() => expect(screen.getByText(/no banned ips/i)).toBeInTheDocument());
   });
 
-  it("admin sees the Unban action, viewer does not", async () => {
+  // Viewer access to this page is blocked at the route level (RequireAdmin),
+  // covered by protected-route.test.tsx. Here we only assert the admin sees the
+  // action column exposed once they reach the page.
+  it("admin sees the Unban action", async () => {
     vi.mocked(bannedIpsApi.listBannedIps).mockResolvedValue(mockListResponse);
 
-    renderPage({ hasRole: vi.fn().mockReturnValue(false) });
+    renderPage();
     await waitFor(() => expect(screen.getByText("203.0.113.10")).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: /unban/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /unban/i })).toBeInTheDocument();
   });
 
   it("filters the list client-side by IP search", async () => {

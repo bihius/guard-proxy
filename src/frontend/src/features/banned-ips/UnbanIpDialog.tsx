@@ -63,7 +63,9 @@ export function UnbanIpDialog({ bannedIp, onSuccess, onClose }: UnbanIpDialogPro
       <p className="text-sm text-foreground">
         Are you sure you want to unban{" "}
         <span className="font-mono font-semibold text-foreground">{bannedIp.ip}</span>{" "}
-        on <span className="font-semibold text-foreground">{bannedIp.domain}</span>?
+        across <span className="font-semibold text-foreground">all virtual hosts</span>?
+        This clears the address from every active ban table, not just{" "}
+        <span className="font-semibold text-foreground">{bannedIp.domain}</span>.
       </p>
     </Modal>
   );

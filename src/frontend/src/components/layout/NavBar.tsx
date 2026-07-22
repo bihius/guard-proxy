@@ -12,12 +12,18 @@ import { useAuth } from "@/hooks/use-auth";
 import { THEMES, type Theme, getThemeStorageKey } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-const navigation = [
+type NavItem = {
+  to: string;
+  label: string;
+  adminOnly?: boolean;
+};
+
+const navigation: NavItem[] = [
   { to: appRoutes.dashboard, label: "Dashboard" },
   { to: appRoutes.vhosts, label: "VHosts" },
   { to: appRoutes.policies, label: "Policies" },
   { to: appRoutes.logs, label: "Logs" },
-  { to: appRoutes.bannedIps, label: "Banned IPs" },
+  { to: appRoutes.bannedIps, label: "Banned IPs", adminOnly: true },
 ];
 
 function navLinkClass(isActive: boolean, pill = false) {
@@ -62,7 +68,9 @@ function applyTheme(theme: Theme) {
 
 export function NavBar() {
   const navigate = useNavigate();
-  const { signOut, user } = useAuth();
+  const { signOut, user, hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
+  const visibleNavigation = navigation.filter((item) => !item.adminOnly || isAdmin);
   const runtimeStatus = useRuntimeStatus();
   const { showNotice } = useApplyNotice();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -117,7 +125,7 @@ export function NavBar() {
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex" role="navigation">
-          {navigation.map((item) => (
+          {visibleNavigation.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -199,7 +207,7 @@ export function NavBar() {
               </Button>
             </div>
 
-            {navigation.map((item) => (
+            {visibleNavigation.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
