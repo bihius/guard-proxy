@@ -17,6 +17,7 @@ const navigation = [
   { to: appRoutes.vhosts, label: "VHosts" },
   { to: appRoutes.policies, label: "Policies" },
   { to: appRoutes.logs, label: "Logs" },
+  { to: appRoutes.bannedIps, label: "Banned IPs" },
 ];
 
 function navLinkClass(isActive: boolean, pill = false) {

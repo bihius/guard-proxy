@@ -34,7 +34,7 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
         <StatCard
           label="Protected vhosts"
           value={
@@ -78,6 +78,17 @@ export function DashboardPage() {
           tone="error"
           icon={<PulseIcon />}
           isLoading={stats.alerts.isLoading}
+        />
+        <StatCard
+          label="Banned IPs"
+          value={
+            stats.bannedIps.error || stats.bannedIps.count === null
+              ? "—"
+              : String(stats.bannedIps.count)
+          }
+          tone="error"
+          icon={<ShieldIcon />}
+          isLoading={stats.bannedIps.isLoading}
         />
       </div>
 
