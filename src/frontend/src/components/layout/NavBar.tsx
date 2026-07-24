@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApplyConfigButton } from "@/features/runtime/ApplyConfigButton";
 import { useApplyNotice } from "@/features/runtime/use-apply-notice";
+import { useConfigChanged } from "@/features/runtime/use-config-changed";
 import { useRuntimeStatus } from "@/features/runtime/use-runtime-status";
 import { useAuth } from "@/hooks/use-auth";
 import { THEMES, type Theme, getThemeStorageKey } from "@/lib/theme";
@@ -73,8 +74,14 @@ export function NavBar() {
   const visibleNavigation = navigation.filter((item) => !item.adminOnly || isAdmin);
   const runtimeStatus = useRuntimeStatus();
   const { showNotice } = useApplyNotice();
+  const { subscribe } = useConfigChanged();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
+
+  useEffect(
+    () => subscribe(runtimeStatus.refresh),
+    [subscribe, runtimeStatus.refresh],
+  );
 
   useEffect(() => {
     applyTheme(theme);

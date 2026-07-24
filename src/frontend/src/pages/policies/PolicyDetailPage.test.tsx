@@ -12,6 +12,7 @@ import type {
   RuleExclusion,
   RuleOverride,
 } from "@/features/policies/types";
+import { ConfigChangedProvider } from "@/features/runtime/config-changed-provider";
 
 import { PolicyDetailPage } from "./PolicyDetailPage";
 
@@ -101,11 +102,13 @@ function mockSuccessfulLoad(policy: PolicyDetail = mockPolicy) {
 function renderPage(authOverrides: Partial<AuthContextValue> = {}) {
   return render(
     <AuthContext.Provider value={makeAuthContext(authOverrides)}>
-      <MemoryRouter initialEntries={["/policies/1"]}>
-        <Routes>
-          <Route path="/policies/:policyId" element={<PolicyDetailPage />} />
-        </Routes>
-      </MemoryRouter>
+      <ConfigChangedProvider>
+        <MemoryRouter initialEntries={["/policies/1"]}>
+          <Routes>
+            <Route path="/policies/:policyId" element={<PolicyDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ConfigChangedProvider>
     </AuthContext.Provider>,
   );
 }

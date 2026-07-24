@@ -31,6 +31,7 @@ import type {
   RuleExclusion,
   RuleOverride,
 } from "@/features/policies/types";
+import { useConfigChanged } from "@/features/runtime/use-config-changed";
 import { useAuth } from "@/hooks/use-auth";
 
 export function PolicyDetailPage() {
@@ -44,6 +45,7 @@ export function PolicyDetailPage() {
   const [customRuleModal, setCustomRuleModal] = useState<CustomRuleModalState>(null);
   const refreshCountRef = useRef(0);
   const isAdmin = hasRole("admin");
+  const { notifyConfigChanged } = useConfigChanged();
 
   const load = useCallback(() => {
     if (!accessToken || !policyId) return;
@@ -78,16 +80,19 @@ export function PolicyDetailPage() {
   function closeOverrideModalAndRefresh() {
     setOverrideModal(null);
     load();
+    notifyConfigChanged();
   }
 
   function closeExclusionModalAndRefresh() {
     setExclusionModal(null);
     load();
+    notifyConfigChanged();
   }
 
   function closeCustomRuleModalAndRefresh() {
     setCustomRuleModal(null);
     load();
+    notifyConfigChanged();
   }
 
   const overrideColumns: DataTableColumn<RuleOverride>[] = [

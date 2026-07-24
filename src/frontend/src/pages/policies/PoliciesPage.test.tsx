@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthContext } from "@/features/auth/auth-context.shared";
 import type { AuthContextValue } from "@/features/auth/auth-context.types";
 import * as policiesApi from "@/features/policies/api";
+import { ConfigChangedProvider } from "@/features/runtime/config-changed-provider";
 import * as vhostsApi from "@/features/vhosts/api";
 
 import { PoliciesPage } from "./PoliciesPage";
@@ -99,12 +100,14 @@ const mockVHostListResponse = {
 function renderPage(authOverrides: Partial<AuthContextValue> = {}) {
   return render(
     <AuthContext.Provider value={makeAuthContext(authOverrides)}>
-      <MemoryRouter initialEntries={["/policies"]}>
-        <Routes>
-          <Route path="/policies" element={<PoliciesPage />} />
-          <Route path="/policies/:policyId" element={<p>Policy detail page</p>} />
-        </Routes>
-      </MemoryRouter>
+      <ConfigChangedProvider>
+        <MemoryRouter initialEntries={["/policies"]}>
+          <Routes>
+            <Route path="/policies" element={<PoliciesPage />} />
+            <Route path="/policies/:policyId" element={<p>Policy detail page</p>} />
+          </Routes>
+        </MemoryRouter>
+      </ConfigChangedProvider>
     </AuthContext.Provider>,
   );
 }
