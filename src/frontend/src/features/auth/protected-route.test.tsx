@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthContext } from "@/features/auth/auth-context.shared";
 import type { AuthContextValue } from "@/features/auth/auth-context.types";
 
-import { ProtectedRoute, PublicOnlyRoute } from "./protected-route";
+import { ProtectedRoute, PublicOnlyRoute, RequireAdmin } from "./protected-route";
 
 function makeAuthContextValue(
   overrides: Partial<AuthContextValue> = {},
@@ -72,5 +72,36 @@ describe("route guards", () => {
     );
 
     expect(screen.getByText("Dashboard screen")).toBeInTheDocument();
+  });
+
+  function renderAdminGuard(hasAdminRole: boolean) {
+    render(
+      <AuthContext.Provider
+        value={makeAuthContextValue({
+          isAuthenticated: true,
+          role: hasAdminRole ? "admin" : "viewer",
+          hasRole: vi.fn().mockReturnValue(hasAdminRole),
+        })}
+      >
+        <MemoryRouter initialEntries={["/banned-ips"]}>
+          <Routes>
+            <Route element={<RequireAdmin />}>
+              <Route path="/banned-ips" element={<div>Admin-only screen</div>} />
+            </Route>
+            <Route path="/forbidden" element={<div>Forbidden screen</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    );
+  }
+
+  it("lets admins into admin-only routes", () => {
+    renderAdminGuard(true);
+    expect(screen.getByText("Admin-only screen")).toBeInTheDocument();
+  });
+
+  it("redirects non-admins from admin-only routes to forbidden", () => {
+    renderAdminGuard(false);
+    expect(screen.getByText("Forbidden screen")).toBeInTheDocument();
   });
 });

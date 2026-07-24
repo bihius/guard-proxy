@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, DateTime, Enum, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.database import Base
 
@@ -57,3 +57,15 @@ class RuntimeOperation(Base):
             f"<RuntimeOperation id={self.id} type={self.operation_type} "
             f"status={self.status} created_at={self.created_at.isoformat()}>"
         )
+
+
+def get_latest_operation(
+    db: Session, operation_type: RuntimeOperationType
+) -> RuntimeOperation | None:
+    """Most recent operation of a given type, or None if none has run yet."""
+    return (
+        db.query(RuntimeOperation)
+        .filter(RuntimeOperation.operation_type == operation_type)
+        .order_by(RuntimeOperation.created_at.desc(), RuntimeOperation.id.desc())
+        .first()
+    )

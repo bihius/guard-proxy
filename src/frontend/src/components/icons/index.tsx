@@ -148,6 +148,23 @@ export function AlertTriangleIcon(props: IconProps) {
   );
 }
 
+export function BanIcon(props: IconProps) {
+  return (
+    <svg
+      {...iconProps({
+        width: 18,
+        height: 18,
+        viewBox: "0 0 18 18",
+        strokeWidth: 1.5,
+        ...props,
+      })}
+    >
+      <circle cx="9" cy="9" r="6" />
+      <line x1="4.8" y1="4.8" x2="13.2" y2="13.2" />
+    </svg>
+  );
+}
+
 export function PulseIcon(props: IconProps) {
   return (
     <svg

@@ -6,6 +6,7 @@ export const appRoutes = {
   vhosts: "/vhosts",
   policies: "/policies",
   logs: "/logs",
+  bannedIps: "/banned-ips",
 } as const;
 
 export function getVHostDetailPath(vhostId: string | number) {

@@ -10,7 +10,8 @@ from app.models.runtime_operation import (
     RuntimeOperationType,
 )
 from app.models.vhost import VHost
-from app.services.config_generator import generate
+from app.services.config_apply import calculate_checksum
+from app.services.config_generator import GeneratedConfig, generate
 from app.services.runtime_status_service import RuntimeStatusService
 
 
@@ -275,21 +276,26 @@ def test_active_policy_selection_rejects_missing_policy() -> None:
         raise AssertionError("Expected missing policy to fail generation")
 
 
+def _generated(haproxy_cfg: str = "haproxy") -> GeneratedConfig:
+    return GeneratedConfig(
+        haproxy_cfg=haproxy_cfg,
+        crs_setup_conf="crs",
+        rule_overrides_conf="rules",
+        certs={},
+    )
+
+
 def test_checksum_is_stable_for_same_generated_content() -> None:
-    checksum_a = RuntimeStatusService._calculate_checksum("haproxy", "crs", "rules")
-    checksum_b = RuntimeStatusService._calculate_checksum("haproxy", "crs", "rules")
+    checksum_a = calculate_checksum(_generated())
+    checksum_b = calculate_checksum(_generated())
 
     assert checksum_a == checksum_b
     assert len(checksum_a) == 64
 
 
 def test_checksum_changes_when_generated_content_changes() -> None:
-    checksum_a = RuntimeStatusService._calculate_checksum("haproxy", "crs", "rules")
-    checksum_b = RuntimeStatusService._calculate_checksum(
-        "haproxy-changed",
-        "crs",
-        "rules",
-    )
+    checksum_a = calculate_checksum(_generated())
+    checksum_b = calculate_checksum(_generated("haproxy-changed"))
 
     assert checksum_a != checksum_b
 

@@ -105,6 +105,28 @@ def test_list_banned_ips_returns_502_when_runtime_api_unreachable(
     assert response.status_code == 502
 
 
+def test_list_banned_ips_returns_empty_when_table_not_yet_provisioned(
+    client: TestClient,
+    admin_token: dict[str, str],
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auto-ban enabled in the DB but "Apply config" not clicked yet: the
+    HAProxy stick-table doesn't exist, which must read as "nothing banned",
+    not as a Runtime API outage."""
+    _create_banned_vhost(db)
+
+    def fake_send(_command: str) -> str:
+        raise ban_list_service.RuntimeTableNotProvisionedError("No such table")
+
+    monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
+    response = client.get("/security/banned-ips", headers=admin_token)
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "total": 0}
+
+
 def test_unban_requires_auth(client: TestClient) -> None:
     response = client.delete("/security/banned-ips/203.0.113.5")
 
@@ -160,3 +182,22 @@ def test_unban_returns_502_when_runtime_api_unreachable(
     response = client.delete("/security/banned-ips/203.0.113.5", headers=admin_token)
 
     assert response.status_code == 502
+
+
+def test_unban_returns_200_with_cleared_zero_when_table_not_yet_provisioned(
+    client: TestClient,
+    admin_token: dict[str, str],
+    db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _create_banned_vhost(db)
+
+    def fake_send(_command: str) -> str:
+        raise ban_list_service.RuntimeTableNotProvisionedError("No such table")
+
+    monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
+    response = client.delete("/security/banned-ips/203.0.113.5", headers=admin_token)
+
+    assert response.status_code == 200
+    assert response.json() == {"ip": "203.0.113.5", "cleared": 0}

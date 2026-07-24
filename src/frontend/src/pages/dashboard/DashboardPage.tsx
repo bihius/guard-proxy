@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import {
   AlertTriangleIcon,
+  BanIcon,
   PulseIcon,
   ServerIcon,
   ShieldIcon,
@@ -17,7 +18,8 @@ import { useDashboardStats } from "@/features/dashboard/use-dashboard-stats";
 import { useAuth } from "@/hooks/use-auth";
 
 export function DashboardPage() {
-  const { role } = useAuth();
+  const { role, hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const runtimeStatus = useRuntimeStatus();
   const stats = useDashboardStats();
 
@@ -34,7 +36,13 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div
+        className={
+          isAdmin
+            ? "grid gap-5 md:grid-cols-2 xl:grid-cols-5"
+            : "grid gap-5 md:grid-cols-2 xl:grid-cols-4"
+        }
+      >
         <StatCard
           label="Protected vhosts"
           value={
@@ -79,6 +87,19 @@ export function DashboardPage() {
           icon={<PulseIcon />}
           isLoading={stats.alerts.isLoading}
         />
+        {isAdmin && (
+          <StatCard
+            label="Banned IPs"
+            value={
+              stats.bannedIps.error || stats.bannedIps.count === null
+                ? "—"
+                : String(stats.bannedIps.count)
+            }
+            tone="error"
+            icon={<BanIcon />}
+            isLoading={stats.bannedIps.isLoading}
+          />
+        )}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.25fr_1fr]">
