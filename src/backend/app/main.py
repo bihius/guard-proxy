@@ -22,6 +22,12 @@ from app.models.policy import Policy
 from app.models.policy_binding import PolicyBinding
 from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
+from app.models.runtime_operation import (
+    RuntimeOperation,
+    RuntimeOperationStatus,
+    RuntimeOperationType,
+    get_latest_operation,
+)
 from app.models.vhost import VHost
 from app.rate_limit import limiter, rate_limit_exceeded_handler
 from app.routers import (
@@ -104,6 +110,14 @@ def _seed_runtime_config() -> None:
     release on startup. If no admin has run "Apply config" yet, that
     release does not exist. Best-effort: failures are logged but must not
     block backend startup.
+
+    Also reconciles the `RuntimeOperation` log with whatever config is
+    actually active in `current` after seeding, on every startup — not just
+    the first. Without this, a backend restart leaves no `reload` row
+    matching the deployed config, so `/runtime/status` always reports
+    "pending changes" (and the frontend's Apply-config button never hides)
+    until an admin manually clicks Apply once, even though nothing
+    actually changed.
     """
     db = SessionLocal()
     try:
@@ -121,11 +135,42 @@ def _seed_runtime_config() -> None:
             custom_rules,
             policy_bindings,
         )
-        seed_runtime_config(generated)
+        active_checksum = seed_runtime_config(generated)
+        _reconcile_runtime_operation_checksum(db, active_checksum)
     except Exception:
         logger.exception("Failed to seed runtime config on startup")
     finally:
         db.close()
+
+
+def _reconcile_runtime_operation_checksum(
+    db: Session, active_checksum: str | None
+) -> None:
+    """Record a `reload` operation if the DB's latest one is stale or missing.
+
+    `active_checksum` is whatever `seed_runtime_config` reports is actually
+    deployed in `current` (freshly written or pre-existing) — `None` means
+    there is no valid active release, in which case there is nothing to
+    reconcile. A new row is only written when it would change the latest
+    known checksum, so restarts with no drift don't grow the operation log.
+    """
+    if active_checksum is None:
+        return
+
+    latest_reload = get_latest_operation(db, RuntimeOperationType.reload)
+    if latest_reload is not None and latest_reload.config_checksum == active_checksum:
+        return
+
+    db.add(
+        RuntimeOperation(
+            operation_type=RuntimeOperationType.reload,
+            status=RuntimeOperationStatus.success,
+            config_checksum=active_checksum,
+            message="Reconciled from runtime startup",
+            metadata_json={"source": "startup_seed"},
+        )
+    )
+    db.commit()
 
 
 

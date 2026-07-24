@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session, selectinload
@@ -13,9 +12,9 @@ from app.models.policy_binding import PolicyBinding
 from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
 from app.models.runtime_operation import (
-    RuntimeOperation,
     RuntimeOperationStatus,
     RuntimeOperationType,
+    get_latest_operation,
 )
 from app.models.vhost import VHost
 from app.schemas.runtime_status import (
@@ -24,6 +23,7 @@ from app.schemas.runtime_status import (
     RuntimeOperationSnapshot,
     RuntimeStatusResponse,
 )
+from app.services.config_apply import calculate_checksum
 from app.services.config_generator import generate
 
 _FRONTEND_CONTRACT_VERSION = "1"
@@ -93,11 +93,7 @@ class RuntimeStatusService:
 
         return RuntimeGeneratedConfigStatus(
             can_generate=True,
-            checksum=self._calculate_checksum(
-                generated.haproxy_cfg,
-                generated.crs_setup_conf,
-                generated.rule_overrides_conf,
-            ),
+            checksum=calculate_checksum(generated),
             generated_at=datetime.now(UTC),
             unbound_vhost_domains=unbound_vhost_domains,
         )
@@ -105,12 +101,7 @@ class RuntimeStatusService:
     def _get_latest_operation(
         self, operation_type: RuntimeOperationType
     ) -> RuntimeOperationSnapshot | None:
-        record = (
-            self.db.query(RuntimeOperation)
-            .filter(RuntimeOperation.operation_type == operation_type)
-            .order_by(RuntimeOperation.created_at.desc(), RuntimeOperation.id.desc())
-            .first()
-        )
+        record = get_latest_operation(self.db, operation_type)
         if record is None:
             return None
 
@@ -130,17 +121,3 @@ class RuntimeStatusService:
         # Returning "never_deployed" here was incorrect because a reload WAS
         # attempted; it just failed.
         return "failed"
-
-    @staticmethod
-    def _calculate_checksum(
-        haproxy_cfg: str,
-        crs_setup_conf: str,
-        rule_overrides_conf: str,
-    ) -> str:
-        digest = hashlib.sha256()
-        digest.update(haproxy_cfg.encode("utf-8"))
-        digest.update(b"\n---\n")
-        digest.update(crs_setup_conf.encode("utf-8"))
-        digest.update(b"\n---\n")
-        digest.update(rule_overrides_conf.encode("utf-8"))
-        return digest.hexdigest()
