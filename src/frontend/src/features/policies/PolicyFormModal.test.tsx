@@ -65,15 +65,15 @@ function renderEditModal(onSuccess = vi.fn(), onClose = vi.fn()) {
 }
 
 describe("PolicyFormModal DDoS protection fields", () => {
-  it("disables the numeric fields until DDoS protection is enabled", () => {
+  it("hides the numeric fields until DDoS protection is enabled", () => {
     renderCreateModal();
 
-    expect(screen.getByLabelText("Rate limit (requests)")).toBeDisabled();
-    expect(screen.getByLabelText("Rate limit window (seconds)")).toBeDisabled();
-    expect(screen.getByLabelText("Max connections per IP")).toBeDisabled();
+    expect(screen.queryByLabelText("Rate limit (requests)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Rate limit window (seconds)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Max connections per IP")).not.toBeInTheDocument();
   });
 
-  it("enables the numeric fields once the toggle is checked", async () => {
+  it("reveals the numeric fields once the toggle is checked", async () => {
     renderCreateModal();
 
     await userEvent.click(screen.getByText("DDoS protection"));
@@ -134,17 +134,17 @@ describe("PolicyFormModal DDoS protection fields", () => {
 });
 
 describe("PolicyFormModal automatic IP banning fields", () => {
-  it("disables the auto-ban toggle and numeric fields until DDoS protection is enabled", () => {
+  it("hides the auto-ban toggle and numeric fields until DDoS protection is enabled", () => {
     renderCreateModal();
 
     expect(
-      screen.getByRole("checkbox", { name: /automatic ip banning/i }),
-    ).toBeDisabled();
-    expect(screen.getByLabelText("Ban threshold (violations)")).toBeDisabled();
-    expect(screen.getByLabelText("Ban duration (seconds)")).toBeDisabled();
+      screen.queryByRole("checkbox", { name: /automatic ip banning/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ban threshold (violations)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ban duration (seconds)")).not.toBeInTheDocument();
   });
 
-  it("keeps the ban numeric fields disabled until both DDoS and auto-ban are enabled", async () => {
+  it("keeps the ban numeric fields hidden until both DDoS and auto-ban are enabled", async () => {
     renderCreateModal();
 
     await userEvent.click(screen.getByText("DDoS protection"));
@@ -152,13 +152,26 @@ describe("PolicyFormModal automatic IP banning fields", () => {
     expect(
       screen.getByRole("checkbox", { name: /automatic ip banning/i }),
     ).toBeEnabled();
-    expect(screen.getByLabelText("Ban threshold (violations)")).toBeDisabled();
-    expect(screen.getByLabelText("Ban duration (seconds)")).toBeDisabled();
+    expect(screen.queryByLabelText("Ban threshold (violations)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Ban duration (seconds)")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByText("Automatic IP banning"));
 
     expect(screen.getByLabelText("Ban threshold (violations)")).toBeEnabled();
     expect(screen.getByLabelText("Ban duration (seconds)")).toBeEnabled();
+  });
+
+  it("unchecks automatic IP banning when DDoS protection is disabled again", async () => {
+    renderCreateModal();
+
+    await userEvent.click(screen.getByText("DDoS protection"));
+    await userEvent.click(screen.getByText("Automatic IP banning"));
+    await userEvent.click(screen.getByText("DDoS protection"));
+    await userEvent.click(screen.getByText("DDoS protection"));
+
+    expect(
+      screen.getByRole("checkbox", { name: /automatic ip banning/i }),
+    ).not.toBeChecked();
   });
 
   it("submits auto-ban fields on create", async () => {

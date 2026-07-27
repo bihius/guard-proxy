@@ -229,95 +229,100 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           >
             <Checkbox
               checked={ddosProtectionEnabled}
-              onChange={(e) => setDdosProtectionEnabled(e.target.checked)}
+              onChange={(e) => {
+                setDdosProtectionEnabled(e.target.checked);
+                if (!e.target.checked) setAutoBanEnabled(false);
+              }}
             />
             DDoS protection
             <InfoTooltip label="Enable per-vhost request-rate limiting and connection throttling in the generated HAProxy config." />
           </Label>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="policy-rate-limit-requests">Rate limit (requests)</Label>
-            <Input
-              id="policy-rate-limit-requests"
-              type="number"
-              required
-              min={1}
-              disabled={!ddosProtectionEnabled}
-              value={rateLimitRequests}
-              onChange={(e) => setRateLimitRequests(e.target.value)}
-            />
-          </div>
+          {ddosProtectionEnabled && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="policy-rate-limit-requests">Rate limit (requests)</Label>
+                <Input
+                  id="policy-rate-limit-requests"
+                  type="number"
+                  required
+                  min={1}
+                  value={rateLimitRequests}
+                  onChange={(e) => setRateLimitRequests(e.target.value)}
+                />
+              </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="policy-rate-limit-window">Rate limit window (seconds)</Label>
-            <Input
-              id="policy-rate-limit-window"
-              type="number"
-              required
-              min={1}
-              max={3600}
-              disabled={!ddosProtectionEnabled}
-              value={rateLimitWindowSeconds}
-              onChange={(e) => setRateLimitWindowSeconds(e.target.value)}
-            />
-          </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="policy-rate-limit-window">Rate limit window (seconds)</Label>
+                <Input
+                  id="policy-rate-limit-window"
+                  type="number"
+                  required
+                  min={1}
+                  max={3600}
+                  value={rateLimitWindowSeconds}
+                  onChange={(e) => setRateLimitWindowSeconds(e.target.value)}
+                />
+              </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="policy-max-connections">Max connections per IP</Label>
-            <Input
-              id="policy-max-connections"
-              type="number"
-              required
-              min={1}
-              disabled={!ddosProtectionEnabled}
-              value={maxConnectionsPerIp}
-              onChange={(e) => setMaxConnectionsPerIp(e.target.value)}
-            />
-          </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="policy-max-connections">Max connections per IP</Label>
+                <Input
+                  id="policy-max-connections"
+                  type="number"
+                  required
+                  min={1}
+                  value={maxConnectionsPerIp}
+                  onChange={(e) => setMaxConnectionsPerIp(e.target.value)}
+                />
+              </div>
 
-          <div className="space-y-3 border-t border-border pt-3">
-            <Label
-              className={cn(
-                "flex cursor-pointer items-center gap-2",
-                ddosProtectionEnabled && autoBanEnabled && "text-foreground",
-              )}
-            >
-              <Checkbox
-                checked={autoBanEnabled}
-                disabled={!ddosProtectionEnabled}
-                onChange={(e) => setAutoBanEnabled(e.target.checked)}
-              />
-              Automatic IP banning
-              <InfoTooltip label="Ban a source IP after repeated rate-limit or connection-limit violations. The ban lifts automatically once the IP stays quiet for the ban duration." />
-            </Label>
+              <div className="space-y-3 border-t border-border pt-3">
+                <Label
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2",
+                    autoBanEnabled && "text-foreground",
+                  )}
+                >
+                  <Checkbox
+                    checked={autoBanEnabled}
+                    onChange={(e) => setAutoBanEnabled(e.target.checked)}
+                  />
+                  Automatic IP banning
+                  <InfoTooltip label="Ban a source IP after repeated rate-limit or connection-limit violations. The ban lifts automatically once the IP stays quiet for the ban duration." />
+                </Label>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="policy-ban-threshold">Ban threshold (violations)</Label>
-              <Input
-                id="policy-ban-threshold"
-                type="number"
-                required
-                min={1}
-                disabled={!ddosProtectionEnabled || !autoBanEnabled}
-                value={banThreshold}
-                onChange={(e) => setBanThreshold(e.target.value)}
-              />
-            </div>
+                {autoBanEnabled && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="policy-ban-threshold">Ban threshold (violations)</Label>
+                      <Input
+                        id="policy-ban-threshold"
+                        type="number"
+                        required
+                        min={1}
+                        value={banThreshold}
+                        onChange={(e) => setBanThreshold(e.target.value)}
+                      />
+                    </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="policy-ban-duration">Ban duration (seconds)</Label>
-              <Input
-                id="policy-ban-duration"
-                type="number"
-                required
-                min={1}
-                max={86400}
-                disabled={!ddosProtectionEnabled || !autoBanEnabled}
-                value={banDurationSeconds}
-                onChange={(e) => setBanDurationSeconds(e.target.value)}
-              />
-            </div>
-          </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="policy-ban-duration">Ban duration (seconds)</Label>
+                      <Input
+                        id="policy-ban-duration"
+                        type="number"
+                        required
+                        min={1}
+                        max={86400}
+                        value={banDurationSeconds}
+                        onChange={(e) => setBanDurationSeconds(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {props.mode === "edit" && (
