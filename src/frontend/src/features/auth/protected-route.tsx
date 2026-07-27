@@ -20,6 +20,16 @@ export function ProtectedRoute() {
   return <Outlet />;
 }
 
+export function RequireAdmin() {
+  const { hasRole } = useAuth();
+
+  if (!hasRole("admin")) {
+    return <Navigate to={appRoutes.forbidden} replace />;
+  }
+
+  return <Outlet />;
+}
+
 export function PublicOnlyRoute() {
   const { isAuthenticated, isLoading } = useAuth();
 

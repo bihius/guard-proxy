@@ -38,6 +38,14 @@ _RUNTIME_API_ERROR_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# A vhost's `st_ban_vhost_<id>` stick-table only exists in HAProxy's *running*
+# config after "Apply config" has been clicked since that vhost's policy was
+# assigned/enabled for auto-ban. Until then, HAProxy replies "No such table"
+# to `show table`/`clear table` for it — an expected, transient state, not a
+# Runtime API outage. Narrower than `_RUNTIME_API_ERROR_RE` so it can be
+# classified separately from genuine errors (permission denied, etc.).
+_TABLE_NOT_FOUND_RE = re.compile(r"^\s*no such\s+table\b", re.IGNORECASE | re.MULTILINE)
+
 
 class BanListError(Exception):
     """Base class for ban-list domain errors."""
@@ -52,7 +60,30 @@ class InvalidIpError(BanListError):
 
 
 class RuntimeApiError(BanListError):
-    """Raised when the HAProxy Runtime API socket cannot be reached at all."""
+    """Base class for HAProxy Runtime API failures.
+
+    Raised directly for HAProxy-reported errors that aren't otherwise
+    classified (e.g. "permission denied"). See the more specific subclasses
+    below for socket-unreachable and not-yet-provisioned-table cases, which
+    callers handle differently.
+    """
+
+
+class RuntimeSocketUnreachableError(RuntimeApiError):
+    """Raised when the HAProxy Runtime API socket itself cannot be reached.
+
+    A genuine infrastructure failure — HAProxy is down, the socket path is
+    wrong, permissions are broken, etc.
+    """
+
+
+class RuntimeTableNotProvisionedError(RuntimeApiError):
+    """Raised when HAProxy reports "No such table" for a ban stick-table.
+
+    Expected whenever a vhost's policy has auto-ban enabled in the database
+    but "Apply config" hasn't run since — the table simply doesn't exist in
+    HAProxy's running config yet. Not a Runtime API failure.
+    """
 
 
 @dataclass(frozen=True)
@@ -67,10 +98,11 @@ class BanTableEntry:
 def _send_runtime_command(command: str) -> str:
     """Send one Runtime API command over the admin stats socket and return output.
 
-    Raises `RuntimeApiError` both when the socket itself is unreachable and
-    when HAProxy accepts the connection but replies with an error message
-    (e.g. an unknown table) — the caller cannot otherwise tell a successful
-    `clear`/`show` from one HAProxy silently rejected.
+    Raises `RuntimeSocketUnreachableError` when the socket itself cannot be
+    reached, `RuntimeTableNotProvisionedError` when HAProxy replies "No such
+    table", and the base `RuntimeApiError` for any other HAProxy-reported
+    error — the caller cannot otherwise tell a successful `clear`/`show`
+    from one HAProxy silently rejected.
     """
     socket_path = settings.haproxy_stats_socket_path
     try:
@@ -86,9 +118,11 @@ def _send_runtime_command(command: str) -> str:
                     break
                 output_chunks.append(chunk)
     except OSError as error:
-        raise RuntimeApiError(str(error)) from error
+        raise RuntimeSocketUnreachableError(str(error)) from error
 
     output = b"".join(output_chunks).decode("utf-8", errors="replace")
+    if _TABLE_NOT_FOUND_RE.search(output):
+        raise RuntimeTableNotProvisionedError(output.strip() or "No such table")
     if _RUNTIME_API_ERROR_RE.search(output):
         raise RuntimeApiError(output.strip() or "HAProxy Runtime API returned an error")
 
@@ -130,9 +164,13 @@ class BanListService:
 
         Tolerates individual table failures (one dead table must not blank
         the whole list) but raises `RuntimeApiError` if every attempted
-        table failed, so a fully unreachable Runtime API surfaces as an
-        error instead of an empty list indistinguishable from "nothing
-        tracked" — mirroring `unban`'s all-tables-failed handling below.
+        table failed for a genuine reason, so a fully unreachable Runtime
+        API surfaces as an error instead of an empty list indistinguishable
+        from "nothing tracked" — mirroring `unban`'s all-tables-failed
+        handling below. Vhosts whose stick-table isn't provisioned yet
+        (config not applied since auto-ban was enabled) are silently
+        omitted and never count toward that failure threshold — that's an
+        expected transient state, not an error.
         """
         tables = self._active_ban_tables()
         results: list[BannedIpResponse] = []
@@ -141,6 +179,14 @@ class BanListService:
             try:
                 raw = _send_runtime_command(f"show table {table_name}")
                 entries = _parse_show_table(raw)
+            except RuntimeTableNotProvisionedError:
+                logger.info(
+                    "ban-list table %s not yet provisioned for vhost %s "
+                    "(config not applied since auto-ban was enabled)",
+                    table_name,
+                    vhost.id,
+                )
+                continue
             except RuntimeApiError:
                 logger.exception(
                     "ban-list failed to read table %s for vhost %s",
@@ -177,8 +223,11 @@ class BanListService:
         `_send_runtime_command` raises on an HAProxy-reported error too.
         Tolerates individual table failures (one dead table must not block
         clearing the others) but raises `RuntimeApiError` if every attempted
-        table failed, so a fully unreachable Runtime API surfaces as an
-        error instead of a silent no-op `cleared=0`.
+        table failed for a genuine reason, so a fully unreachable Runtime
+        API surfaces as an error instead of a silent no-op `cleared=0`.
+        Tables not yet provisioned (config not applied since auto-ban was
+        enabled) have nothing to clear and are skipped without counting as
+        a failure.
         """
         try:
             ipaddress.ip_address(ip)
@@ -192,6 +241,11 @@ class BanListService:
             try:
                 _send_runtime_command(f"clear table {table_name} key {ip}")
                 cleared += 1
+            except RuntimeTableNotProvisionedError:
+                logger.info(
+                    "ban-list table %s not yet provisioned, nothing to clear",
+                    table_name,
+                )
             except RuntimeApiError:
                 logger.exception(
                     "ban-list failed to clear key %s in table %s", ip, table_name

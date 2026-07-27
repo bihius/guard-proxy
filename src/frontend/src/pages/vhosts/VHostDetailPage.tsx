@@ -18,6 +18,7 @@ import {
 import type { RuleOverride } from "@/features/policies/types";
 import { getVHost, listAllPolicies, updateVHost } from "@/features/vhosts/api";
 import type { Policy, VHostDetail } from "@/features/vhosts/types";
+import { useConfigChanged } from "@/features/runtime/use-config-changed";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
 
@@ -42,6 +43,7 @@ export function VHostDetailPage() {
   const [overrideModal, setOverrideModal] = useState<RuleOverrideModalState>(null);
   const refreshCountRef = useRef(0);
   const isAdmin = hasRole("admin");
+  const { notifyConfigChanged } = useConfigChanged();
 
   const load = useCallback(() => {
     if (!accessToken) return;
@@ -110,6 +112,7 @@ export function VHostDetailPage() {
         policy_id: selectedPolicyId ? Number(selectedPolicyId) : null,
       });
       load();
+      notifyConfigChanged();
     } catch (err) {
       setPolicyError(
         err instanceof ApiError ? err.detail : "An unexpected error occurred",
@@ -122,6 +125,7 @@ export function VHostDetailPage() {
   function closeOverrideModalAndRefresh() {
     setOverrideModal(null);
     load();
+    notifyConfigChanged();
   }
 
   const overrideColumns: DataTableColumn<RuleOverride>[] = [

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { listBannedIps } from "@/features/banned-ips/api";
 import { fetchLogTotal } from "@/features/logs/api";
 import type { LogAction, LogSeverity } from "@/features/logs/types";
 import { listAllVHosts } from "@/features/vhosts/api";
@@ -17,6 +18,7 @@ type DashboardStatsState = {
   policies: StatValue;
   blocked: StatValue;
   alerts: StatValue;
+  bannedIps: StatValue;
   refresh: () => void;
 };
 
@@ -35,11 +37,13 @@ function isAbortError(e: unknown): boolean {
 }
 
 export function useDashboardStats(): DashboardStatsState {
-  const { accessToken } = useAuth();
+  const { accessToken, hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [vhosts, setVHosts] = useState<StatValue>(LOADING);
   const [policies, setPolicies] = useState<StatValue>(LOADING);
   const [blocked, setBlocked] = useState<StatValue>(LOADING);
   const [alerts, setAlerts] = useState<StatValue>(LOADING);
+  const [bannedIps, setBannedIps] = useState<StatValue>(LOADING);
   const generationRef = useRef(0);
 
   const load = useCallback(() => {
@@ -52,6 +56,7 @@ export function useDashboardStats(): DashboardStatsState {
     setPolicies(LOADING);
     setBlocked(LOADING);
     setAlerts(LOADING);
+    setBannedIps(LOADING);
 
     // Each card resolves independently so fast cards aren't blocked by slow ones.
     // Aborted fetches are silently dropped (not surfaced as errors).
@@ -82,8 +87,21 @@ export function useDashboardStats(): DashboardStatsState {
       .then((total) => guard(setAlerts)(ok(total)))
       .catch((e) => { if (!isAbortError(e)) guard(setAlerts)(failed()); });
 
+    // The banned-IPs endpoint is admin-only, so only admins fetch and see this
+    // card. Count unique source IPs (an IP can be banned on several vhosts).
+    if (isAdmin) {
+      listBannedIps(accessToken, controller.signal)
+        .then((response) => {
+          const uniqueBanned = new Set(
+            response.items.filter((item) => item.banned).map((item) => item.ip),
+          );
+          guard(setBannedIps)(ok(uniqueBanned.size));
+        })
+        .catch((e) => { if (!isAbortError(e)) guard(setBannedIps)(failed()); });
+    }
+
     return () => controller.abort();
-  }, [accessToken]);
+  }, [accessToken, isAdmin]);
 
   useEffect(() => {
     const cleanup = load();
@@ -92,5 +110,5 @@ export function useDashboardStats(): DashboardStatsState {
 
   const refresh = useCallback(() => { load(); }, [load]);
 
-  return { vhosts, policies, blocked, alerts, refresh };
+  return { vhosts, policies, blocked, alerts, bannedIps, refresh };
 }

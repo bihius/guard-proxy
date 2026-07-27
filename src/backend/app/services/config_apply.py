@@ -64,7 +64,7 @@ class ApplyResult:
 def apply(generated: GeneratedConfig) -> ApplyResult:
     """Validate and atomically activate generated runtime config."""
     correlation_id = uuid.uuid4().hex
-    checksum = _calculate_checksum(generated)
+    checksum = calculate_checksum(generated)
     runtime_root = Path(settings.runtime_generated_config_root).resolve()
     releases_root = runtime_root / "releases"
     candidate_dir = releases_root / correlation_id
@@ -249,16 +249,24 @@ def apply(generated: GeneratedConfig) -> ApplyResult:
     )
 
 
-def seed_runtime_config(generated: GeneratedConfig) -> None:
+def seed_runtime_config(generated: GeneratedConfig) -> str | None:
     """Write an initial runtime release if none exists yet.
 
     HAProxy and Coraza both read their config from
     `<runtime_root>/current` on startup. Until the first admin "Apply
     config" runs, that symlink does not exist, so Coraza's
     `Include /runtime/current/crs-setup.conf` resolves to nothing and CRS
-    fails to load. Called once during backend startup to seed `current`
-    from the database state, without reloading anything (no service has
-    started yet, so there is nothing to reload).
+    fails to load. Called on every backend startup to seed `current` from
+    the database state, without reloading anything (no service has started
+    yet, so there is nothing to reload).
+
+    Returns the checksum of whatever release is active in `current` once
+    this returns (freshly written or pre-existing), or `None` if there is
+    no valid active release — the caller uses this to reconcile the
+    `RuntimeOperation` log so the "pending changes" comparison in
+    `RuntimeStatusService` reflects what's actually deployed, not just what
+    was deployed via the last `POST /config/apply` before the most recent
+    restart.
     """
     runtime_root = Path(settings.runtime_generated_config_root).resolve()
     current_link = runtime_root / "current"
@@ -271,7 +279,7 @@ def seed_runtime_config(generated: GeneratedConfig) -> None:
         (current_link / "crs-setup.conf").exists()
         and (current_link / "haproxy.cfg").exists()
     ):
-        return
+        return _read_active_checksum(current_link)
 
     correlation_id = uuid.uuid4().hex
     candidate_dir = runtime_root / "releases" / correlation_id
@@ -287,7 +295,7 @@ def seed_runtime_config(generated: GeneratedConfig) -> None:
                 validation.output,
             )
             shutil.rmtree(candidate_dir, ignore_errors=True)
-            return
+            return None
         _swap_current_link(current_link, candidate_dir, runtime_root)
     except OSError:
         logger.exception(
@@ -295,12 +303,13 @@ def seed_runtime_config(generated: GeneratedConfig) -> None:
             correlation_id,
         )
         shutil.rmtree(candidate_dir, ignore_errors=True)
-        return
+        return None
 
     logger.info(
         "config-seed wrote initial runtime config correlation_id=%s",
         correlation_id,
     )
+    return calculate_checksum(generated)
 
 
 @dataclass(frozen=True)
@@ -466,7 +475,13 @@ def _sweep_orphaned_temp_links(runtime_root: Path) -> None:
             pass
 
 
-def _calculate_checksum(generated: GeneratedConfig) -> str:
+def calculate_checksum(generated: GeneratedConfig) -> str:
+    """Digest used to detect drift between DB-generated and deployed config.
+
+    Shared by `apply()` here and by `RuntimeStatusService` (which computes it
+    for the current DB state on every `/runtime/status` call) so there is a
+    single source of truth for what "the same config" means.
+    """
     digest = hashlib.sha256()
     digest.update(generated.haproxy_cfg.encode("utf-8"))
     digest.update(b"\n---\n")
@@ -474,6 +489,29 @@ def _calculate_checksum(generated: GeneratedConfig) -> str:
     digest.update(b"\n---\n")
     digest.update(generated.rule_overrides_conf.encode("utf-8"))
     return digest.hexdigest()
+
+
+def _read_active_checksum(current_link: Path) -> str | None:
+    """Checksum of whatever release `current` actually points to, if any."""
+    active_dir = _resolve_current(current_link)
+    if active_dir is None:
+        return None
+    try:
+        haproxy_cfg = (active_dir / "haproxy.cfg").read_text(encoding="utf-8")
+        crs_setup_conf = (active_dir / "crs-setup.conf").read_text(encoding="utf-8")
+        rule_overrides_conf = (active_dir / "rule-overrides.conf").read_text(
+            encoding="utf-8"
+        )
+    except OSError:
+        return None
+    return calculate_checksum(
+        GeneratedConfig(
+            haproxy_cfg=haproxy_cfg,
+            crs_setup_conf=crs_setup_conf,
+            rule_overrides_conf=rule_overrides_conf,
+            certs={},
+        )
+    )
 
 
 def _join_output(stdout: str, stderr: str) -> str:

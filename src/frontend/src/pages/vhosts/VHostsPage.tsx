@@ -15,6 +15,7 @@ import { DeleteVHostDialog } from "@/features/vhosts/DeleteVHostDialog";
 import { VHostFormModal } from "@/features/vhosts/VHostFormModal";
 import { useVHosts } from "@/features/vhosts/use-vhosts";
 import type { VHost } from "@/features/vhosts/types";
+import { useConfigChanged } from "@/features/runtime/use-config-changed";
 import { useAuth } from "@/hooks/use-auth";
 
 type ModalState =
@@ -43,10 +44,12 @@ export function VHostsPage() {
   const [modal, setModal] = useState<ModalState>(null);
   const isAdmin = hasRole("admin");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const { notifyConfigChanged } = useConfigChanged();
 
   function closeAndRefresh() {
     setModal(null);
     refresh();
+    notifyConfigChanged();
   }
 
   const columns: DataTableColumn<VHost>[] = [

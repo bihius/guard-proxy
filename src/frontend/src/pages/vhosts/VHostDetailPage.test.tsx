@@ -7,6 +7,7 @@ import * as policiesApi from "@/features/policies/api";
 import type { RuleOverride } from "@/features/policies/types";
 import { AuthContext } from "@/features/auth/auth-context.shared";
 import type { AuthContextValue } from "@/features/auth/auth-context.types";
+import { ConfigChangedProvider } from "@/features/runtime/config-changed-provider";
 import * as vhostsApi from "@/features/vhosts/api";
 import type { Policy, VHostDetail } from "@/features/vhosts/types";
 
@@ -109,11 +110,13 @@ function mockSuccessfulLoad(
 function renderPage(authOverrides: Partial<AuthContextValue> = {}) {
   return render(
     <AuthContext.Provider value={makeAuthContext(authOverrides)}>
-      <MemoryRouter initialEntries={["/vhosts/1"]}>
-        <Routes>
-          <Route path="/vhosts/:vhostId" element={<VHostDetailPage />} />
-        </Routes>
-      </MemoryRouter>
+      <ConfigChangedProvider>
+        <MemoryRouter initialEntries={["/vhosts/1"]}>
+          <Routes>
+            <Route path="/vhosts/:vhostId" element={<VHostDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ConfigChangedProvider>
     </AuthContext.Provider>,
   );
 }

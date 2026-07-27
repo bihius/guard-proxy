@@ -12,6 +12,7 @@ from app.services.config_apply import (
     _read_current_symlink,
     _write_candidate,
     apply,
+    calculate_checksum,
     seed_runtime_config,
 )
 from app.services.config_generator import GeneratedConfig
@@ -328,13 +329,14 @@ def test_seed_runtime_config_writes_current_when_missing(
         lambda _: CommandResult(ok=True, output="valid"),
     )
 
-    seed_runtime_config(_sample_generated())
+    returned_checksum = seed_runtime_config(_sample_generated())
 
     current = runtime_root / "current"
     assert current.is_symlink()
     assert (current / "crs-setup.conf").read_text(
         encoding="utf-8"
     ) == "SecRuleEngine On\n"
+    assert returned_checksum == calculate_checksum(_sample_generated())
 
 
 def test_seed_runtime_config_replaces_entrypoint_stub_release(
@@ -356,7 +358,7 @@ def test_seed_runtime_config_replaces_entrypoint_stub_release(
         lambda _: CommandResult(ok=True, output="valid"),
     )
 
-    seed_runtime_config(_sample_generated())
+    returned_checksum = seed_runtime_config(_sample_generated())
 
     current = runtime_root / "current"
     assert current.resolve() != stub_dir.resolve()
@@ -364,6 +366,7 @@ def test_seed_runtime_config_replaces_entrypoint_stub_release(
     assert (current / "crs-setup.conf").read_text(
         encoding="utf-8"
     ) == "SecRuleEngine On\n"
+    assert returned_checksum == calculate_checksum(_sample_generated())
 
 
 def test_seed_runtime_config_is_noop_when_current_already_exists(
@@ -378,9 +381,17 @@ def test_seed_runtime_config_is_noop_when_current_already_exists(
         lambda _: (_ for _ in ()).throw(AssertionError("should not validate")),
     )
 
-    seed_runtime_config(_sample_generated())
+    returned_checksum = seed_runtime_config(_sample_generated())
 
     assert (runtime_root / "current").resolve() == previous.resolve()
+    # The pre-existing release's own content, not the (unused) candidate.
+    previous_generated = GeneratedConfig(
+        haproxy_cfg="global\n",
+        crs_setup_conf="SecRuleEngine On\n",
+        rule_overrides_conf="# seed\n",
+        certs={},
+    )
+    assert returned_checksum == calculate_checksum(previous_generated)
 
 
 def test_seed_runtime_config_does_not_swap_current_when_validation_fails(
@@ -394,10 +405,11 @@ def test_seed_runtime_config_does_not_swap_current_when_validation_fails(
         lambda _: CommandResult(ok=False, output="parse error"),
     )
 
-    seed_runtime_config(_sample_generated())
+    returned_checksum = seed_runtime_config(_sample_generated())
 
     assert not (runtime_root / "current").exists()
     assert not (runtime_root / "current").is_symlink()
+    assert returned_checksum is None
 
 
 # ---------------------------------------------------------------------------

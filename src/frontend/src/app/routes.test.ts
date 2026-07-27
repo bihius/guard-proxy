@@ -8,6 +8,7 @@ describe("appRoutes", () => {
     expect(appRoutes.dashboard).toBe("/dashboard");
     expect(appRoutes.vhosts).toBe("/vhosts");
     expect(appRoutes.policies).toBe("/policies");
+    expect(appRoutes.bannedIps).toBe("/banned-ips");
   });
 
   it("builds vhost detail paths", () => {

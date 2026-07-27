@@ -14,6 +14,7 @@ import { DeletePolicyDialog } from "@/features/policies/DeletePolicyDialog";
 import { PolicyFormModal } from "@/features/policies/PolicyFormModal";
 import type { Policy } from "@/features/policies/types";
 import { usePolicies } from "@/features/policies/use-policies";
+import { useConfigChanged } from "@/features/runtime/use-config-changed";
 import { useAuth } from "@/hooks/use-auth";
 import { getPolicyDetailPath } from "@/app/routes";
 
@@ -42,10 +43,12 @@ export function PoliciesPage() {
   const [modal, setModal] = useState<ModalState>(null);
   const isAdmin = hasRole("admin");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const { notifyConfigChanged } = useConfigChanged();
 
   function closeAndRefresh() {
     setModal(null);
     refresh();
+    notifyConfigChanged();
   }
 
   const columns: DataTableColumn<Policy>[] = [

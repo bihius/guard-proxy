@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "@/features/auth/auth-context.shared";
 import type { AuthContextValue } from "@/features/auth/auth-context.types";
+import { ConfigChangedProvider } from "@/features/runtime/config-changed-provider";
 import * as vhostsApi from "@/features/vhosts/api";
 
 import { VHostsPage } from "./VHostsPage";
@@ -74,12 +75,14 @@ const emptyVHostListResponse = {
 function renderPage(authOverrides: Partial<AuthContextValue> = {}) {
   return render(
     <AuthContext.Provider value={makeAuthContext(authOverrides)}>
-      <MemoryRouter initialEntries={["/vhosts"]}>
-        <Routes>
-          <Route path="/vhosts" element={<VHostsPage />} />
-          <Route path="/vhosts/:vhostId" element={<p>VHost detail page</p>} />
-        </Routes>
-      </MemoryRouter>
+      <ConfigChangedProvider>
+        <MemoryRouter initialEntries={["/vhosts"]}>
+          <Routes>
+            <Route path="/vhosts" element={<VHostsPage />} />
+            <Route path="/vhosts/:vhostId" element={<p>VHost detail page</p>} />
+          </Routes>
+        </MemoryRouter>
+      </ConfigChangedProvider>
     </AuthContext.Provider>,
   );
 }

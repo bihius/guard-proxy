@@ -1,8 +1,9 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { appRoutes } from "@/app/routes";
-import { ProtectedRoute, PublicOnlyRoute } from "@/features/auth/protected-route";
+import { ProtectedRoute, PublicOnlyRoute, RequireAdmin } from "@/features/auth/protected-route";
 import { AppLayout } from "@/layouts/AppLayout";
+import { BannedIpsPage } from "@/pages/banned-ips/BannedIpsPage";
 import { DashboardPage } from "@/pages/dashboard/DashboardPage";
 import { ForbiddenPage } from "@/pages/forbidden/ForbiddenPage";
 import { LoginPage } from "@/pages/login/LoginPage";
@@ -61,6 +62,15 @@ export const router = createBrowserRouter([
           {
             path: appRoutes.logs,
             element: <LogsPage />,
+          },
+          {
+            element: <RequireAdmin />,
+            children: [
+              {
+                path: appRoutes.bannedIps,
+                element: <BannedIpsPage />,
+              },
+            ],
           },
         ],
       },

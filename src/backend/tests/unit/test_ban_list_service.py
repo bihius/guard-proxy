@@ -1,5 +1,6 @@
 """Unit tests for the ban-list Runtime API service."""
 
+import socket
 from unittest.mock import Mock
 
 import pytest
@@ -10,11 +11,15 @@ from app.models.vhost import VHost
 from app.services import ban_list_service
 from app.services.ban_list_service import (
     _RUNTIME_API_ERROR_RE,
+    _TABLE_NOT_FOUND_RE,
     BanListService,
     BanTableEntry,
     InvalidIpError,
     RuntimeApiError,
+    RuntimeSocketUnreachableError,
+    RuntimeTableNotProvisionedError,
     _parse_show_table,
+    _send_runtime_command,
 )
 
 
@@ -113,6 +118,99 @@ class TestRuntimeApiErrorRegex:
             assert _RUNTIME_API_ERROR_RE.search(output), (
                 f"Regex did not match expected error output: {output!r}"
             )
+
+
+class TestTableNotFoundRegex:
+    def test_matches_no_such_table(self) -> None:
+        assert _TABLE_NOT_FOUND_RE.search("No such table\n")
+
+    def test_does_not_match_other_errors(self) -> None:
+        for output in ["Permission denied\n", "Invalid key\n", "Unknown command\n"]:
+            assert not _TABLE_NOT_FOUND_RE.search(output)
+
+
+class _FakeSocket:
+    """In-memory stand-in for `socket.socket(AF_UNIX, SOCK_STREAM)`.
+
+    `_send_runtime_command` only uses `connect`/`settimeout`/`sendall`/
+    `shutdown`/`recv`/context-manager exit — faking those avoids spinning up
+    a real OS-level Unix socket (and the thread-timing races that come with
+    one) just to test response classification.
+    """
+
+    def __init__(self, reply: bytes) -> None:
+        self._reply = reply
+        self._served = False
+
+    def __enter__(self) -> "_FakeSocket":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def settimeout(self, _seconds: float) -> None:
+        pass
+
+    def connect(self, _path: str) -> None:
+        pass
+
+    def sendall(self, _data: bytes) -> None:
+        pass
+
+    def shutdown(self, _how: int) -> None:
+        pass
+
+    def recv(self, _bufsize: int) -> bytes:
+        if self._served:
+            return b""
+        self._served = True
+        return self._reply
+
+
+class TestSendRuntimeCommand:
+    def test_raises_socket_unreachable_when_socket_path_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_socket(*_args: object, **_kwargs: object) -> _FakeSocket:
+            raise OSError("No such file or directory")
+
+        monkeypatch.setattr(socket, "socket", fake_socket)
+
+        with pytest.raises(RuntimeSocketUnreachableError):
+            _send_runtime_command("show table st_ban_vhost_1")
+
+    def test_raises_table_not_provisioned_for_no_such_table(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            socket, "socket", lambda *a, **k: _FakeSocket(b"No such table\n")
+        )
+
+        with pytest.raises(RuntimeTableNotProvisionedError):
+            _send_runtime_command("show table st_ban_vhost_1")
+
+    def test_raises_generic_runtime_api_error_for_other_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            socket, "socket", lambda *a, **k: _FakeSocket(b"Permission denied\n")
+        )
+
+        with pytest.raises(RuntimeApiError) as excinfo:
+            _send_runtime_command("show table st_ban_vhost_1")
+        assert not isinstance(excinfo.value, RuntimeTableNotProvisionedError)
+        assert not isinstance(excinfo.value, RuntimeSocketUnreachableError)
+
+    def test_returns_output_on_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            socket,
+            "socket",
+            lambda *a, **k: _FakeSocket(b"0x1: key=192.0.2.1 use=0 exp=1000 gpc0=1\n"),
+        )
+
+        output = _send_runtime_command("show table st_ban_vhost_1")
+
+        assert "192.0.2.1" in output
 
 
 class TestListBanned:
@@ -227,6 +325,43 @@ class TestListBanned:
         with pytest.raises(RuntimeApiError):
             BanListService(db).list_banned()
 
+    def test_skips_table_not_provisioned_without_counting_as_failure(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        policy_a = _sample_policy(name="A")
+        policy_b = _sample_policy(name="B")
+        vhost_a = _sample_vhost(policy_a, domain="a.example.com")
+        vhost_b = _sample_vhost(policy_b, domain="b.example.com")
+        db.add_all([policy_a, policy_b, vhost_a, vhost_b])
+        db.flush()
+
+        def fake_send(command: str) -> str:
+            if f"vhost_{vhost_a.id}" in command:
+                raise RuntimeTableNotProvisionedError("No such table")
+            return "0x1: key=192.0.2.1 use=0 exp=1000 gpc0=1\n"
+
+        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
+        results = BanListService(db).list_banned()
+
+        assert len(results) == 1
+        assert results[0].vhost_id == vhost_b.id
+
+    def test_returns_empty_when_all_tables_not_yet_provisioned(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        policy = _sample_policy()
+        vhost = _sample_vhost(policy)
+        db.add_all([policy, vhost])
+        db.flush()
+
+        def fake_send(_command: str) -> str:
+            raise RuntimeTableNotProvisionedError("No such table")
+
+        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
+        assert BanListService(db).list_banned() == []
+
 
 class TestUnban:
     def test_clears_ip_from_every_active_table(
@@ -302,6 +437,44 @@ class TestUnban:
             BanListService(db).unban("203.0.113.9")
 
     def test_returns_zero_cleared_when_no_vhost_qualifies(self, db: Session) -> None:
+        result = BanListService(db).unban("203.0.113.9")
+
+        assert result.cleared == 0
+
+    def test_skips_table_not_provisioned_without_counting_as_failure(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        policy_a = _sample_policy(name="A")
+        policy_b = _sample_policy(name="B")
+        vhost_a = _sample_vhost(policy_a, domain="a.example.com")
+        vhost_b = _sample_vhost(policy_b, domain="b.example.com")
+        db.add_all([policy_a, policy_b, vhost_a, vhost_b])
+        db.flush()
+
+        def fake_send(command: str) -> str:
+            if f"vhost_{vhost_a.id}" in command:
+                raise RuntimeTableNotProvisionedError("No such table")
+            return ""
+
+        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
+        result = BanListService(db).unban("203.0.113.9")
+
+        assert result.cleared == 1
+
+    def test_returns_zero_cleared_when_all_tables_not_yet_provisioned(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        policy = _sample_policy()
+        vhost = _sample_vhost(policy)
+        db.add_all([policy, vhost])
+        db.flush()
+
+        def fake_send(_command: str) -> str:
+            raise RuntimeTableNotProvisionedError("No such table")
+
+        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+
         result = BanListService(db).unban("203.0.113.9")
 
         assert result.cleared == 0
