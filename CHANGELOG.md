@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [0.1.0-beta.3] - 2026-07-27
+
+### Added
+
+- Banned IPs admin page: table of source IPs currently blocked by the
+  auto-ban mechanism (IP, domain, violations, expires-in), with search,
+  client-side pagination, and an admin-gated Unban action backed by the
+  HAProxy Runtime API.
+- Dashboard stat card showing the current count of actively banned IPs.
+
+### Changed
+
+- Policy form now hides the DDoS/auto-ban sub-fields entirely until their
+  parent toggle is enabled, instead of just disabling them; disabling DDoS
+  protection also clears the auto-ban toggle so it can't stay enabled
+  invisibly.
+
+### Fixed
+
+- `GET /security/banned-ips` and the Unban action no longer return `502`
+  when a vhost's auto-ban stick-table hasn't been provisioned by HAProxy
+  yet — an unprovisioned table is now treated as an empty ban list.
+- The "Apply config" button no longer stays stuck visible after a plain
+  backend restart with no pending changes; the deployed config's checksum
+  is now reconciled against the runtime operation log on every startup.
+
 ## [0.1.0-beta.2] - 2026-07-21
 
 ### Added
@@ -48,6 +74,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[0.1.0-beta.3]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/bihius/guard-proxy/compare/v0.1.0-alpha...v0.1.0-beta.1
 [0.1.0-alpha]: https://github.com/bihius/guard-proxy/releases/tag/v0.1.0-alpha
