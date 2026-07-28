@@ -14,13 +14,18 @@ from sqlalchemy.orm import Session
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
 
-from app.models.policy import Policy, PolicyEnforcementMode  # noqa: E402
+from app.models.policy import (  # noqa: E402
+    Policy,
+    PolicyEnforcementMode,
+    PolicyGeoipMode,
+)
 from app.models.policy_binding import PolicyBinding  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vhost import VHost  # noqa: E402
 from app.services.policy_service import (  # noqa: E402
     PolicyDisallowedFieldError,
     PolicyFieldCannotBeNullError,
+    PolicyGeoipConfigurationError,
     PolicyInUseError,
     PolicyNameAlreadyExistsError,
     PolicyNotFoundError,
@@ -479,6 +484,201 @@ def test_delete_policy_missing_raises_not_found(db: Session) -> None:
 
     with pytest.raises(PolicyNotFoundError):
         service.delete_policy(99999)
+
+
+# ---------------------------------------------------------------------------
+# GeoIP country filtering (issue #175)
+# ---------------------------------------------------------------------------
+
+
+def test_create_policy_defaults_geoip_to_off_and_empty_list(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+
+    policy = service.create_policy(
+        name="Geo default",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    assert policy.geoip_mode == PolicyGeoipMode.off
+    assert policy.geoip_countries == []
+
+
+def test_create_policy_persists_geoip_fields(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+
+    policy = service.create_policy(
+        name="Geo blocklist",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+        geoip_mode=PolicyGeoipMode.blocklist,
+        geoip_countries=["RU", "CN"],
+    )
+
+    assert policy.geoip_mode == PolicyGeoipMode.blocklist
+    assert policy.geoip_countries == ["RU", "CN"]
+
+
+def test_create_policy_allowlist_with_empty_countries_raises(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+
+    with pytest.raises(PolicyGeoipConfigurationError):
+        service.create_policy(
+            name="Geo invalid",
+            description=None,
+            paranoia_level=2,
+            inbound_anomaly_threshold=5,
+            outbound_anomaly_threshold=5,
+            enforcement_mode=PolicyEnforcementMode.block,
+            created_by=admin_user.id,
+            geoip_mode=PolicyGeoipMode.allowlist,
+            geoip_countries=[],
+        )
+
+
+def test_update_policy_patches_geoip_fields(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Geo patch",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    updated = service.update_policy(
+        created.id,
+        {"geoip_mode": PolicyGeoipMode.allowlist, "geoip_countries": ["US", "CA"]},
+    )
+
+    assert updated.geoip_mode == PolicyGeoipMode.allowlist
+    assert updated.geoip_countries == ["US", "CA"]
+
+
+def test_update_policy_geoip_mode_null_raises_error(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Geo null mode",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyFieldCannotBeNullError):
+        service.update_policy(created.id, {"geoip_mode": None})
+
+
+def test_update_policy_geoip_countries_null_raises_error(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Geo null countries",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyFieldCannotBeNullError):
+        service.update_policy(created.id, {"geoip_countries": None})
+
+
+def test_update_policy_allowlist_with_empty_stored_list_raises(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Geo empty stored",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    with pytest.raises(PolicyGeoipConfigurationError):
+        service.update_policy(created.id, {"geoip_mode": PolicyGeoipMode.allowlist})
+
+
+def test_update_policy_allowlist_with_countries_in_same_patch_succeeds(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Geo same patch",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+    )
+
+    updated = service.update_policy(
+        created.id,
+        {"geoip_mode": PolicyGeoipMode.allowlist, "geoip_countries": ["FR"]},
+    )
+
+    assert updated.geoip_mode == PolicyGeoipMode.allowlist
+    assert updated.geoip_countries == ["FR"]
+
+
+def test_update_policy_geoip_off_leaves_stored_countries_untouched(
+    db: Session,
+    admin_user: User,
+) -> None:
+    service = PolicyService(db)
+    created = service.create_policy(
+        name="Geo toggle off",
+        description=None,
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=5,
+        enforcement_mode=PolicyEnforcementMode.block,
+        created_by=admin_user.id,
+        geoip_mode=PolicyGeoipMode.allowlist,
+        geoip_countries=["JP"],
+    )
+
+    updated = service.update_policy(created.id, {"geoip_mode": PolicyGeoipMode.off})
+
+    assert updated.geoip_mode == PolicyGeoipMode.off
+    assert updated.geoip_countries == ["JP"]
 
 
 def test_update_policy_disallowed_field_raises_error(

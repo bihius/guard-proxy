@@ -133,6 +133,44 @@ independently queryable or filterable. See
 and `::test_multi_rule_request_preserves_all_matched_rules_in_raw_context`
 for the tested behavior. A per-rule breakdown is deferred post-MVP.
 
+## GeoIP Country Filtering
+
+A policy can restrict a vhost by client country (issue #175) with `geoip_mode`
+(`off` / `allowlist` / `blocklist`) and `geoip_countries` (a list of ISO
+3166-1 alpha-2 codes). The mechanism is intentionally native to HAProxy:
+
+1. `app.services.geoip_service.download_database()` downloads the free
+   MaxMind GeoLite2-Country MMDB using a license key supplied via
+   `MAXMIND_LICENSE_KEY`.
+2. `generate_map_file()` converts the MMDB into a plain-text HAProxy map file
+   (`CIDR <space> ISO-country-code` per line), written atomically
+   (`os.replace()`) to `<runtime_root>/geoip/country.map` on the shared
+   `guard_proxy_runtime` volume — the same volume HAProxy reads at
+   `/etc/haproxy/generated`.
+3. The generated `haproxy.cfg` uses HAProxy's native `map_ip()` fetch against
+   that file to resolve `src` to a country in `var(txn.geoip_country)`, then
+   denies with `403` when the resolved (or absent) country violates the
+   configured mode. No Lua and no HAProxy MMDB module are required — the
+   map lookup is table-driven and fully supported by stock HAProxy, and
+   `haproxy -c` never fails because of a missing map: a non-empty stub map is
+   always written first if no real database has been downloaded yet.
+4. A weekly APScheduler job (`refresh_geoip_database`, interval controlled by
+   `GEOIP_REFRESH_INTERVAL_DAYS`) re-downloads the MMDB and regenerates the
+   map. `POST /geoip/refresh` (admin only) triggers the same pipeline
+   on-demand. Both paths reload HAProxy only when the generated map actually
+   changed, so a no-op refresh does not cause an unnecessary reload.
+
+**Fail-open by default.** Unlike the SPOE WAF inspection path above — which
+fails *closed* with `503` because an unavailable Coraza SPOA is a security
+control failure that must stop traffic — GeoIP filtering fails *open*
+(allows the request) by default when the map is missing, the database has
+never been downloaded, or an IP cannot be resolved to a country. A stale or
+absent geolocation database is not a security control failure in the same
+sense; it must never take a site offline on its own. This default is
+controlled by `GEOIP_FAIL_OPEN` (default `true`); set `GEOIP_FAIL_OPEN=false`
+to fail closed instead, at the cost of blocking traffic whenever geolocation
+data is unavailable.
+
 ## Authentication & Rate Limiting
 
 The FastAPI backend issues short-lived **JWT access tokens** (30 min, HS256) and

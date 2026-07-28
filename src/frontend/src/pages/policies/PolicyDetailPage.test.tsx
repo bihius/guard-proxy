@@ -87,6 +87,8 @@ const mockPolicy: PolicyDetail = {
   auto_ban_enabled: false,
   ban_threshold: 10,
   ban_duration_seconds: 600,
+  geoip_mode: "off",
+  geoip_countries: [],
   created_by: 1,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-02T00:00:00Z",

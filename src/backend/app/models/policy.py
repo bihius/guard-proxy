@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -34,6 +35,14 @@ class PolicyEnforcementMode(enum.StrEnum):
 
     block = "block"
     detect_only = "detect_only"
+
+
+class PolicyGeoipMode(enum.StrEnum):
+    """GeoIP country filtering mode for a policy."""
+
+    off = "off"
+    allowlist = "allowlist"
+    blocklist = "blocklist"
 
 
 class Policy(Base):
@@ -151,6 +160,19 @@ class Policy(Base):
         Integer,
         nullable=False,
         default=600,  # ban duration (idle-expiry), in seconds
+    )
+
+    # GeoIP country filtering (issue #175). geoip_countries is a whole-list
+    # replacement field: PATCH always assigns a fresh list, so MutableList
+    # change tracking is deliberately not needed. There is no CheckConstraint
+    # for the countries list — JSON content is validated in the schema/service
+    # layer (matching how CRS target values are handled elsewhere); the enum
+    # column already constrains geoip_mode.
+    geoip_mode: Mapped[PolicyGeoipMode] = mapped_column(
+        Enum(PolicyGeoipMode), nullable=False, default=PolicyGeoipMode.off
+    )
+    geoip_countries: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
     )
 
     # Audit — who created the policy

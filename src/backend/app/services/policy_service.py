@@ -3,7 +3,7 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.policy import Policy, PolicyEnforcementMode, PolicyGeoipMode
 from app.models.policy_binding import PolicyBinding
 from app.models.vhost import VHost
 
@@ -21,6 +21,8 @@ NON_NULLABLE_PATCH_FIELDS = {
     "auto_ban_enabled",
     "ban_threshold",
     "ban_duration_seconds",
+    "geoip_mode",
+    "geoip_countries",
 }
 
 # description is intentionally included: it is nullable and may be set to None.
@@ -39,6 +41,8 @@ PATCHABLE_FIELDS = {
     "auto_ban_enabled",
     "ban_threshold",
     "ban_duration_seconds",
+    "geoip_mode",
+    "geoip_countries",
 }
 
 
@@ -78,6 +82,15 @@ class PolicyInUseError(PolicyError):
     """Raised when a policy is still assigned to a vhost or path binding."""
 
 
+class PolicyGeoipConfigurationError(PolicyError):
+    """Raised when geoip_mode is not 'off' but geoip_countries is empty."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "geoip_countries must not be empty when geoip_mode is not 'off'"
+        )
+
+
 class PolicyService:
     """Encapsulates policy CRUD business rules.
 
@@ -106,8 +119,11 @@ class PolicyService:
         auto_ban_enabled: bool = False,
         ban_threshold: int = 10,
         ban_duration_seconds: int = 600,
+        geoip_mode: PolicyGeoipMode = PolicyGeoipMode.off,
+        geoip_countries: list[str] | None = None,
     ) -> Policy:
         """Create and persist a new policy."""
+        self._validate_geoip(geoip_mode, geoip_countries or [])
         policy = Policy(
             name=name,
             description=description,
@@ -122,6 +138,8 @@ class PolicyService:
             auto_ban_enabled=auto_ban_enabled,
             ban_threshold=ban_threshold,
             ban_duration_seconds=ban_duration_seconds,
+            geoip_mode=geoip_mode,
+            geoip_countries=list(geoip_countries or []),
             is_active=True,
             created_by=created_by,
         )
@@ -182,6 +200,10 @@ class PolicyService:
         policy = self._get_policy_or_raise(policy_id)
         self._validate_patch_data(patch_data)
 
+        effective_mode = patch_data.get("geoip_mode", policy.geoip_mode)
+        effective_countries = patch_data.get("geoip_countries", policy.geoip_countries)
+        self._validate_geoip(effective_mode, effective_countries)
+
         for field, value in patch_data.items():
             setattr(policy, field, value)
 
@@ -235,6 +257,22 @@ class PolicyService:
         for field in NON_NULLABLE_PATCH_FIELDS:
             if field in patch_data and patch_data[field] is None:
                 raise PolicyFieldCannotBeNullError(field)
+
+    @staticmethod
+    def _validate_geoip(mode: object, countries: object) -> None:
+        """Enforce "geoip_countries must be non-empty unless mode is off".
+
+        Called with the *effective* mode/countries — for create() these are
+        simply the request values; for update() the caller merges the patch
+        onto the currently stored row before calling this, since geoip_mode
+        and geoip_countries can be patched independently.
+
+        When mode is toggled back to `off`, geoip_countries is intentionally
+        left as-is (not cleared, not rejected) so an admin can turn filtering
+        off and later back on without re-entering the country list.
+        """
+        if mode != PolicyGeoipMode.off and not countries:
+            raise PolicyGeoipConfigurationError
 
     @staticmethod
     def _is_policy_name_unique_violation(error: IntegrityError) -> bool:

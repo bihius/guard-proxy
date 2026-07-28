@@ -24,6 +24,8 @@ _HAPROXY_HOST_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 # HAProxy backend address (host:port): same allowlist as host values.
 _HAPROXY_ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 _HAPROXY_HEALTH_PATH_RE = re.compile(r"^[A-Za-z0-9_./:-]+$")
+_ISO_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
+_HAPROXY_MAP_PATH_RE = re.compile(r"^/[A-Za-z0-9._/-]+$")
 _MODSEC_LINE_BREAK_RE = re.compile(r"[\r\n]")
 _MODSEC_TARGET_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:/@-]+$")
 _MODSEC_VARIABLES_RE = re.compile(r"^[A-Za-z0-9_.:|@-]+$")
@@ -186,6 +188,39 @@ class HaproxyDdos:
 
 
 @dataclass(frozen=True)
+class HaproxyGeoip:
+    """Per-vhost GeoIP country filtering settings.
+
+    ``map_path`` points at a generated CIDR -> ISO 3166-1 alpha-2 map file
+    that HAProxy reads natively via ``map_ip()`` (no Lua, no MMDB module).
+    """
+
+    mode: str  # "allowlist" | "blocklist"
+    countries: tuple[str, ...]
+    map_path: str
+    fail_open: bool = True
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("allowlist", "blocklist"):
+            raise ValueError(
+                f"HaproxyGeoip.mode {self.mode!r} must be 'allowlist' or 'blocklist'"
+            )
+        if not self.countries:
+            raise ValueError("HaproxyGeoip.countries must not be empty")
+        for code in self.countries:
+            if not _ISO_COUNTRY_RE.match(code):
+                raise ValueError(
+                    f"HaproxyGeoip.countries {code!r} must be an uppercase "
+                    "two-letter ISO 3166-1 alpha-2 code"
+                )
+        if not self.map_path or not _HAPROXY_MAP_PATH_RE.match(self.map_path):
+            raise ValueError(
+                f"HaproxyGeoip.map_path {self.map_path!r} must be a non-empty "
+                "absolute POSIX path"
+            )
+
+
+@dataclass(frozen=True)
 class HaproxyRoute:
     """Prepared HAProxy render input with no database behavior.
 
@@ -199,6 +234,7 @@ class HaproxyRoute:
     ssl_provider: str
     backend: HaproxyBackend
     ddos: HaproxyDdos | None = None
+    geoip: HaproxyGeoip | None = None
 
     def __post_init__(self) -> None:
         _validate_haproxy_identifier(
@@ -251,6 +287,9 @@ class HaproxyRenderContext:
             ),
             "HaproxyRenderContext.routes.ddos.ban_stick_table_name",
         )
+        # geoip introduces no new per-route identifiers (a single shared
+        # read-only var(txn.geoip_country) is used across all routes), so no
+        # uniqueness check is needed here.
 
 
 @dataclass(frozen=True)

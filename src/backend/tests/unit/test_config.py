@@ -255,3 +255,39 @@ def test_settings_reject_non_positive_reload_timeout() -> None:
             LOG_INGEST_SHARED_SECRET="real-log-secret",
             HAPROXY_RELOAD_TIMEOUT_SECONDS="0",
         )
+
+
+# ---------------------------------------------------------------------------
+# GeoIP settings (issue #175)
+# ---------------------------------------------------------------------------
+
+
+def test_geoip_defaults() -> None:
+    s = _make_settings(
+        JWT_SECRET_KEY="real-secret-value",
+        LOG_INGEST_SHARED_SECRET="real-log-secret",
+    )
+    assert getattr(s, "maxmind_license_key") == ""
+    assert getattr(s, "geoip_refresh_interval_days") == 7
+    assert getattr(s, "geoip_fail_open") is True
+
+
+def test_geoip_refresh_interval_days_zero_raises() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="GEOIP_REFRESH_INTERVAL_DAYS must be greater than zero",
+    ):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            GEOIP_REFRESH_INTERVAL_DAYS="0",
+        )
+
+
+def test_maxmind_license_key_whitespace_only_normalises_to_empty() -> None:
+    s = _make_settings(
+        JWT_SECRET_KEY="real-secret-value",
+        LOG_INGEST_SHARED_SECRET="real-log-secret",
+        MAXMIND_LICENSE_KEY="   ",
+    )
+    assert getattr(s, "maxmind_license_key") == ""

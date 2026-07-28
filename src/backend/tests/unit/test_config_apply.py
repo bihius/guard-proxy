@@ -513,3 +513,71 @@ def test_apply_skips_rollback_reload_when_previous_no_longer_validates(
         if p.name != "previous" and p.resolve() == current_resolved
     ]
     assert candidates, "current should point at the new candidate after rollback skipped"
+
+
+# ---------------------------------------------------------------------------
+# GeoIP stub map file (issue #175) — must exist so `haproxy -c` never fails
+# on a missing map, including right after upgrading an existing deployment.
+# ---------------------------------------------------------------------------
+
+
+def test_apply_creates_geoip_stub_map_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._reload_haproxy",
+        lambda: CommandResult(ok=True, output="reload ok"),
+    )
+
+    apply(_sample_generated())
+
+    geoip_map = runtime_root / "geoip" / "country.map"
+    assert geoip_map.exists()
+    assert "192.0.2.0/24 ZZ" in geoip_map.read_text(encoding="utf-8")
+
+
+def test_seed_runtime_config_creates_geoip_stub_map_file_when_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    geoip_map = runtime_root / "geoip" / "country.map"
+    assert geoip_map.exists()
+    assert "192.0.2.0/24 ZZ" in geoip_map.read_text(encoding="utf-8")
+
+
+def test_seed_runtime_config_creates_geoip_stub_map_file_on_early_return(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Regression: existing deployments upgrading into this feature must get
+    the stub map even when `current` already points at a release, since
+    seed_runtime_config's early-return path used to skip _ensure_geoip_map_file."""
+    runtime_root = tmp_path / "generated"
+    _seed_current_release(runtime_root)
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: (_ for _ in ()).throw(AssertionError("should not validate")),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    geoip_map = runtime_root / "geoip" / "country.map"
+    assert geoip_map.exists()
+    assert "192.0.2.0/24 ZZ" in geoip_map.read_text(encoding="utf-8")

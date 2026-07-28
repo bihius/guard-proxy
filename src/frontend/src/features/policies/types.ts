@@ -1,3 +1,5 @@
+export type GeoipMode = "off" | "allowlist" | "blocklist";
+
 export type Policy = {
   id: number;
   name: string;
@@ -14,6 +16,8 @@ export type Policy = {
   auto_ban_enabled: boolean;
   ban_threshold: number;
   ban_duration_seconds: number;
+  geoip_mode: GeoipMode;
+  geoip_countries: string[];
   created_by: number | null;
   created_at: string;
   updated_at: string;
@@ -159,6 +163,8 @@ export type PolicyCreate = {
   auto_ban_enabled?: boolean;
   ban_threshold?: number;
   ban_duration_seconds?: number;
+  geoip_mode?: GeoipMode;
+  geoip_countries?: string[];
 };
 
 export type PolicyUpdate = {
@@ -176,4 +182,6 @@ export type PolicyUpdate = {
   auto_ban_enabled?: boolean;
   ban_threshold?: number;
   ban_duration_seconds?: number;
+  geoip_mode?: GeoipMode;
+  geoip_countries?: string[];
 };

@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.config import settings
 from app.models.custom_rule import CustomRule
-from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.policy import Policy, PolicyEnforcementMode, PolicyGeoipMode
 from app.models.policy_binding import PolicyBinding
 from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
@@ -16,6 +17,7 @@ from app.services.config_renderer import (
     CustomRuleRenderContext,
     HaproxyBackend,
     HaproxyDdos,
+    HaproxyGeoip,
     HaproxyRenderContext,
     HaproxyRoute,
     HaproxyServer,
@@ -25,6 +27,12 @@ from app.services.config_renderer import (
     render_haproxy_cfg_multi,
     render_rule_overrides,
 )
+
+# Stable, non-versioned path on the shared `generated_config` volume. The
+# backend writes it at <runtime_root>/geoip/country.map; HAProxy reads the
+# same file through /etc/haproxy/generated. Deliberately outside
+# releases/<id>/ because the map is refreshed on its own weekly schedule.
+HAPROXY_GEOIP_MAP_PATH = "/etc/haproxy/generated/geoip/country.map"
 
 
 @dataclass(frozen=True)
@@ -246,6 +254,20 @@ def _to_haproxy_context(
         if policy is not None and policy.ddos_protection_enabled
         else None
     )
+    # settings is imported only for geoip_fail_open; this is the only
+    # settings read in this module.
+    geoip = (
+        HaproxyGeoip(
+            mode=policy.geoip_mode.value,
+            countries=tuple(policy.geoip_countries),
+            map_path=HAPROXY_GEOIP_MAP_PATH,
+            fail_open=settings.geoip_fail_open,
+        )
+        if policy is not None
+        and policy.geoip_mode != PolicyGeoipMode.off
+        and policy.geoip_countries
+        else None
+    )
 
     return HaproxyRenderContext(
         routes=(
@@ -254,6 +276,7 @@ def _to_haproxy_context(
                 vhost_hosts=(vhost.domain,),
                 ssl_provider=vhost.ssl_provider if vhost.ssl_enabled else "none",
                 ddos=ddos,
+                geoip=geoip,
                 backend=HaproxyBackend(
                     name=f"be_{suffix}",
                     health_check_path=health_check_path,

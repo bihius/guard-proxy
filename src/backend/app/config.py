@@ -80,6 +80,13 @@ class Settings(EnvFileSettings):
     haproxy_stats_timeout_seconds: int = 10
     log_retention_days: int = 30
 
+    # GeoIP country filtering (issue #175). An empty license key means the
+    # feature is not configured — GeoIP filtering then always fails open
+    # (see geoip_fail_open) because no database can be downloaded.
+    maxmind_license_key: str = ""
+    geoip_refresh_interval_days: int = 7
+    geoip_fail_open: bool = True
+
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_empty(cls, value: str) -> str:
@@ -114,6 +121,23 @@ class Settings(EnvFileSettings):
         if value <= 0:
             raise ValueError("LOG_RETENTION_DAYS must be greater than zero.")
         return value
+
+    @field_validator("geoip_refresh_interval_days")
+    @classmethod
+    def geoip_refresh_interval_days_must_be_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("GEOIP_REFRESH_INTERVAL_DAYS must be greater than zero.")
+        return value
+
+    @field_validator("maxmind_license_key")
+    @classmethod
+    def maxmind_license_key_strip_whitespace(cls, value: str) -> str:
+        """Strip whitespace so a whitespace-only value counts as unset.
+
+        Unlike JWT_SECRET_KEY, an empty value here is a legitimate "feature
+        not configured" state and must not run through `_validate_secret`.
+        """
+        return value.strip()
 
     # JWT
     jwt_secret_key: str
