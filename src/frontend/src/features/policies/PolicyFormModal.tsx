@@ -94,7 +94,10 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
     setSubmitting(true);
     setServerError(null);
 
-    const parsedGeoipCountries = parseGeoipCountries();
+    // The country input is hidden while the mode is "off", so any leftover
+    // text in it is invisible to the user. Submitting it anyway would fail
+    // validation server-side with a 422 they can neither see nor fix.
+    const parsedGeoipCountries = geoipMode === "off" ? [] : parseGeoipCountries();
     if (geoipMode !== "off") {
       if (parsedGeoipCountries.length === 0) {
         setServerError("Select at least one country code.");

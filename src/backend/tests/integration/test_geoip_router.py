@@ -11,7 +11,6 @@ def _fake_result(**overrides: object):
     from app.services.geoip_service import GeoipRefreshResult
 
     defaults: dict[str, object] = {
-        "configured": True,
         "downloaded": True,
         "entries": 42,
         "changed": True,
@@ -36,7 +35,6 @@ def test_refresh_admin_returns_serialized_result(
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["configured"] is True
     assert body["downloaded"] is True
     assert body["entries"] == 42
     assert body["changed"] is True
@@ -55,32 +53,6 @@ def test_refresh_viewer_returns_403(
     resp = client.post("/geoip/refresh", headers=viewer_token)
     assert resp.status_code == 403
     assert resp.json()["detail"] == "Admin role required"
-
-
-def test_refresh_unconfigured_returns_503(
-    client: TestClient,
-    admin_token: dict[str, str],
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "app.services.geoip_service.refresh",
-        lambda: _fake_result(
-            configured=False,
-            downloaded=False,
-            entries=0,
-            changed=False,
-            reloaded=False,
-            message=(
-                "MAXMIND_LICENSE_KEY is not configured; "
-                "GeoIP filtering fails open."
-            ),
-        ),
-    )
-
-    resp = client.post("/geoip/refresh", headers=admin_token)
-
-    assert resp.status_code == 503
-    assert "MAXMIND_LICENSE_KEY" in resp.json()["detail"]
 
 
 def test_refresh_concurrent_call_returns_409(

@@ -31,7 +31,7 @@ from app.services.config_renderer import (
 # Stable, non-versioned path on the shared `generated_config` volume. The
 # backend writes it at <runtime_root>/geoip/country.map; HAProxy reads the
 # same file through /etc/haproxy/generated. Deliberately outside
-# releases/<id>/ because the map is refreshed on its own weekly schedule.
+# releases/<id>/ because the map is refreshed on its own daily schedule.
 HAPROXY_GEOIP_MAP_PATH = "/etc/haproxy/generated/geoip/country.map"
 
 

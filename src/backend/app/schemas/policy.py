@@ -15,8 +15,8 @@ def _normalize_and_validate_countries(codes: list[str]) -> list[str]:
     """Uppercase/strip, drop empties, de-duplicate (first-seen order kept).
 
     Raises ValueError for any code not in VALID_COUNTRY_CODES. "ZZ" is
-    explicitly rejected — it is an internal sentinel for unresolved GeoLite2
-    records, not an admin-selectable country.
+    explicitly rejected — it is an internal sentinel for unresolved GeoIP
+    database records, not an admin-selectable country.
     """
     normalized: list[str] = []
     seen: set[str] = set()

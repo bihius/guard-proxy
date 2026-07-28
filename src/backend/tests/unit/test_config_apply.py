@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import pytest
+
 from app.config import settings
 from app.services.config_apply import (
     _RELOAD_ERROR_RE,
@@ -581,3 +583,26 @@ def test_seed_runtime_config_creates_geoip_stub_map_file_on_early_return(
     geoip_map = runtime_root / "geoip" / "country.map"
     assert geoip_map.exists()
     assert "192.0.2.0/24 ZZ" in geoip_map.read_text(encoding="utf-8")
+
+
+def test_ensure_geoip_map_file_swallows_oserror(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A read-only or missing runtime dir must not break a config apply.
+
+    The GeoIP map stub is a convenience so `haproxy -c` never trips over a
+    missing map path; failing to write it is worth a warning, not an aborted
+    apply.
+    """
+    from app.services import geoip_service
+    from app.services.config_apply import _ensure_geoip_map_file
+
+    def _raise() -> None:
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(geoip_service, "ensure_map_file_exists", _raise)
+
+    with caplog.at_level(logging.WARNING):
+        _ensure_geoip_map_file()
+
+    assert "failed to ensure GeoIP map file exists" in caplog.text

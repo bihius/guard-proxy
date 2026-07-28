@@ -1,7 +1,7 @@
 """ISO 3166-1 alpha-2 country codes for GeoIP filtering (issue #175).
 
 This is a static hardcoded list of the 249 officially assigned ISO 3166-1
-alpha-2 codes, plus the "ZZ" sentinel used internally to mark GeoLite2
+alpha-2 codes, plus the "ZZ" sentinel used internally to mark GeoIP database
 records that resolve to an unknown/reserved country. Keeping this list
 hardcoded avoids adding a `pycountry` runtime dependency for what is a very
 small, very stable dataset.
@@ -43,10 +43,10 @@ _ISO_3166_1_ALPHA_2 = frozenset(
 )
 
 # "ZZ" is not an assigned ISO 3166-1 alpha-2 code; it is the sentinel used
-# internally (see app/services/geoip_service.py) for GeoLite2 records that
-# have no resolvable country. It is included here so generated map entries
-# validate, but it is explicitly rejected as an admin-selectable country in
-# app/schemas/policy.py.
+# internally (see app/services/geoip_service.py) for GeoIP database records
+# that have no resolvable country. It is included here so generated map
+# entries validate, but it is explicitly rejected as an admin-selectable
+# country in app/schemas/policy.py.
 VALID_COUNTRY_CODES: frozenset[str] = _ISO_3166_1_ALPHA_2 | {"ZZ"}
 
 

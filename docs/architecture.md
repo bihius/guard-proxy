@@ -139,14 +139,25 @@ A policy can restrict a vhost by client country (issue #175) with `geoip_mode`
 (`off` / `allowlist` / `blocklist`) and `geoip_countries` (a list of ISO
 3166-1 alpha-2 codes). The mechanism is intentionally native to HAProxy:
 
-1. `app.services.geoip_service.download_database()` downloads the free
-   MaxMind GeoLite2-Country MMDB using a license key supplied via
-   `MAXMIND_LICENSE_KEY`.
+1. `app.services.geoip_service.download_database()` downloads the free,
+   no-registration, no-license-key country-level MMDB published by
+   [ip66.dev](https://ip66.dev) from `GEOIP_DATABASE_URL`. GeoIP data is
+   provided by ip66.dev and licensed under
+   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The download is
+   a conditional GET using the ETag/Last-Modified validators persisted from
+   the previous run; a `304 Not Modified` response is a no-op.
 2. `generate_map_file()` converts the MMDB into a plain-text HAProxy map file
    (`CIDR <space> ISO-country-code` per line), written atomically
    (`os.replace()`) to `<runtime_root>/geoip/country.map` on the shared
    `guard_proxy_runtime` volume — the same volume HAProxy reads at
-   `/etc/haproxy/generated`.
+   `/etc/haproxy/generated`. Because ip66.dev splits blocks by ASN as well as
+   by country, adjacent networks are grouped by `(country_code, ip_version)`
+   and merged with `ipaddress.collapse_addresses()` before writing, cutting
+   roughly 1.3M raw networks down to ~920k lines (~18 MB). Merging is done per
+   run of consecutive same-country networks as the reader streams them, not by
+   buffering everything first: only networks adjacent in address space can
+   merge, so the result is identical while peak memory stays around 70 MB
+   instead of ~780 MB.
 3. The generated `haproxy.cfg` uses HAProxy's native `map_ip()` fetch against
    that file to resolve `src` to a country in `var(txn.geoip_country)`, then
    denies with `403` when the resolved (or absent) country violates the
@@ -154,11 +165,22 @@ A policy can restrict a vhost by client country (issue #175) with `geoip_mode`
    map lookup is table-driven and fully supported by stock HAProxy, and
    `haproxy -c` never fails because of a missing map: a non-empty stub map is
    always written first if no real database has been downloaded yet.
-4. A weekly APScheduler job (`refresh_geoip_database`, interval controlled by
-   `GEOIP_REFRESH_INTERVAL_DAYS`) re-downloads the MMDB and regenerates the
-   map. `POST /geoip/refresh` (admin only) triggers the same pipeline
-   on-demand. Both paths reload HAProxy only when the generated map actually
-   changed, so a no-op refresh does not cause an unnecessary reload.
+   Country codes are emitted as repeated same-name ACLs of 50 codes each,
+   which HAProxy ORs together — HAProxy truncates any config line after 64
+   words, so a single-line list of every ISO code yields a fatally invalid
+   config. Only ACME challenges are exempt from the deny rules (they have
+   their own local `backend_acme`); `/health` deliberately is **not**, because
+   it is a host-independent path match routed to the customer origin and
+   exempting it would make it a trivial full bypass of country filtering.
+   Loading the ~920k-entry map costs HAProxy roughly **280 MB RSS**
+   (measured on `haproxy:3.0-alpine`), which is the main operational cost of
+   this feature.
+4. A daily APScheduler job (`refresh_geoip_database`, interval controlled by
+   `GEOIP_REFRESH_INTERVAL_DAYS`, matching ip66.dev's daily rebuild cadence)
+   re-downloads the MMDB and regenerates the map. `POST /geoip/refresh`
+   (admin only) triggers the same pipeline on-demand. Both paths reload
+   HAProxy only when the generated map actually changed, so a no-op refresh
+   does not cause an unnecessary reload.
 
 **Fail-open by default.** Unlike the SPOE WAF inspection path above — which
 fails *closed* with `503` because an unavailable Coraza SPOA is a security
@@ -170,6 +192,16 @@ sense; it must never take a site offline on its own. This default is
 controlled by `GEOIP_FAIL_OPEN` (default `true`); set `GEOIP_FAIL_OPEN=false`
 to fail closed instead, at the cost of blocking traffic whenever geolocation
 data is unavailable.
+
+**Not every address resolves to a country.** Around 306k networks in the
+upstream database carry no country at all, and a further ~90k are labelled
+`EU` — a Europe-wide allocation that is not an ISO 3166-1 country. Those are
+left unresolved, so with the default fail-open they are **allowed even in
+allowlist mode**: an allowlist of `PL` alone still admits every `EU`-labelled
+network. Set `GEOIP_FAIL_OPEN=false` if that is unacceptable. The one code
+that is rewritten is `UK`, which the database uses for a handful of networks
+that ISO 3166-1 spells `GB`; without that alias, blocking `GB` would silently
+miss them.
 
 ## Authentication & Rate Limiting
 

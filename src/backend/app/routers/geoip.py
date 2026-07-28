@@ -20,7 +20,7 @@ def refresh_geoip_database(
 ) -> GeoipRefreshResponse:
     """Trigger an on-demand GeoIP database refresh (admin only).
 
-    Shares its implementation with the scheduled weekly refresh job (see
+    Shares its implementation with the scheduled daily refresh job (see
     app.services.scheduler.refresh_geoip_database).
     """
     if not _refresh_lock.acquire(blocking=False):
@@ -33,17 +33,10 @@ def refresh_geoip_database(
     finally:
         _refresh_lock.release()
 
-    response = GeoipRefreshResponse(
-        configured=result.configured,
+    return GeoipRefreshResponse(
         downloaded=result.downloaded,
         entries=result.entries,
         changed=result.changed,
         reloaded=result.reloaded,
         message=result.message,
     )
-    if not result.configured:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=response.message,
-        )
-    return response

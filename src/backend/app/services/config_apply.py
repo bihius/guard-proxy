@@ -9,6 +9,7 @@ import re
 import shutil
 import socket
 import subprocess
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -24,6 +25,11 @@ from app.config import settings
 from app.services.config_generator import GeneratedConfig
 
 logger = logging.getLogger(__name__)
+
+# Serialises everything that mutates the live HAProxy runtime: full applies
+# and the standalone reload the GeoIP map refresh performs. Reentrant so an
+# apply can still call the internal reload helper while holding it.
+_apply_lock = threading.RLock()
 
 # Anchored to the start of a line so common benign substrings such as
 # "no error", "failover ready", or "warning: bind ... failed for ipv6,
@@ -63,6 +69,11 @@ class ApplyResult:
 
 def apply(generated: GeneratedConfig) -> ApplyResult:
     """Validate and atomically activate generated runtime config."""
+    with _apply_lock:
+        return _apply_locked(generated)
+
+
+def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
     _ensure_geoip_map_file()
     correlation_id = uuid.uuid4().hex
     checksum = calculate_checksum(generated)
@@ -334,8 +345,16 @@ def _ensure_geoip_map_file() -> None:
 
 
 def reload_haproxy() -> CommandResult:
-    """Reload HAProxy without rewriting the release. Used by the GeoIP map refresh."""
-    return _reload_haproxy()
+    """Reload HAProxy without rewriting the release. Used by the GeoIP map refresh.
+
+    Takes the same lock as `apply()`. The GeoIP refresh runs on its own
+    schedule and is serialised by a different lock in the router, so without
+    this a refresh could reload HAProxy midway through an apply's
+    validate/swap/rollback sequence and activate a release that apply is in
+    the middle of reverting.
+    """
+    with _apply_lock:
+        return _reload_haproxy()
 
 
 def _write_candidate(

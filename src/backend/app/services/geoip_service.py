@@ -1,16 +1,20 @@
 """GeoIP database download and HAProxy map generation (issue #175).
 
-Pipeline: MaxMind GeoLite2-Country (MMDB) -> generated HAProxy map file
+Pipeline: ip66.dev country-level MMDB -> generated HAProxy map file
 (CIDR -> ISO 3166-1 alpha-2) -> `map_ip()` ACLs in haproxy.cfg.j2. This keeps
 country lookups native to HAProxy — no Lua, no HAProxy MMDB module — because
 the backend already owns the runtime config generation pipeline.
 
+The database is downloaded from ip66.dev (https://ip66.dev), a free,
+no-registration MMDB source licensed under CC BY 4.0 and rebuilt daily
+upstream. Attribution: GeoIP data provided by ip66.dev, licensed CC BY 4.0.
+
 Both the MMDB and the generated map file live on the shared
 `generated_config` volume, next to (but outside of) the versioned
 `releases/<id>/` directories used by config_apply, because the GeoIP data is
-refreshed on its own weekly schedule independent of config applies:
+refreshed on its own daily schedule independent of config applies:
 
-    <runtime_root>/geoip/GeoLite2-Country.mmdb
+    <runtime_root>/geoip/country.mmdb
     <runtime_root>/geoip/country.map
 
 The backend reaches this path via `settings.runtime_generated_config_root`;
@@ -21,11 +25,14 @@ HAProxy reads the same file through its `/etc/haproxy/generated` mount (see
 from __future__ import annotations
 
 import hashlib
+import ipaddress
+import json
 import logging
 import os
-import tarfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO, cast
 
 import httpx
 import maxminddb
@@ -35,34 +42,47 @@ from app.constants.countries import VALID_COUNTRY_CODES
 
 logger = logging.getLogger(__name__)
 
-_DOWNLOAD_URL = "https://download.maxmind.com/app/geoip_download"
-_EDITION_ID = "GeoLite2-Country"
-
 _STUB_HEADER = (
     "# Guard Proxy GeoIP map (CIDR -> ISO 3166-1 alpha-2).\n"
-    "# Regenerated from GeoLite2-Country; manual edits are overwritten.\n"
+    "# Regenerated from the ip66.dev country database; manual edits are\n"
+    "# overwritten. GeoIP data provided by https://ip66.dev, licensed CC BY 4.0.\n"
 )
 # RFC 5737 TEST-NET-1, never routed — keeps the file non-empty so HAProxy
-# always parses it even before any real GeoLite2 data has been downloaded.
+# always parses it even before any real ip66.dev data has been downloaded.
 _STUB_SENTINEL = "192.0.2.0/24 ZZ\n"
 
-_MMDB_FILENAME = "GeoLite2-Country.mmdb"
+_MMDB_FILENAME = "country.mmdb"
 _MAP_FILENAME = "country.map"
+_META_FILENAME = "country.mmdb.meta.json"
+
+# Iterating the database MUST go through maxminddb's C extension. The pure
+# Python reader (MODE_MEMORY / MODE_FILE) raises
+# "ValueError: ::1:0:0/0 has host bits set" partway through the real ip66.dev
+# database while rebuilding IPv6 networks from the search tree, so it cannot
+# enumerate this database at all. MODE_AUTO picks the extension when it is
+# available; `generate_map_file()` turns the fallback's failure into an
+# actionable GeoipError rather than an opaque crash.
+_READER_MODE = maxminddb.MODE_AUTO
+
+_STUB_BYTES = len((_STUB_HEADER + _STUB_SENTINEL).encode("utf-8"))
+
+# The upstream database uses a few codes that are not ISO 3166-1 alpha-2
+# assignments. "UK" is just the wrong spelling of "GB" (11 networks in the
+# July 2026 build) and is aliased so blocking GB also covers them. Everything
+# else is left unresolved on purpose and therefore fails open: "EU" (~90k
+# networks) marks Europe-wide allocations with no single country, "XK" is the
+# user-assigned code for Kosovo, and CS/YU/AN are withdrawn codes.
+_COUNTRY_ALIASES = {"UK": "GB"}
 
 
 class GeoipError(Exception):
     """Base class for GeoIP service errors."""
 
 
-class GeoipNotConfiguredError(GeoipError):
-    """Raised when a MaxMind license key has not been configured."""
-
-
 @dataclass(frozen=True)
 class GeoipRefreshResult:
     """Outcome of one `refresh()` run."""
 
-    configured: bool
     downloaded: bool
     entries: int
     changed: bool
@@ -76,13 +96,35 @@ def geoip_dir() -> Path:
 
 
 def mmdb_path() -> Path:
-    """Path to the downloaded GeoLite2-Country database."""
+    """Path to the downloaded ip66.dev country MMDB."""
     return geoip_dir() / _MMDB_FILENAME
 
 
 def map_file_path() -> Path:
     """Path to the generated HAProxy CIDR -> country map."""
     return geoip_dir() / _MAP_FILENAME
+
+
+def _meta_path() -> Path:
+    """Path to the sidecar file storing the last ETag / Last-Modified."""
+    return geoip_dir() / _META_FILENAME
+
+
+def _map_is_stub() -> bool:
+    """True when the map on disk is missing or still the placeholder stub.
+
+    Used so a "not modified" download does not leave a stub map in place: the
+    MMDB can be current while the map is not (first boot after an upgrade, a
+    wiped volume, or a map generation that failed last time). The size check
+    short-circuits the common case so a real ~20 MB map is never read back.
+    """
+    path = map_file_path()
+    try:
+        if path.stat().st_size != _STUB_BYTES:
+            return False
+        return path.read_text(encoding="utf-8") == _STUB_HEADER + _STUB_SENTINEL
+    except OSError:
+        return True
 
 
 def ensure_map_file_exists() -> Path:
@@ -105,66 +147,104 @@ def ensure_map_file_exists() -> Path:
     return path
 
 
-def download_database() -> Path:
-    """Download and extract the GeoLite2-Country MMDB.
+def _load_conditional_headers() -> dict[str, str]:
+    """Build If-None-Match / If-Modified-Since headers from the sidecar file."""
+    path = _meta_path()
+    if not path.exists():
+        return {}
+    try:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    headers: dict[str, str] = {}
+    etag = meta.get("etag")
+    if isinstance(etag, str) and etag:
+        headers["If-None-Match"] = etag
+    last_modified = meta.get("last_modified")
+    if isinstance(last_modified, str) and last_modified:
+        headers["If-Modified-Since"] = last_modified
+    return headers
 
-    No-op (returning the existing path, or raising GeoipNotConfiguredError if
-    none exists yet) when no license key is configured.
+
+def _store_conditional_headers(response: httpx.Response) -> None:
+    """Persist the ETag / Last-Modified validators next to the MMDB."""
+    meta = {
+        "etag": response.headers.get("ETag"),
+        "last_modified": response.headers.get("Last-Modified"),
+    }
+    _meta_path().write_text(json.dumps(meta), encoding="utf-8")
+
+
+def download_database() -> tuple[Path, bool]:
+    """Download the ip66.dev country MMDB, if it changed.
+
+    Issues a conditional GET using the stored ETag/Last-Modified validators
+    from the previous download. Returns `(path, downloaded)` where
+    `downloaded` is False when the server replied 304 Not Modified (or when
+    no download has ever run and one just succeeded, `downloaded` is True).
     """
-    if not settings.maxmind_license_key:
-        logger.warning(
-            "MAXMIND_LICENSE_KEY is not configured; skipping GeoIP database download"
-        )
-        path = mmdb_path()
-        if path.exists():
-            return path
-        raise GeoipNotConfiguredError(
-            "MAXMIND_LICENSE_KEY is not configured and no database "
-            "has been downloaded yet"
-        )
-
     directory = geoip_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    tarball_path = directory / f".{_EDITION_ID}.tar.gz.tmp"
+    tmp_mmdb = directory / f".{_MMDB_FILENAME}.tmp"
 
+    headers = _load_conditional_headers() if mmdb_path().exists() else {}
+
+    logger.info("downloading GeoIP database from %s", settings.geoip_database_url)
     try:
-        # Never log params (they contain the license key) — only the URL.
-        logger.info("downloading GeoIP database from %s", _DOWNLOAD_URL)
-        response = httpx.get(
-            _DOWNLOAD_URL,
-            params={
-                "edition_id": _EDITION_ID,
-                "license_key": settings.maxmind_license_key,
-                "suffix": "tar.gz",
-            },
+        with httpx.stream(
+            "GET",
+            settings.geoip_database_url,
+            headers=headers,
             timeout=60.0,
             follow_redirects=True,
-        )
-        response.raise_for_status()
-        tarball_path.write_bytes(response.content)
+        ) as response:
+            if response.status_code == 304:
+                logger.info("GeoIP database not modified since last download")
+                return mmdb_path(), False
 
-        with tarfile.open(tarball_path, "r:gz") as archive:
-            member = next(
-                (m for m in archive.getmembers() if m.name.endswith(_MMDB_FILENAME)),
-                None,
-            )
-            if member is None:
-                raise GeoipError(
-                    f"{_MMDB_FILENAME} not found inside downloaded archive"
-                )
-            extracted = archive.extractfile(member)
-            if extracted is None:
-                raise GeoipError(f"Could not read {_MMDB_FILENAME} from archive")
+            response.raise_for_status()
 
-            tmp_mmdb = directory / f".{_MMDB_FILENAME}.tmp"
             with tmp_mmdb.open("wb") as out:
-                while chunk := extracted.read(65536):
+                for chunk in response.iter_bytes(65536):
                     out.write(chunk)
-            os.replace(tmp_mmdb, mmdb_path())
-    finally:
-        tarball_path.unlink(missing_ok=True)
 
-    return mmdb_path()
+            os.replace(tmp_mmdb, mmdb_path())
+            _store_conditional_headers(response)
+    finally:
+        tmp_mmdb.unlink(missing_ok=True)
+
+    return mmdb_path(), True
+
+
+_Network = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+def _write_run(out: TextIO, networks: list[_Network], code: str | None) -> int:
+    """Collapse one same-country run and write it out. Returns lines written.
+
+    A run is homogeneous by construction — the caller starts a new one
+    whenever the country code or the IP version changes — which both satisfies
+    `collapse_addresses()` (it rejects mixed families) and lets the two
+    branches below narrow the element type for the type checker.
+    """
+    if not networks or code is None:
+        return 0
+
+    collapsed: Iterator[_Network]
+    if networks[0].version == 4:
+        collapsed = ipaddress.collapse_addresses(
+            cast("list[ipaddress.IPv4Network]", networks)
+        )
+    else:
+        collapsed = ipaddress.collapse_addresses(
+            cast("list[ipaddress.IPv6Network]", networks)
+        )
+
+    written = 0
+    for network in collapsed:
+        out.write(f"{network} {code}\n")
+        written += 1
+    return written
 
 
 def generate_map_file(mmdb: Path | None = None) -> int:
@@ -172,6 +252,22 @@ def generate_map_file(mmdb: Path | None = None) -> int:
 
     Atomic (write to a temp file, then `os.replace()`), so HAProxy can keep
     reading the previous map file while this runs.
+
+    The upstream database splits blocks by ASN as well as by country, so
+    adjacent networks are merged with `ipaddress.collapse_addresses()` before
+    writing — that cuts roughly 1.3M raw networks down to ~1.0M lines.
+
+    The merge is done per *run* of consecutive same-country, same-version
+    networks rather than by first grouping every network by country. Both
+    produce identical output, because `collapse_addresses()` can only merge
+    networks that are adjacent in address space and the reader yields networks
+    in ascending address order — so any two mergeable networks are always in
+    the same run. Streaming this way keeps peak memory flat (one run at a
+    time); buffering all networks first cost ~780 MB on the real database,
+    which would not fit the backend container.
+
+    Note `collapse_addresses()` raises `TypeError` when IPv4 and IPv6 networks
+    are mixed in one call, which is why the IP version also breaks a run.
     """
     path = mmdb if mmdb is not None else mmdb_path()
     if not path.exists():
@@ -185,16 +281,39 @@ def generate_map_file(mmdb: Path | None = None) -> int:
 
     entries = 0
     skipped = 0
-    with maxminddb.open_database(str(path), maxminddb.MODE_MEMORY) as reader:
-        with tmp_map.open("w", encoding="utf-8") as out:
+    run: list[_Network] = []
+    run_code: str | None = None
+    run_version: int | None = None
+
+    try:
+        with (
+            maxminddb.open_database(str(path), _READER_MODE) as reader,
+            tmp_map.open("w", encoding="utf-8") as out,
+        ):
             out.write(_STUB_HEADER)
             for network, record in reader:
                 code = _country_code(record)
                 if code is None or code not in VALID_COUNTRY_CODES:
                     skipped += 1
                     continue
-                out.write(f"{network} {code}\n")
-                entries += 1
+                if code != run_code or network.version != run_version:
+                    entries += _write_run(out, run, run_code)
+                    run = []
+                    run_code = code
+                    run_version = network.version
+                run.append(network)
+            entries += _write_run(out, run, run_code)
+    except ValueError as error:
+        # The pure Python maxminddb reader cannot enumerate this database (see
+        # _READER_MODE). Surface it as an actionable error instead of letting a
+        # bare ValueError escape as a "GeoIP refresh failed" mystery.
+        tmp_map.unlink(missing_ok=True)
+        raise GeoipError(
+            "Could not enumerate the GeoIP database. This happens when the "
+            "maxminddb C extension is unavailable and the pure Python reader "
+            "is used as a fallback; install a maxminddb build with the "
+            f"extension. Underlying error: {error}"
+        ) from error
 
     os.replace(tmp_map, map_file_path())
     if skipped:
@@ -211,47 +330,37 @@ def _country_code(record: object) -> str | None:
     if isinstance(country, dict):
         code = country.get("iso_code")
         if isinstance(code, str) and code:
-            return code
+            return _COUNTRY_ALIASES.get(code, code)
     registered = record.get("registered_country")
     if isinstance(registered, dict):
         code = registered.get("iso_code")
         if isinstance(code, str) and code:
-            return code
+            return _COUNTRY_ALIASES.get(code, code)
     return None
 
 
 def refresh(force_reload: bool = True) -> GeoipRefreshResult:
     """Refresh the GeoIP database and regenerate the HAProxy map.
 
-    Single entry point shared by the scheduled weekly job and the manual
-    `POST /geoip/refresh` endpoint. Never raises — network, filesystem, and
-    archive errors are all converted into a failed GeoipRefreshResult so a
-    bad refresh cannot crash the scheduler.
+    Single entry point shared by the scheduled daily job and the manual
+    `POST /geoip/refresh` endpoint. Never raises — network and filesystem
+    errors are all converted into a failed GeoipRefreshResult so a bad
+    refresh cannot crash the scheduler.
     """
     ensure_map_file_exists()
-
-    if not settings.maxmind_license_key:
-        return GeoipRefreshResult(
-            configured=False,
-            downloaded=False,
-            entries=0,
-            changed=False,
-            reloaded=False,
-            message=(
-                "MAXMIND_LICENSE_KEY is not configured; "
-                "GeoIP filtering fails open."
-            ),
-        )
 
     before_digest = _map_digest()
 
     try:
-        download_database()
-        entries = generate_map_file()
-    except (httpx.HTTPError, OSError, tarfile.TarError, GeoipError) as error:
+        _mmdb, downloaded = download_database()
+        # Regenerate when the database changed, but also whenever the map is
+        # still a stub — otherwise a 304 would report "up to date" while every
+        # lookup misses and the filter silently fails open.
+        regenerate = downloaded or _map_is_stub()
+        entries = generate_map_file() if regenerate else 0
+    except (httpx.HTTPError, OSError, GeoipError) as error:
         logger.exception("GeoIP refresh failed")
         return GeoipRefreshResult(
-            configured=True,
             downloaded=False,
             entries=0,
             changed=False,
@@ -277,13 +386,17 @@ def refresh(force_reload: bool = True) -> GeoipRefreshResult:
                 reload_result.output,
             )
 
+    message = (
+        f"GeoIP database refreshed: {entries} entries written."
+        if regenerate
+        else "GeoIP database is already up to date."
+    )
     return GeoipRefreshResult(
-        configured=True,
-        downloaded=True,
+        downloaded=downloaded,
         entries=entries,
         changed=changed,
         reloaded=reloaded,
-        message=f"GeoIP database refreshed: {entries} entries written.",
+        message=message,
     )
 
 
