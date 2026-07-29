@@ -44,12 +44,16 @@ services:
     image: bkimminich/juice-shop:v17.1.1
     cpuset: "${LAB_WAF_CPUSET:-}"
     restart: unless-stopped
+    # The image is distroless (entrypoint is /nodejs/bin/node, there is no
+    # /bin/sh and no wget/curl), so a CMD-SHELL probe can never run and the
+    # container would sit permanently unhealthy. Probe with node itself via
+    # the exec form, which does not go through a shell.
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "wget -q -O- http://localhost:3000/rest/admin/application-version >/dev/null 2>&1",
-        ]
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - "require('http').get('http://127.0.0.1:3000/rest/admin/application-version',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
       interval: 15s
       timeout: 10s
       retries: 10
