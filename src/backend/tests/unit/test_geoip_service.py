@@ -432,6 +432,80 @@ def test_generate_map_file_reports_unusable_reader(
         geoip_service.generate_map_file(mmdb)
 
 
+def test_generate_map_file_never_emits_the_zz_sentinel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ZZ must not reach the map as a resolved country.
+
+    In allowlist mode `var(txn.geoip_country) -m found` would then be true
+    while ZZ matched no allowed code, so the request would be denied — the
+    opposite of the documented fail-open behaviour for unresolvable IPs.
+    """
+    mmdb = tmp_path / "fake.mmdb"
+    mmdb.write_bytes(b"not a real mmdb, just needs to exist")
+    entries = [
+        (IPv4Network("1.0.0.0/24"), {"country": {"iso_code": "ZZ"}}),
+        (IPv4Network("2.0.0.0/24"), {"country": {"iso_code": "PL"}}),
+    ]
+    monkeypatch.setattr(
+        geoip_service.maxminddb,
+        "open_database",
+        lambda *args, **kwargs: _FakeReader(entries),
+    )
+
+    written = geoip_service.generate_map_file(mmdb)
+
+    assert written == 1
+    content = geoip_service.map_file_path().read_text(encoding="utf-8")
+    assert "1.0.0.0/24" not in content
+    assert "2.0.0.0/24 PL" in content
+
+
+def test_refresh_drops_cache_validators_when_database_is_unusable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A corrupt download must not become permanent via a poisoned ETag.
+
+    download_database() records ETag/Last-Modified as soon as the transfer
+    succeeds, which happens before the file is known to be a valid MMDB (a
+    mirror answering 200 with an HTML error page passes raise_for_status()).
+    Keeping those validators would make every later refresh a 304.
+    """
+    meta = geoip_service._meta_path()
+    meta.parent.mkdir(parents=True, exist_ok=True)
+    meta.write_text(json.dumps({"etag": '"stale"'}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        geoip_service, "download_database", lambda: (geoip_service.mmdb_path(), True)
+    )
+
+    def _raise() -> int:
+        raise geoip_service.maxminddb.InvalidDatabaseError("not an mmdb")
+
+    monkeypatch.setattr(geoip_service, "generate_map_file", _raise)
+
+    result = geoip_service.refresh(force_reload=False)
+
+    assert "GeoIP refresh failed" in result.message
+    assert not meta.exists(), (
+        "stale validators must be dropped so the next run refetches"
+    )
+
+
+def test_try_refresh_returns_none_while_another_refresh_holds_the_lock() -> None:
+    """The API and the scheduled job must contend for one lock.
+
+    Both write the same fixed temp paths, so a second concurrent refresh
+    would interleave writes and delete the other's temp file before its
+    os.replace(), publishing a corrupt map.
+    """
+    assert geoip_service._refresh_lock.acquire(blocking=False)
+    try:
+        assert geoip_service.try_refresh() is None
+    finally:
+        geoip_service._refresh_lock.release()
+
+
 def test_refresh_swallows_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def _raise(*args: object, **kwargs: object) -> None:
         raise httpx.HTTPError("boom")

@@ -174,7 +174,11 @@ A policy can restrict a vhost by client country (issue #175) with `geoip_mode`
    exempting it would make it a trivial full bypass of country filtering.
    Loading the ~920k-entry map costs HAProxy roughly **280 MB RSS**
    (measured on `haproxy:3.0-alpine`), which is the main operational cost of
-   this feature.
+   this feature. Budget for **double that** on the host: a reload runs the
+   old and new processes side by side, so the peak is ~560 MB. The `map_ip()`
+   lookup itself is emitted once per frontend and so runs for all traffic,
+   including vhosts with `geoip_mode = off`; a radix lookup is cheap, but the
+   resident map is not.
 4. A daily APScheduler job (`refresh_geoip_database`, interval controlled by
    `GEOIP_REFRESH_INTERVAL_DAYS`, matching ip66.dev's daily rebuild cadence)
    re-downloads the MMDB and regenerates the map. `POST /geoip/refresh`
@@ -191,7 +195,10 @@ absent geolocation database is not a security control failure in the same
 sense; it must never take a site offline on its own. This default is
 controlled by `GEOIP_FAIL_OPEN` (default `true`); set `GEOIP_FAIL_OPEN=false`
 to fail closed instead, at the cost of blocking traffic whenever geolocation
-data is unavailable.
+data is unavailable. Note this setting is read when the config is
+*generated*, not at request time — it is baked into the rendered
+`haproxy.cfg`, so changing the environment variable takes effect only after a
+full config re-apply, not on a plain HAProxy reload.
 
 **Not every address resolves to a country.** Around 306k networks in the
 upstream database carry no country at all, and a further ~90k are labelled

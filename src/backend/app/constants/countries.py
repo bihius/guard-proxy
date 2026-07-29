@@ -42,11 +42,17 @@ _ISO_3166_1_ALPHA_2 = frozenset(
     }
 )
 
-# "ZZ" is not an assigned ISO 3166-1 alpha-2 code; it is the sentinel used
-# internally (see app/services/geoip_service.py) for GeoIP database records
-# that have no resolvable country. It is included here so generated map
-# entries validate, but it is explicitly rejected as an admin-selectable
-# country in app/schemas/policy.py.
+# Codes that may appear in a generated map entry. "ZZ" is deliberately NOT
+# one of them: it is only a placeholder inside the stub map file written
+# before any real database exists. Emitting it as a resolved country would
+# defeat fail-open — in allowlist mode `var(txn.geoip_country) -m found`
+# would be true while "ZZ" matched no allowed code, so the request would be
+# denied instead of allowed.
+MAPPABLE_COUNTRY_CODES: frozenset[str] = _ISO_3166_1_ALPHA_2
+
+# Codes accepted anywhere a country is referenced, including the internal
+# "ZZ" sentinel. "ZZ" is rejected as an admin-selectable country in
+# app/schemas/policy.py.
 VALID_COUNTRY_CODES: frozenset[str] = _ISO_3166_1_ALPHA_2 | {"ZZ"}
 
 

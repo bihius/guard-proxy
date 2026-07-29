@@ -1,7 +1,5 @@
 """GeoIP database refresh API router (issue #175)."""
 
-import threading
-
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import require_admin
@@ -11,8 +9,6 @@ from app.services import geoip_service
 
 router = APIRouter(prefix="/geoip", tags=["geoip"])
 
-# Guards against concurrent refreshes, matching app.routers.config._apply_lock.
-_refresh_lock = threading.Lock()
 
 @router.post("/refresh", response_model=GeoipRefreshResponse)
 def refresh_geoip_database(
@@ -21,17 +17,16 @@ def refresh_geoip_database(
     """Trigger an on-demand GeoIP database refresh (admin only).
 
     Shares its implementation with the scheduled daily refresh job (see
-    app.services.scheduler.refresh_geoip_database).
+    app.services.scheduler.refresh_geoip_database). The concurrency guard
+    lives in the service, not here, so the scheduled job contends for the
+    same lock — a lock held only by this router would not serialise the two.
     """
-    if not _refresh_lock.acquire(blocking=False):
+    result = geoip_service.try_refresh()
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A GeoIP refresh is already running",
         )
-    try:
-        result = geoip_service.refresh()
-    finally:
-        _refresh_lock.release()
 
     return GeoipRefreshResponse(
         downloaded=result.downloaded,

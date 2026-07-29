@@ -29,6 +29,7 @@ import ipaddress
 import json
 import logging
 import os
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,9 +39,14 @@ import httpx
 import maxminddb
 
 from app.config import settings
-from app.constants.countries import VALID_COUNTRY_CODES
+from app.constants.countries import MAPPABLE_COUNTRY_CODES
 
 logger = logging.getLogger(__name__)
+
+# Serialises refreshes across the scheduled job and the API endpoint. Both go
+# through the same fixed temp paths, so this is what stops them from
+# clobbering each other's partial writes.
+_refresh_lock = threading.Lock()
 
 _STUB_HEADER = (
     "# Guard Proxy GeoIP map (CIDR -> ISO 3166-1 alpha-2).\n"
@@ -293,7 +299,7 @@ def generate_map_file(mmdb: Path | None = None) -> int:
             out.write(_STUB_HEADER)
             for network, record in reader:
                 code = _country_code(record)
-                if code is None or code not in VALID_COUNTRY_CODES:
+                if code is None or code not in MAPPABLE_COUNTRY_CODES:
                     skipped += 1
                     continue
                 if code != run_code or network.version != run_version:
@@ -339,34 +345,77 @@ def _country_code(record: object) -> str | None:
     return None
 
 
+def _failed_refresh(error: Exception) -> GeoipRefreshResult:
+    return GeoipRefreshResult(
+        downloaded=False,
+        entries=0,
+        changed=False,
+        reloaded=False,
+        message=f"GeoIP refresh failed: {error}",
+    )
+
+
+def try_refresh(force_reload: bool = True) -> GeoipRefreshResult | None:
+    """`refresh()` that gives up instead of waiting. Returns None when busy.
+
+    Used by the API endpoint so an admin gets an immediate 409 rather than
+    blocking on a refresh the scheduler already started.
+    """
+    if not _refresh_lock.acquire(blocking=False):
+        return None
+    try:
+        return _refresh_locked(force_reload)
+    finally:
+        _refresh_lock.release()
+
+
 def refresh(force_reload: bool = True) -> GeoipRefreshResult:
     """Refresh the GeoIP database and regenerate the HAProxy map.
 
     Single entry point shared by the scheduled daily job and the manual
-    `POST /geoip/refresh` endpoint. Never raises — network and filesystem
-    errors are all converted into a failed GeoipRefreshResult so a bad
-    refresh cannot crash the scheduler.
+    `POST /geoip/refresh` endpoint. Never raises — network, filesystem and
+    malformed-database errors are all converted into a failed
+    GeoipRefreshResult so a bad refresh cannot crash the scheduler.
+
+    Serialised on a module-level lock. Both callers write to the same fixed
+    temp paths (`.country.mmdb.tmp`, `.country.map.tmp`), so two concurrent
+    refreshes would interleave writes and each `finally: unlink()` would
+    delete the other's temp file before its `os.replace()` — publishing a
+    corrupt map into a live security filter.
     """
+    with _refresh_lock:
+        return _refresh_locked(force_reload)
+
+
+def _refresh_locked(force_reload: bool) -> GeoipRefreshResult:
     ensure_map_file_exists()
 
     before_digest = _map_digest()
 
     try:
         _mmdb, downloaded = download_database()
+    except (httpx.HTTPError, OSError, GeoipError) as error:
+        logger.exception("GeoIP refresh failed")
+        return _failed_refresh(error)
+
+    try:
         # Regenerate when the database changed, but also whenever the map is
         # still a stub — otherwise a 304 would report "up to date" while every
         # lookup misses and the filter silently fails open.
         regenerate = downloaded or _map_is_stub()
         entries = generate_map_file() if regenerate else 0
-    except (httpx.HTTPError, OSError, GeoipError) as error:
-        logger.exception("GeoIP refresh failed")
-        return GeoipRefreshResult(
-            downloaded=False,
-            entries=0,
-            changed=False,
-            reloaded=False,
-            message=f"GeoIP refresh failed: {error}",
-        )
+    except (OSError, GeoipError, maxminddb.InvalidDatabaseError) as error:
+        # The file on disk is not a usable database — a mirror answering 200
+        # with an HTML error page is the common case, and raise_for_status()
+        # cannot catch that. Its ETag/Last-Modified were already recorded by
+        # the successful download above, so leaving them would make every
+        # later refresh a 304 and the corruption permanent. Dropping the
+        # validators forces the next run to fetch in full.
+        # InvalidDatabaseError subclasses RuntimeError, so neither OSError nor
+        # GeoipError would catch it on their own.
+        _meta_path().unlink(missing_ok=True)
+        logger.exception("GeoIP refresh failed; dropped cache validators")
+        return _failed_refresh(error)
 
     after_digest = _map_digest()
     changed = before_digest != after_digest
@@ -401,7 +450,12 @@ def refresh(force_reload: bool = True) -> GeoipRefreshResult:
 
 
 def _map_digest() -> str | None:
+    """Hash the map file, streamed so an ~18 MB map is never held in memory."""
     path = map_file_path()
     if not path.exists():
         return None
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()

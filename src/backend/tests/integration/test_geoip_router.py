@@ -26,9 +26,10 @@ def test_refresh_admin_returns_serialized_result(
     admin_token: dict[str, str],
     monkeypatch,
 ) -> None:
+    # Patch below the lock so try_refresh()'s real locking still runs.
     monkeypatch.setattr(
-        "app.services.geoip_service.refresh",
-        lambda: _fake_result(),
+        "app.services.geoip_service._refresh_locked",
+        lambda force_reload: _fake_result(),
     )
 
     resp = client.post("/geoip/refresh", headers=admin_token)
@@ -63,12 +64,14 @@ def test_refresh_concurrent_call_returns_409(
     started = threading.Event()
     release = threading.Event()
 
-    def _slow_refresh():
+    def _slow_refresh(force_reload):
         started.set()
         release.wait(timeout=5)
         return _fake_result()
 
-    monkeypatch.setattr("app.services.geoip_service.refresh", _slow_refresh)
+    # Patched below the lock, so this exercises the real service-level lock —
+    # the same one the scheduled job contends for.
+    monkeypatch.setattr("app.services.geoip_service._refresh_locked", _slow_refresh)
 
     first_call_result: dict[str, int] = {}
 
