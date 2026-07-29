@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 from app.config import settings
 from app.database import SessionLocal
 from app.models.vhost import VHost
+from app.services import geoip_service
 from app.services.certbot_service import CertbotError, CertbotService
 from app.services.log_retention import purge_logs_older_than
 
@@ -81,10 +82,26 @@ def purge_old_logs() -> None:
             f"{settings.log_retention_days} days"
         )
 
+def refresh_geoip_database() -> None:
+    """Refresh the ip66.dev country database and regenerate the HAProxy map."""
+    result = geoip_service.refresh()
+    logger.info("GeoIP refresh: %s", result.message)
+
 def start_scheduler() -> None:
     """Start the background scheduler."""
     scheduler.add_job(renew_certificates, 'interval', days=1, id='renew_certificates')
     scheduler.add_job(purge_old_logs, 'interval', days=1, id='purge_old_logs')
+    # next_run_time fires an initial refresh shortly after boot instead of
+    # waiting a full interval. Without it the country map stays the empty stub
+    # for a whole interval after every start, silently failing open. The short
+    # delay keeps the download and map generation off the startup path.
+    scheduler.add_job(
+        refresh_geoip_database,
+        'interval',
+        days=settings.geoip_refresh_interval_days,
+        id='refresh_geoip_database',
+        next_run_time=datetime.now(UTC) + timedelta(seconds=30),
+    )
     scheduler.start()
     logger.info("Background scheduler started")
 

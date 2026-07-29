@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import pytest
+
 from app.config import settings
 from app.services.config_apply import (
     _RELOAD_ERROR_RE,
@@ -513,3 +515,94 @@ def test_apply_skips_rollback_reload_when_previous_no_longer_validates(
         if p.name != "previous" and p.resolve() == current_resolved
     ]
     assert candidates, "current should point at the new candidate after rollback skipped"
+
+
+# ---------------------------------------------------------------------------
+# GeoIP stub map file (issue #175) — must exist so `haproxy -c` never fails
+# on a missing map, including right after upgrading an existing deployment.
+# ---------------------------------------------------------------------------
+
+
+def test_apply_creates_geoip_stub_map_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._reload_haproxy",
+        lambda: CommandResult(ok=True, output="reload ok"),
+    )
+
+    apply(_sample_generated())
+
+    geoip_map = runtime_root / "geoip" / "country.map"
+    assert geoip_map.exists()
+    assert "192.0.2.0/24 ZZ" in geoip_map.read_text(encoding="utf-8")
+
+
+def test_seed_runtime_config_creates_geoip_stub_map_file_when_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    geoip_map = runtime_root / "geoip" / "country.map"
+    assert geoip_map.exists()
+    assert "192.0.2.0/24 ZZ" in geoip_map.read_text(encoding="utf-8")
+
+
+def test_seed_runtime_config_creates_geoip_stub_map_file_on_early_return(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Regression: existing deployments upgrading into this feature must get
+    the stub map even when `current` already points at a release, since
+    seed_runtime_config's early-return path used to skip _ensure_geoip_map_file."""
+    runtime_root = tmp_path / "generated"
+    _seed_current_release(runtime_root)
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: (_ for _ in ()).throw(AssertionError("should not validate")),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    geoip_map = runtime_root / "geoip" / "country.map"
+    assert geoip_map.exists()
+    assert "192.0.2.0/24 ZZ" in geoip_map.read_text(encoding="utf-8")
+
+
+def test_ensure_geoip_map_file_swallows_oserror(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A read-only or missing runtime dir must not break a config apply.
+
+    The GeoIP map stub is a convenience so `haproxy -c` never trips over a
+    missing map path; failing to write it is worth a warning, not an aborted
+    apply.
+    """
+    from app.services import geoip_service
+    from app.services.config_apply import _ensure_geoip_map_file
+
+    def _raise() -> None:
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(geoip_service, "ensure_map_file_exists", _raise)
+
+    with caplog.at_level(logging.WARNING):
+        _ensure_geoip_map_file()
+
+    assert "failed to ensure GeoIP map file exists" in caplog.text

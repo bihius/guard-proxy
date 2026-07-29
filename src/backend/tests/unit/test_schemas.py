@@ -201,6 +201,54 @@ def test_policy_update_name_null_is_allowed_by_schema() -> None:
 
 
 # ---------------------------------------------------------------------------
+# PolicyCreate/PolicyUpdate: geoip_countries normalisation (issue #175)
+# ---------------------------------------------------------------------------
+
+
+def test_policy_create_geoip_countries_normalized() -> None:
+    p = PolicyCreate(
+        name="x",
+        geoip_mode="allowlist",
+        geoip_countries=[" pl ", "de", " pl "],
+    )
+    assert p.geoip_countries == ["PL", "DE"]
+
+
+def test_policy_create_geoip_countries_rejects_unknown_code() -> None:
+    with pytest.raises(ValidationError, match="Unknown country code"):
+        PolicyCreate(name="x", geoip_mode="allowlist", geoip_countries=["XX"])
+
+
+def test_policy_create_geoip_countries_rejects_zz_sentinel() -> None:
+    with pytest.raises(ValidationError, match="Unknown country code"):
+        PolicyCreate(name="x", geoip_mode="allowlist", geoip_countries=["ZZ"])
+
+
+def test_policy_create_geoip_countries_caps_at_250() -> None:
+    with pytest.raises(ValidationError):
+        PolicyCreate(
+            name="x",
+            geoip_mode="allowlist",
+            geoip_countries=[f"c{i}" for i in range(251)],
+        )
+
+
+def test_policy_update_geoip_countries_normalized() -> None:
+    p = PolicyUpdate(geoip_countries=[" pl ", "de", " pl "])
+    assert p.geoip_countries == ["PL", "DE"]
+
+
+def test_policy_update_geoip_countries_none_is_valid() -> None:
+    p = PolicyUpdate()
+    assert p.geoip_countries is None
+
+
+def test_policy_update_geoip_countries_rejects_unknown_code() -> None:
+    with pytest.raises(ValidationError, match="Unknown country code"):
+        PolicyUpdate(geoip_countries=["XX"])
+
+
+# ---------------------------------------------------------------------------
 # RuleOverride schemas
 # ---------------------------------------------------------------------------
 

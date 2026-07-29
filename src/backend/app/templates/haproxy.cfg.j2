@@ -60,6 +60,43 @@ frontend fe_http
     # cannot be bypassed by header spoofing.
     http-request set-header X-Forwarded-For %[src]
 
+{% set has_geoip_http = routes | selectattr("geoip") | list | length > 0 %}
+{% if has_geoip_http %}
+    # Country filtering via a generated CIDR -> ISO 3166-1 alpha-2 map.
+    # map_ip() is native (no Lua, no MMDB module). An IP absent from the map
+    # leaves txn.geoip_country unset; with fail_open (the default) such
+    # requests are allowed. The map file is always present on disk (a stub is
+    # written when no GeoIP data has been downloaded yet), so `haproxy -c`
+    # never fails because of a missing map.
+    #
+    # Only ACME challenges are exempt: they must reach backend_acme for cert
+    # issuance and that backend is local. `is_health` is deliberately NOT
+    # exempt here — it is a host-independent path match with no use_backend of
+    # its own, so exempting it would let any request to /health on a protected
+    # vhost skip country filtering and reach the customer origin.
+    #
+    # Country codes are emitted in chunks as repeated ACLs of the same name
+    # (which HAProxy ORs together). HAProxy truncates any config line after 64
+    # words, so a single-line list of ~250 codes produces a fatally invalid
+    # config; 50 per line leaves room for the rest of the line.
+    http-request set-var(txn.geoip_country) src,map_ip({{ (routes | selectattr("geoip") | first).geoip.map_path }}) if !is_acme
+{% for route in routes %}
+{% if route.geoip %}
+{% for chunk in route.geoip.countries | batch(50) %}
+    acl geoip_{{ route.vhost_acl_name }} var(txn.geoip_country) -m str {{ chunk | join(" ") }}
+{% endfor %}
+{% if route.geoip.mode == "allowlist" %}
+    http-request deny deny_status 403 if {{ route.vhost_acl_name }} !is_acme { var(txn.geoip_country) -m found } !geoip_{{ route.vhost_acl_name }}
+{% else %}
+    http-request deny deny_status 403 if {{ route.vhost_acl_name }} !is_acme geoip_{{ route.vhost_acl_name }}
+{% endif %}
+{% if not route.geoip.fail_open %}
+    http-request deny deny_status 403 if {{ route.vhost_acl_name }} !is_acme !{ var(txn.geoip_country) -m found }
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
 {% set has_ddos_http = routes | selectattr("ddos") | list | length > 0 %}
 {% if has_ddos_http %}
     # Per-vhost DDoS protection: request-rate limiting and connection
@@ -135,6 +172,28 @@ frontend fe_https
 
     http-request set-header X-Forwarded-For %[src]
     http-request set-header X-Forwarded-Proto https
+
+{% set has_geoip_https = routes | selectattr("geoip") | list | length > 0 %}
+{% if has_geoip_https %}
+    # Country filtering via a generated CIDR -> ISO 3166-1 alpha-2 map (see fe_http),
+    # including why /health is not exempt and why codes are chunked.
+    http-request set-var(txn.geoip_country) src,map_ip({{ (routes | selectattr("geoip") | first).geoip.map_path }}) if !is_acme
+{% for route in routes %}
+{% if route.geoip %}
+{% for chunk in route.geoip.countries | batch(50) %}
+    acl geoip_{{ route.vhost_acl_name }} var(txn.geoip_country) -m str {{ chunk | join(" ") }}
+{% endfor %}
+{% if route.geoip.mode == "allowlist" %}
+    http-request deny deny_status 403 if {{ route.vhost_acl_name }} !is_acme { var(txn.geoip_country) -m found } !geoip_{{ route.vhost_acl_name }}
+{% else %}
+    http-request deny deny_status 403 if {{ route.vhost_acl_name }} !is_acme geoip_{{ route.vhost_acl_name }}
+{% endif %}
+{% if not route.geoip.fail_open %}
+    http-request deny deny_status 403 if {{ route.vhost_acl_name }} !is_acme !{ var(txn.geoip_country) -m found }
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
 
 {% set has_ddos_https = routes | selectattr("ddos") | list | length > 0 %}
 {% if has_ddos_https %}

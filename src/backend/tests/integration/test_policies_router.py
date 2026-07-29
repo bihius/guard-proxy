@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.models.user import User
@@ -606,3 +607,188 @@ def test_delete_policy_not_found_returns_404(
     resp = client.delete("/policies/99999", headers=admin_token)
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Policy not found"
+
+
+# ---------------------------------------------------------------------------
+# GeoIP country filtering (issue #175)
+# ---------------------------------------------------------------------------
+
+
+def test_create_policy_with_geoip_blocklist_returns_201(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Geo blocklist",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "geoip_mode": "blocklist",
+            "geoip_countries": ["RU", "CN"],
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["geoip_mode"] == "blocklist"
+    assert body["geoip_countries"] == ["RU", "CN"]
+
+
+def test_create_policy_without_geoip_fields_defaults_to_off(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    body = _create_policy(client, admin_token, name="Geo default")
+
+    assert body["geoip_mode"] == "off"
+    assert body["geoip_countries"] == []
+
+
+def test_create_policy_geoip_allowlist_with_empty_list_returns_422(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Geo empty allowlist",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "geoip_mode": "allowlist",
+            "geoip_countries": [],
+        },
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("code", ["XX", "PLX"])
+def test_create_policy_geoip_invalid_code_returns_422(
+    client: TestClient, admin_token: dict[str, str], code: str
+) -> None:
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": f"Geo invalid {code}",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "geoip_mode": "allowlist",
+            "geoip_countries": [code],
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_create_policy_geoip_lowercase_code_is_normalized_to_uppercase(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """Country codes are case-insensitive: "pl" normalizes to "PL", not rejected."""
+    resp = client.post(
+        "/policies",
+        headers=admin_token,
+        json={
+            "name": "Geo lowercase code",
+            "paranoia_level": 2,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "geoip_mode": "allowlist",
+            "geoip_countries": ["pl"],
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["geoip_countries"] == ["PL"]
+
+
+def test_patch_policy_geoip_off_to_allowlist_persists(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    created = _create_policy(client, admin_token, name="Geo off to allowlist")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json={"geoip_mode": "allowlist", "geoip_countries": ["US", "CA"]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["geoip_mode"] == "allowlist"
+    assert body["geoip_countries"] == ["US", "CA"]
+
+    resp_back = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json={"geoip_mode": "off"},
+    )
+    assert resp_back.status_code == 200
+    body_back = resp_back.json()
+    assert body_back["geoip_mode"] == "off"
+    assert body_back["geoip_countries"] == ["US", "CA"]
+
+
+@pytest.mark.parametrize(
+    "payload", [{"geoip_mode": None}, {"geoip_countries": None}]
+)
+def test_patch_policy_geoip_null_returns_422(
+    client: TestClient, admin_token: dict[str, str], payload: dict
+) -> None:
+    created = _create_policy(client, admin_token, name="Geo null patch")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=admin_token,
+        json=payload,
+    )
+    assert resp.status_code == 422
+
+
+def test_get_and_list_policies_include_geoip_fields(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    created = _create_policy(client, admin_token, name="Geo visible")
+
+    detail_resp = client.get(f"/policies/{created['id']}", headers=admin_token)
+    assert detail_resp.status_code == 200
+    detail_body = detail_resp.json()
+    assert "geoip_mode" in detail_body
+    assert "geoip_countries" in detail_body
+
+    list_resp = client.get("/policies", headers=admin_token)
+    assert list_resp.status_code == 200
+    list_body = list_resp.json()
+    assert "geoip_mode" in list_body["items"][0]
+    assert "geoip_countries" in list_body["items"][0]
+
+
+def test_create_policy_with_geoip_viewer_forbidden(
+    client: TestClient, viewer_token: dict[str, str]
+) -> None:
+    resp = client.post(
+        "/policies",
+        headers=viewer_token,
+        json={
+            "name": "Geo viewer",
+            "paranoia_level": 1,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 5,
+            "geoip_mode": "blocklist",
+            "geoip_countries": ["RU"],
+        },
+    )
+    assert resp.status_code == 403
+
+
+def test_patch_policy_with_geoip_viewer_forbidden(
+    client: TestClient,
+    admin_token: dict[str, str],
+    viewer_token: dict[str, str],
+) -> None:
+    created = _create_policy(client, admin_token, name="Geo patch viewer")
+
+    resp = client.patch(
+        f"/policies/{created['id']}",
+        headers=viewer_token,
+        json={"geoip_mode": "blocklist", "geoip_countries": ["RU"]},
+    )
+    assert resp.status_code == 403

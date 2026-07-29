@@ -255,3 +255,42 @@ def test_settings_reject_non_positive_reload_timeout() -> None:
             LOG_INGEST_SHARED_SECRET="real-log-secret",
             HAPROXY_RELOAD_TIMEOUT_SECONDS="0",
         )
+
+
+# ---------------------------------------------------------------------------
+# GeoIP settings (issue #175)
+# ---------------------------------------------------------------------------
+
+
+def test_geoip_defaults() -> None:
+    s = _make_settings(
+        JWT_SECRET_KEY="real-secret-value",
+        LOG_INGEST_SHARED_SECRET="real-log-secret",
+    )
+    assert getattr(s, "geoip_database_url") == "https://downloads.ip66.dev/db/ip66.mmdb"
+    assert getattr(s, "geoip_refresh_interval_days") == 1
+    assert getattr(s, "geoip_fail_open") is True
+
+
+def test_geoip_refresh_interval_days_zero_raises() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="GEOIP_REFRESH_INTERVAL_DAYS must be greater than zero",
+    ):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            GEOIP_REFRESH_INTERVAL_DAYS="0",
+        )
+
+
+def test_geoip_database_url_empty_raises() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="GEOIP_DATABASE_URL must not be empty",
+    ):
+        _make_settings(
+            JWT_SECRET_KEY="real-secret-value",
+            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            GEOIP_DATABASE_URL="   ",
+        )

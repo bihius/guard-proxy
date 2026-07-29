@@ -9,6 +9,7 @@ import re
 import shutil
 import socket
 import subprocess
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -24,6 +25,11 @@ from app.config import settings
 from app.services.config_generator import GeneratedConfig
 
 logger = logging.getLogger(__name__)
+
+# Serialises everything that mutates the live HAProxy runtime: full applies
+# and the standalone reload the GeoIP map refresh performs. Reentrant so an
+# apply can still call the internal reload helper while holding it.
+_apply_lock = threading.RLock()
 
 # Anchored to the start of a line so common benign substrings such as
 # "no error", "failover ready", or "warning: bind ... failed for ipv6,
@@ -63,6 +69,12 @@ class ApplyResult:
 
 def apply(generated: GeneratedConfig) -> ApplyResult:
     """Validate and atomically activate generated runtime config."""
+    with _apply_lock:
+        return _apply_locked(generated)
+
+
+def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
+    _ensure_geoip_map_file()
     correlation_id = uuid.uuid4().hex
     checksum = calculate_checksum(generated)
     runtime_root = Path(settings.runtime_generated_config_root).resolve()
@@ -268,6 +280,10 @@ def seed_runtime_config(generated: GeneratedConfig) -> str | None:
     was deployed via the last `POST /config/apply` before the most recent
     restart.
     """
+    # Must run before the "release already exists" early return below,
+    # otherwise an existing deployment upgrading into the GeoIP feature would
+    # never get the stub map file that keeps `haproxy -c` passing.
+    _ensure_geoip_map_file()
     runtime_root = Path(settings.runtime_generated_config_root).resolve()
     current_link = runtime_root / "current"
 
@@ -318,9 +334,33 @@ class CommandResult:
     output: str
 
 
+def _ensure_geoip_map_file() -> None:
+    """Best-effort stub-write so a read-only/missing runtime dir cannot break apply."""
+    from app.services import geoip_service
+
+    try:
+        geoip_service.ensure_map_file_exists()
+    except OSError as error:
+        logger.warning("failed to ensure GeoIP map file exists: %s", error)
+
+
+def reload_haproxy() -> CommandResult:
+    """Reload HAProxy without rewriting the release. Used by the GeoIP map refresh.
+
+    Takes the same lock as `apply()`. The GeoIP refresh runs on its own
+    schedule and is serialised by a different lock in the router, so without
+    this a refresh could reload HAProxy midway through an apply's
+    validate/swap/rollback sequence and activate a release that apply is in
+    the middle of reverting.
+    """
+    with _apply_lock:
+        return _reload_haproxy()
+
+
 def _write_candidate(
     candidate_dir: Path, generated: GeneratedConfig, certs_dir: Path
 ) -> None:
+    _ensure_geoip_map_file()
     candidate_dir.mkdir(parents=True, exist_ok=False)
     (candidate_dir / "haproxy.cfg").write_text(generated.haproxy_cfg, encoding="utf-8")
     (candidate_dir / "crs-setup.conf").write_text(

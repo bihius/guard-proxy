@@ -18,6 +18,7 @@ from app.services.policy_service import (
     PolicyDatabaseConstraintError,
     PolicyDisallowedFieldError,
     PolicyFieldCannotBeNullError,
+    PolicyGeoipConfigurationError,
     PolicyInUseError,
     PolicyNameAlreadyExistsError,
     PolicyNotFoundError,
@@ -51,6 +52,8 @@ def create_policy(
             auto_ban_enabled=body.auto_ban_enabled,
             ban_threshold=body.ban_threshold,
             ban_duration_seconds=body.ban_duration_seconds,
+            geoip_mode=body.geoip_mode,
+            geoip_countries=body.geoip_countries,
             created_by=current_user.id,
         )
     except PolicyNameAlreadyExistsError as error:
@@ -62,6 +65,11 @@ def create_policy(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Database integrity constraint violated",
+        ) from error
+    except PolicyGeoipConfigurationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
         ) from error
 
 
@@ -135,6 +143,11 @@ def update_policy(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Database integrity constraint violated",
+        ) from error
+    except PolicyGeoipConfigurationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
         ) from error
 
 

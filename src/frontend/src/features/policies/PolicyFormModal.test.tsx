@@ -43,6 +43,8 @@ const editPolicy: Policy = {
   auto_ban_enabled: false,
   ban_threshold: 10,
   ban_duration_seconds: 600,
+  geoip_mode: "off",
+  geoip_countries: [],
   created_by: 1,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
@@ -221,5 +223,110 @@ describe("PolicyFormModal automatic IP banning fields", () => {
         ban_duration_seconds: 600,
       }),
     );
+  });
+});
+
+describe("PolicyFormModal GeoIP country filtering fields", () => {
+  it("hides the country input while mode is off", () => {
+    renderCreateModal();
+
+    expect(screen.queryByLabelText("Country codes")).not.toBeInTheDocument();
+  });
+
+  it("shows the country input once allowlist is selected", async () => {
+    renderCreateModal();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("GeoIP country filtering"),
+      "allowlist",
+    );
+
+    expect(screen.getByLabelText("Country codes")).toBeEnabled();
+  });
+
+  it("shows the country input once blocklist is selected", async () => {
+    renderCreateModal();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("GeoIP country filtering"),
+      "blocklist",
+    );
+
+    expect(screen.getByLabelText("Country codes")).toBeEnabled();
+  });
+
+  it("submits normalized country codes on create", async () => {
+    vi.mocked(api.createPolicy).mockResolvedValue({ ...editPolicy, id: 2 });
+
+    const onSuccess = vi.fn();
+    renderCreateModal(onSuccess);
+
+    await userEvent.type(screen.getByLabelText("Name"), "Geo policy");
+    await userEvent.selectOptions(
+      screen.getByLabelText("GeoIP country filtering"),
+      "allowlist",
+    );
+    await userEvent.type(screen.getByLabelText("Country codes"), "pl, de");
+
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+    expect(api.createPolicy).toHaveBeenCalledWith(
+      "test-token",
+      expect.objectContaining({
+        geoip_mode: "allowlist",
+        geoip_countries: ["PL", "DE"],
+      }),
+    );
+  });
+
+  it("shows an inline error and makes no API call for an unknown code", async () => {
+    vi.mocked(api.createPolicy).mockClear();
+    renderCreateModal();
+
+    await userEvent.type(screen.getByLabelText("Name"), "Geo policy");
+    await userEvent.selectOptions(
+      screen.getByLabelText("GeoIP country filtering"),
+      "allowlist",
+    );
+    await userEvent.type(screen.getByLabelText("Country codes"), "zz");
+
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(await screen.findByText(/Unknown country code/i)).toBeInTheDocument();
+    expect(api.createPolicy).not.toHaveBeenCalled();
+  });
+
+  it("shows an inline error and makes no API call for an empty list", async () => {
+    vi.mocked(api.createPolicy).mockClear();
+    renderCreateModal();
+
+    await userEvent.type(screen.getByLabelText("Name"), "Geo policy");
+    await userEvent.selectOptions(
+      screen.getByLabelText("GeoIP country filtering"),
+      "allowlist",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(
+      await screen.findByText(/Select at least one country code/i),
+    ).toBeInTheDocument();
+    expect(api.createPolicy).not.toHaveBeenCalled();
+  });
+
+  it("pre-populates the country input from policy.geoip_countries", () => {
+    render(
+      <AuthContext.Provider value={makeAuthContext()}>
+        <PolicyFormModal
+          mode="edit"
+          policy={{ ...editPolicy, geoip_mode: "blocklist", geoip_countries: ["RU", "CN"] }}
+          onSuccess={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </AuthContext.Provider>,
+    );
+
+    expect(screen.getByLabelText("Country codes")).toHaveValue("RU, CN");
   });
 });

@@ -13,7 +13,8 @@ import { ApiError } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 import { createPolicy, updatePolicy } from "./api";
-import type { Policy } from "./types";
+import { COUNTRY_CODES_SET } from "./countries";
+import type { GeoipMode, Policy } from "./types";
 
 type CreateMode = { mode: "create" };
 type EditMode = { mode: "edit"; policy: Policy };
@@ -63,8 +64,28 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
   const [banDurationSeconds, setBanDurationSeconds] = useState<string>(
     String(initial?.ban_duration_seconds ?? 600),
   );
+  const [geoipMode, setGeoipMode] = useState<GeoipMode>(
+    initial?.geoip_mode ?? "off",
+  );
+  const [geoipCountries, setGeoipCountries] = useState<string>(
+    (initial?.geoip_countries ?? []).join(", "),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  function parseGeoipCountries(): string[] {
+    const seen = new Set<string>();
+    const codes: string[] = [];
+    for (const raw of geoipCountries.split(",")) {
+      const code = raw.trim().toUpperCase();
+      if (!code) continue;
+      if (!seen.has(code)) {
+        seen.add(code);
+        codes.push(code);
+      }
+    }
+    return codes;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -72,6 +93,26 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
 
     setSubmitting(true);
     setServerError(null);
+
+    // The country input is hidden while the mode is "off", so any leftover
+    // text in it is invisible to the user. Submitting it anyway would fail
+    // validation server-side with a 422 they can neither see nor fix.
+    const parsedGeoipCountries = geoipMode === "off" ? [] : parseGeoipCountries();
+    if (geoipMode !== "off") {
+      if (parsedGeoipCountries.length === 0) {
+        setServerError("Select at least one country code.");
+        setSubmitting(false);
+        return;
+      }
+      const unknown = parsedGeoipCountries.find(
+        (code) => !COUNTRY_CODES_SET.has(code),
+      );
+      if (unknown) {
+        setServerError(`Unknown country code: ${unknown}`);
+        setSubmitting(false);
+        return;
+      }
+    }
 
     try {
       if (props.mode === "edit") {
@@ -90,6 +131,8 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           auto_ban_enabled: autoBanEnabled,
           ban_threshold: Number(banThreshold),
           ban_duration_seconds: Number(banDurationSeconds),
+          geoip_mode: geoipMode,
+          geoip_countries: parsedGeoipCountries,
         });
       } else {
         await createPolicy(accessToken, {
@@ -106,6 +149,8 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           auto_ban_enabled: autoBanEnabled,
           ban_threshold: Number(banThreshold),
           ban_duration_seconds: Number(banDurationSeconds),
+          geoip_mode: geoipMode,
+          geoip_countries: parsedGeoipCountries,
         });
       }
       onSuccess();
@@ -322,6 +367,35 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
                 )}
               </div>
             </>
+          )}
+        </div>
+
+        <div className="space-y-3 rounded-md border border-border p-3">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="policy-geoip-mode">GeoIP country filtering</Label>
+            <InfoTooltip label="Allowlist: only the listed countries may reach this vhost; everything else gets 403. Blocklist: the listed countries get 403. Requests whose country cannot be resolved are allowed by default." />
+          </div>
+          <Select
+            id="policy-geoip-mode"
+            value={geoipMode}
+            onChange={(e) => setGeoipMode(e.target.value as GeoipMode)}
+          >
+            <option value="off">Off</option>
+            <option value="allowlist">Allowlist</option>
+            <option value="blocklist">Blocklist</option>
+          </Select>
+
+          {geoipMode !== "off" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="policy-geoip-countries">Country codes</Label>
+              <Input
+                id="policy-geoip-countries"
+                type="text"
+                value={geoipCountries}
+                onChange={(e) => setGeoipCountries(e.target.value)}
+                placeholder="e.g. US, CA, GB"
+              />
+            </div>
           )}
         </div>
 

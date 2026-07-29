@@ -80,6 +80,13 @@ class Settings(EnvFileSettings):
     haproxy_stats_timeout_seconds: int = 10
     log_retention_days: int = 30
 
+    # GeoIP country filtering (issue #175). The database is downloaded from
+    # ip66.dev (free, no license key, rebuilt daily upstream) and refreshed
+    # on the schedule below.
+    geoip_database_url: str = "https://downloads.ip66.dev/db/ip66.mmdb"
+    geoip_refresh_interval_days: int = 1
+    geoip_fail_open: bool = True
+
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_empty(cls, value: str) -> str:
@@ -113,6 +120,20 @@ class Settings(EnvFileSettings):
     def log_retention_days_must_be_positive(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("LOG_RETENTION_DAYS must be greater than zero.")
+        return value
+
+    @field_validator("geoip_refresh_interval_days")
+    @classmethod
+    def geoip_refresh_interval_days_must_be_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("GEOIP_REFRESH_INTERVAL_DAYS must be greater than zero.")
+        return value
+
+    @field_validator("geoip_database_url")
+    @classmethod
+    def geoip_database_url_must_not_be_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("GEOIP_DATABASE_URL must not be empty.")
         return value
 
     # JWT

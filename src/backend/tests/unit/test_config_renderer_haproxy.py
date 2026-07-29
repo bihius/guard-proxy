@@ -4,9 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from app.constants.countries import VALID_COUNTRY_CODES
 from app.services.config_renderer import (
     HaproxyBackend,
     HaproxyDdos,
+    HaproxyGeoip,
     HaproxyRenderContext,
     HaproxyRoute,
     HaproxyServer,
@@ -662,6 +664,259 @@ def test_rendered_haproxy_template_with_auto_ban_validates_with_haproxy(
     )
 
     assert result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
+# GeoIP country filtering (issue #175)
+# ---------------------------------------------------------------------------
+
+
+def _geoip(
+    mode: str = "allowlist",
+    countries: tuple[str, ...] = ("PL", "DE"),
+    map_path: str = "/etc/haproxy/generated/geoip/country.map",
+    fail_open: bool = True,
+) -> HaproxyGeoip:
+    return HaproxyGeoip(
+        mode=mode,
+        countries=countries,
+        map_path=map_path,
+        fail_open=fail_open,
+    )
+
+
+def test_haproxy_template_renders_allowlist_geoip_in_both_frontends() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="letsencrypt",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    geoip=_geoip(mode="allowlist", countries=("PL", "DE")),
+                ),
+            ),
+        )
+    )
+
+    set_var_line = (
+        "http-request set-var(txn.geoip_country) src,map_ip"
+        "(/etc/haproxy/generated/geoip/country.map) if !is_acme"
+    )
+    acl_line = "acl geoip_host_api var(txn.geoip_country) -m str PL DE"
+    deny_line = (
+        "http-request deny deny_status 403 if host_api !is_acme "
+        "{ var(txn.geoip_country) -m found } !geoip_host_api"
+    )
+    assert rendered.count(set_var_line) == 2
+    assert rendered.count(acl_line) == 2
+    assert rendered.count(deny_line) == 2
+
+
+def test_haproxy_template_renders_blocklist_geoip_without_found_guard() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    geoip=_geoip(mode="blocklist", countries=("RU", "CN")),
+                ),
+            ),
+        )
+    )
+
+    acl_line = "acl geoip_host_api var(txn.geoip_country) -m str RU CN"
+    deny_line = "http-request deny deny_status 403 if host_api !is_acme geoip_host_api"
+    assert acl_line in rendered
+    assert deny_line in rendered
+    assert "-m found } !geoip_host_api" not in rendered
+
+
+def test_haproxy_template_geoip_fail_closed_adds_extra_deny() -> None:
+    rendered_fail_open = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    geoip=_geoip(mode="blocklist", countries=("RU",), fail_open=True),
+                ),
+            ),
+        )
+    )
+    rendered_fail_closed = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    geoip=_geoip(mode="blocklist", countries=("RU",), fail_open=False),
+                ),
+            ),
+        )
+    )
+
+    fail_closed_deny = (
+        "http-request deny deny_status 403 if host_api !is_acme "
+        "!{ var(txn.geoip_country) -m found }"
+    )
+    assert fail_closed_deny not in rendered_fail_open
+    assert fail_closed_deny in rendered_fail_closed
+
+
+def test_haproxy_template_omits_geoip_lines_when_route_has_none() -> None:
+    rendered_plain = render_haproxy_cfg(_m1_reference_context())
+    rendered_with_geoip_field = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_app",
+                    vhost_hosts=("app.local", "localhost", "127.0.0.1"),
+                    ssl_provider="none",
+                    backend=_backend("be_app", "app", "backend:8000"),
+                    geoip=None,
+                ),
+            ),
+        )
+    )
+
+    assert "geoip_country" not in rendered_plain
+    assert "geoip_country" not in rendered_with_geoip_field
+    assert _normalise_config(rendered_plain) == _normalise_config(
+        rendered_with_geoip_field
+    )
+
+
+def test_haproxy_template_geoip_lines_precede_ddos_and_spoe() -> None:
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    ddos=_ddos(stick_table_name="st_ddos_vhost_1"),
+                    geoip=_geoip(mode="blocklist", countries=("RU",)),
+                ),
+            ),
+        )
+    )
+
+    geoip_index = rendered.index("geoip_country")
+    ddos_index = rendered.index("track-sc0")
+    spoe_index = rendered.index("filter spoe engine coraza")
+
+    assert geoip_index < ddos_index < spoe_index
+
+
+def test_haproxy_template_geoip_rules_exempt_acme_but_never_health() -> None:
+    """/health must not be a country-filter bypass.
+
+    `is_health` is a host-independent `path /health` match with no
+    `use_backend` of its own, so a request to /health on a protected vhost is
+    routed to the customer origin. Exempting it from the GeoIP rules would let
+    any blocked country reach that origin just by asking for /health. ACME is
+    different: `is_acme` has its own local `backend_acme` and must stay exempt
+    so certificate issuance keeps working.
+    """
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    geoip=_geoip(mode="blocklist", countries=("RU",), fail_open=False),
+                ),
+            ),
+        )
+    )
+
+    geoip_lines = [
+        line
+        for line in rendered.splitlines()
+        if "geoip" in line and line.strip().startswith("http-request")
+    ]
+    assert geoip_lines, "expected at least one geoip-related line"
+    for line in geoip_lines:
+        assert "!is_health" not in line
+        assert "!is_acme" in line
+
+
+def test_haproxy_template_chunks_country_codes_to_survive_line_word_limit() -> None:
+    """HAProxy truncates a config line after 64 words, which is fatal.
+
+    A single-line list of every ISO code would blow past that, so codes are
+    emitted as repeated same-name ACLs (which HAProxy ORs together). Verified
+    against haproxy:3.0-alpine: 59 codes on an `acl` line is the real ceiling.
+    """
+    countries = tuple(sorted(code for code in VALID_COUNTRY_CODES if code != "ZZ"))
+    assert len(countries) > 60, "fixture must exceed the per-line word limit"
+
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    geoip=_geoip(mode="blocklist", countries=countries),
+                ),
+            ),
+        )
+    )
+
+    # Both frontends emit the same block; analyse fe_http's copy on its own.
+    fe_http = rendered.split("frontend fe_https", 1)[0]
+    acl_lines = [
+        line.strip()
+        for line in fe_http.splitlines()
+        if line.strip().startswith("acl geoip_host_api ")
+    ]
+    assert len(acl_lines) > 1, "expected the country list to be split across lines"
+    for line in acl_lines:
+        assert len(line.split()) <= 64
+
+    emitted: list[str] = []
+    for line in acl_lines:
+        emitted.extend(line.split("-m str ", 1)[1].split())
+    assert emitted == list(countries), "chunking must not drop or reorder codes"
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"mode": "denylist"},
+        {"countries": ()},
+        {"countries": ("pl",)},
+        {"countries": ("POL",)},
+        {"countries": ("P L",)},
+        {"countries": ("PL\ndeny",)},
+        {"map_path": "relative/path.map"},
+        {"map_path": "/has space/country.map"},
+    ],
+)
+def test_haproxy_geoip_rejects_invalid_values(kwargs: dict) -> None:
+    base = {
+        "mode": "allowlist",
+        "countries": ("PL",),
+        "map_path": "/etc/haproxy/generated/geoip/country.map",
+        "fail_open": True,
+    }
+    base.update(kwargs)
+    with pytest.raises(ValueError):
+        HaproxyGeoip(**base)
 
 
 @pytest.mark.skipif(shutil.which("haproxy") is None, reason="haproxy is not installed")

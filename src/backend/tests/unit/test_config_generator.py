@@ -4,14 +4,19 @@ from pathlib import Path
 
 import pytest
 
+from app.config import settings
 from app.models.custom_rule import CustomRule, RuleOperator, RulePhase
-from app.models.policy import Policy, PolicyEnforcementMode
+from app.models.policy import Policy, PolicyEnforcementMode, PolicyGeoipMode
 from app.models.policy_binding import PolicyBinding
 from app.models.rule_exclusion import RuleExclusion, TargetType
 from app.models.rule_override import RuleAction, RuleOverride
 from app.models.vhost import VHost
 from app.models.vhost_backend import VHostBackend
-from app.services.config_generator import generate
+from app.services.config_generator import (
+    HAPROXY_GEOIP_MAP_PATH,
+    _to_haproxy_context,
+    generate,
+)
 from app.services.config_renderer import (
     HaproxyBackend,
     HaproxyRenderContext,
@@ -313,6 +318,107 @@ def test_generate_one_vhost_with_ddos_protection_disabled_emits_nothing() -> Non
     assert "stick-table" not in generated.haproxy_cfg
     assert "track-sc0" not in generated.haproxy_cfg
     assert "deny_status 429" not in generated.haproxy_cfg
+
+
+# ---------------------------------------------------------------------------
+# GeoIP country filtering (issue #175)
+# ---------------------------------------------------------------------------
+
+
+def _vhost_and_policy_for_geoip(
+    *,
+    geoip_mode: PolicyGeoipMode = PolicyGeoipMode.off,
+    geoip_countries: list[str] | None = None,
+) -> tuple[VHost, Policy]:
+    vhost = VHost(
+        id=7,
+        domain="geo.example.com",
+        backend_url="http://geo-backend:8000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Geo",
+        paranoia_level=2,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+        geoip_mode=geoip_mode,
+        geoip_countries=geoip_countries or [],
+    )
+    return vhost, policy
+
+
+def test_to_haproxy_context_allowlist_produces_geoip_context() -> None:
+    vhost, policy = _vhost_and_policy_for_geoip(
+        geoip_mode=PolicyGeoipMode.allowlist,
+        geoip_countries=["PL", "DE"],
+    )
+
+    context = _to_haproxy_context(vhost, policy)
+    geoip = context.routes[0].geoip
+
+    assert geoip is not None
+    assert geoip.mode == "allowlist"
+    assert geoip.countries == ("PL", "DE")
+    assert geoip.map_path == HAPROXY_GEOIP_MAP_PATH
+
+
+def test_to_haproxy_context_off_mode_produces_no_geoip() -> None:
+    vhost, policy = _vhost_and_policy_for_geoip(
+        geoip_mode=PolicyGeoipMode.off,
+        geoip_countries=["PL"],
+    )
+
+    context = _to_haproxy_context(vhost, policy)
+
+    assert context.routes[0].geoip is None
+
+
+def test_to_haproxy_context_non_off_mode_with_empty_countries_produces_no_geoip() -> (
+    None
+):
+    """Defensive: a stored empty list must never render a deny with no patterns."""
+    vhost, policy = _vhost_and_policy_for_geoip(
+        geoip_mode=PolicyGeoipMode.allowlist,
+        geoip_countries=[],
+    )
+
+    context = _to_haproxy_context(vhost, policy)
+
+    assert context.routes[0].geoip is None
+
+
+def test_to_haproxy_context_geoip_fail_open_read_from_settings(
+    monkeypatch,
+) -> None:
+    vhost, policy = _vhost_and_policy_for_geoip(
+        geoip_mode=PolicyGeoipMode.blocklist,
+        geoip_countries=["RU"],
+    )
+
+    monkeypatch.setattr(settings, "geoip_fail_open", True)
+    context = _to_haproxy_context(vhost, policy)
+    assert context.routes[0].geoip.fail_open is True
+
+    monkeypatch.setattr(settings, "geoip_fail_open", False)
+    context = _to_haproxy_context(vhost, policy)
+    assert context.routes[0].geoip.fail_open is False
+
+
+def test_generate_with_geoip_allowlist_renders_deny_rule() -> None:
+    vhost, policy = _vhost_and_policy_for_geoip(
+        geoip_mode=PolicyGeoipMode.allowlist,
+        geoip_countries=["PL", "DE"],
+    )
+
+    generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[])
+
+    assert "geoip_country" in generated.haproxy_cfg
+    assert "-m str PL DE" in generated.haproxy_cfg
 
 
 def test_generated_haproxy_cfg_with_ddos_validates_with_haproxy(

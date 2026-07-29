@@ -34,6 +34,7 @@ from app.routers import (
     auth,
     config,
     custom_rules,
+    geoip,
     logs,
     policies,
     rule_exclusions,
@@ -196,6 +197,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(config.router)
 app.include_router(custom_rules.router)
+app.include_router(geoip.router)
 app.include_router(logs.router)
 app.include_router(policies.router)
 app.include_router(rule_exclusions.router)
