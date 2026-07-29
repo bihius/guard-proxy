@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "@/features/auth/auth-context.shared";
@@ -55,11 +56,13 @@ const mockLog = {
 const mockListResponse = { items: [mockLog], total: 1, page: 1, page_size: 50 };
 const emptyListResponse = { items: [], total: 0, page: 1, page_size: 50 };
 
-function renderPage() {
+function renderPage(initialEntry = "/logs") {
   return render(
-    <AuthContext.Provider value={makeAuthContext()}>
-      <LogsPage />
-    </AuthContext.Provider>,
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <AuthContext.Provider value={makeAuthContext()}>
+        <LogsPage />
+      </AuthContext.Provider>
+    </MemoryRouter>,
   );
 }
 
