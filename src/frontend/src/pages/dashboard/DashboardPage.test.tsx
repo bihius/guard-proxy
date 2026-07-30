@@ -253,6 +253,19 @@ describe("DashboardPage", () => {
         "true",
       ),
     );
+
+    // Keeping focus on the moved-to tab is what makes a second press work at
+    // all, so assert it explicitly rather than inferring it from the move.
+    expect(screen.getByRole("tab", { name: "7d" })).toHaveFocus();
+
+    await user.keyboard("{ArrowRight}");
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "30d" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
+    );
   });
 
   it("lists top rules and marks banned source IPs", async () => {

@@ -161,6 +161,26 @@ describe("PoliciesPage", () => {
     );
   });
 
+  it("opens the edit modal prefilled from the row, without navigating away", async () => {
+    vi.mocked(policiesApi.listPolicies).mockResolvedValue(mockPolicyListResponse);
+    vi.mocked(vhostsApi.listAllVHosts).mockResolvedValue(mockVHostListResponse.items);
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Default WAF")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /edit/i }));
+
+    // The row itself is clickable, so the button has to stop propagation or the
+    // modal would be replaced by a navigation to the detail page.
+    const dialog = await screen.findByRole("dialog");
+    expect(screen.queryByText("Policy detail page")).not.toBeInTheDocument();
+    expect(dialog).toHaveTextContent(/edit policy/i);
+    expect(screen.getByLabelText(/name/i)).toHaveValue("Default WAF");
+    expect(screen.getByLabelText(/geoip country filtering/i)).toBeInTheDocument();
+  });
+
   it("does not show admin actions to viewers", async () => {
     vi.mocked(policiesApi.listPolicies).mockResolvedValue(mockPolicyListResponse);
     vi.mocked(vhostsApi.listAllVHosts).mockResolvedValue(mockVHostListResponse.items);

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -18,12 +18,31 @@ type TimeRangeTabsProps = {
 export function TimeRangeTabs({ value, onChange }: TimeRangeTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const focusTab = (index: number) => {
-    const tabs = containerRef.current?.querySelectorAll<HTMLButtonElement>(
-      "[role='tab']",
+  /**
+   * Move focus onto the selected tab *after* the change has been committed,
+   * and only when focus was already inside the tablist.
+   *
+   * Focusing synchronously in the key handler works but is fragile: the
+   * selection lives in the URL, so a change re-renders the whole screen, and
+   * anything that disturbs focus during that render leaves the roving
+   * tabindex pointing at a blurred element. Every subsequent arrow key then
+   * lands on the document instead of this container and silently does
+   * nothing. Re-asserting focus after the commit keeps the control usable no
+   * matter what else re-rendered. The containment check is what stops this
+   * from stealing focus from elsewhere on the page.
+   */
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return;
+    if (!container.contains(document.activeElement)) return;
+
+    const selected = container.querySelector<HTMLButtonElement>(
+      "[role='tab'][aria-selected='true']",
     );
-    tabs?.[index]?.focus();
-  };
+    if (selected !== null && selected !== document.activeElement) {
+      selected.focus();
+    }
+  }, [value]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const current = STATS_WINDOWS.indexOf(value);
@@ -41,7 +60,6 @@ export function TimeRangeTabs({ value, onChange }: TimeRangeTabsProps) {
 
     event.preventDefault();
     onChange(target);
-    focusTab(next);
   };
 
   return (
