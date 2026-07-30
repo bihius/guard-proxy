@@ -41,6 +41,7 @@ from app.routers import (
     rule_overrides,
     runtime_status,
     security,
+    stats,
     vhosts,
 )
 from app.services.config_apply import seed_runtime_config
@@ -204,6 +205,7 @@ app.include_router(rule_exclusions.router)
 app.include_router(rule_overrides.router)
 app.include_router(runtime_status.router)
 app.include_router(security.router)
+app.include_router(stats.router)
 app.include_router(vhosts.router)
 
 
