@@ -22,8 +22,22 @@ TARGET_VHOST="${TARGET_VHOST:-${LAB_WP_DOMAIN}}"   # default: WordPress scanner 
 ZAP_IMAGE="ghcr.io/zaproxy/zaproxy:stable"
 ZAP_CONF="${REPO_ROOT}/benchmarks/lab/scenarios/zap/zap-baseline.conf"
 
-# HAProxy listens on port 80 inside gp_internal; ZAP container joins that network.
-TARGET_URL="http://haproxy:80"
+# TARGET_VHOST (e.g. wp.local) is not a real DNS name — HAProxy routes on the
+# Host header alone. Previously the Host header was rewritten via a ZAP
+# replacer while the URL stayed http://haproxy:80, but ZAP's own
+# connectivity/spider check resolves the (replaced) Host as if it were the
+# connection target, failing with "wp.local: Name or service not known".
+# Making the vhost genuinely resolvable via --add-host (aliased to HAProxy's
+# container IP) and pointing ZAP straight at it sends the correct Host header
+# naturally, without needing the replacer to touch it at all.
+HAPROXY_CONTAINER="$(docker ps --filter "name=haproxy" --format "{{.Names}}" | head -1 || true)"
+HAPROXY_IP="$(docker inspect -f "{{(index .NetworkSettings.Networks \"${DOCKER_NETWORK}\").IPAddress}}" "${HAPROXY_CONTAINER}" 2>/dev/null || true)"
+if [[ -z "${HAPROXY_IP}" ]]; then
+  echo "Could not resolve HAProxy container IP on network ${DOCKER_NETWORK}." >&2
+  exit 1
+fi
+
+TARGET_URL="http://${TARGET_VHOST}:80"
 
 write_manifest
 SCENARIO="zap-${TARGET_VHOST}"
@@ -31,47 +45,41 @@ OUT_DIR="$(setup_run_dir "${SCENARIO}")"
 export OUT_DIR   # must be set before the Python heredoc reads os.environ
 
 echo "=== OWASP ZAP baseline scan ==="
-echo "Target vhost : ${TARGET_VHOST} → ${TARGET_URL}"
+echo "Target vhost : ${TARGET_VHOST} → ${TARGET_URL} (${HAPROXY_IP})"
 echo "Output dir   : ${OUT_DIR}"
 echo "Image        : ${ZAP_IMAGE}"
 echo ""
 
 # ZAP needs a writable /zap/wrk directory for reports.
-# The Host: header is injected via ZAP's built-in HTTP Request Header Replacer
-# so that every request ZAP sends to haproxy:80 carries the correct vhost name
-# and benchmark correlation tags.
+# Benchmark correlation tags are injected via ZAP's built-in HTTP Request
+# Header Replacer.
 # NOTE: zap-baseline.py does NOT accept top-level "-config key=value" args — its
 # argument parser treats any "-c..." flag as "-c" (config_file), so "-config"
 # gets parsed as "-c" with value "onfig", causing a FileNotFoundError. ZAP-side
 # -config overrides must instead be passed bundled inside a single -z argument,
 # per `-z zap_options` ("-z \"-config aaa=bbb -config ccc=ddd\"").
-ZAP_CONFIG_OPTS="-config replacer.full_list(0).description=host-header \
+ZAP_CONFIG_OPTS="-config replacer.full_list(0).description=eval-run \
 -config replacer.full_list(0).enabled=true \
 -config replacer.full_list(0).matchtype=REQ_HEADER \
--config replacer.full_list(0).matchstr=Host \
--config replacer.full_list(0).replacement=${TARGET_VHOST} \
+-config replacer.full_list(0).matchstr=X-GP-Eval-Run \
+-config replacer.full_list(0).replacement=${RUN_ID} \
 -config replacer.full_list(0).initiators= \
--config replacer.full_list(1).description=eval-run \
+-config replacer.full_list(1).description=eval-scenario \
 -config replacer.full_list(1).enabled=true \
 -config replacer.full_list(1).matchtype=REQ_HEADER \
--config replacer.full_list(1).matchstr=X-GP-Eval-Run \
--config replacer.full_list(1).replacement=${RUN_ID} \
+-config replacer.full_list(1).matchstr=X-GP-Eval-Scenario \
+-config replacer.full_list(1).replacement=${SCENARIO} \
 -config replacer.full_list(1).initiators= \
--config replacer.full_list(2).description=eval-scenario \
+-config replacer.full_list(2).description=eval-case \
 -config replacer.full_list(2).enabled=true \
 -config replacer.full_list(2).matchtype=REQ_HEADER \
--config replacer.full_list(2).matchstr=X-GP-Eval-Scenario \
--config replacer.full_list(2).replacement=${SCENARIO} \
--config replacer.full_list(2).initiators= \
--config replacer.full_list(3).description=eval-case \
--config replacer.full_list(3).enabled=true \
--config replacer.full_list(3).matchtype=REQ_HEADER \
--config replacer.full_list(3).matchstr=X-GP-Eval-Case \
--config replacer.full_list(3).replacement=zap \
--config replacer.full_list(3).initiators="
+-config replacer.full_list(2).matchstr=X-GP-Eval-Case \
+-config replacer.full_list(2).replacement=zap \
+-config replacer.full_list(2).initiators="
 
 docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
+  --add-host "${TARGET_VHOST}:${HAPROXY_IP}" \
   -v "${OUT_DIR}:/zap/wrk:rw" \
   -v "${ZAP_CONF}:/zap/rules.conf:ro" \
   "${ZAP_IMAGE}" \
