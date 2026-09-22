@@ -149,7 +149,8 @@ Target: Juice Shop and DVWA (both known to match many templates).
 
 ### 5.5 Benign Load Test — Latency and RPS overhead
 
-**Tool:** `williamyeh/wrk` with `benchmarks/lab/scenarios/load/benign-mix.lua`
+**Tool:** `elswork/wrk` (arm64+amd64 build of wrk 4.2.0, pinned by digest) with
+`benchmarks/lab/scenarios/load/benign-mix.lua`
 
 Two runs per target:
 
@@ -157,7 +158,13 @@ Two runs per target:
 2. **Direct to target container** — bypasses HAProxy (port mapped inside `gp_internal`)
 
 Overhead = WAF_value − direct_value.  
-Config: 4 threads, 50 connections, 60-second duration.
+Config: 2 threads, 20 connections, 30-second duration. Lowered from an
+earlier 4/50/60s configuration, which was enough to overload Juice Shop's
+single-threaded Node process (its login endpoint hashes passwords with a
+synchronous bcrypt implementation) and invalidate the WAF-vs-direct
+comparison instead of measuring it. The benign-mix request pool also sends
+the login POST only 1 in 20 requests (not 1 in 9) to keep it out of the
+critical path for the same reason.
 
 ---
 

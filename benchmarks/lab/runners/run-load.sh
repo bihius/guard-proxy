@@ -33,7 +33,10 @@ DIRECT_PORT="${DIRECT_PORT:-3000}"         # Target app port (no HAProxy)
 # wrk 4.2.0 build and is publicly pullable.
 # williamyeh/wrk is amd64-only and segfaults under emulation on arm64 hosts
 # (Apple Silicon); elswork/wrk ships native amd64+arm64 builds of the same tool.
-WRK_IMAGE="elswork/wrk:latest"
+# Pinned by digest (not ":latest") so re-runs always use the same binary and
+# results stay comparable across runs; the digest is also recorded in
+# performance.json below.
+WRK_IMAGE="elswork/wrk@sha256:529f8fe35924e549cc270d4128406d5863043e756c31395afd08acccc74ada79"
 LUA_SCRIPT="${REPO_ROOT}/benchmarks/lab/scenarios/load/benign-mix.lua"
 
 # A sustained 50-connection burst was enough to OOM-crash the juiceshop
@@ -100,10 +103,13 @@ copy_audit_log_snapshot "${OUT_DIR}"
 
 echo "--- Run 2: direct to ${DIRECT_HOST}:${DIRECT_PORT} ---"
 
-# A sustained 50-connection burst against the same target can leave it
-# briefly unable to accept new connections right after Run 1 ends; give it a
-# moment to drain before hammering it again directly.
-sleep 3
+# Run 1 leaves Juice Shop's single-threaded Node process backlogged (its
+# request queue keeps draining well after wrk's client-side connections
+# close). Starting Run 2 too soon throws it straight into that backlog:
+# observed as tens of thousands of spurious "write" socket errors even
+# though the underlying requests eventually succeed. 3s was not enough;
+# 15s reliably drains it (verified: 0 socket errors vs ~289k at 3s).
+sleep 15
 
 docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
@@ -129,7 +135,7 @@ echo "Parsing results..."
 # quoted ('PY') so its regex backslashes are not shell-expanded, which means
 # shell variables inside it are not substituted either — os.environ is the
 # only reliable way to pass values in.
-export OUT_DIR THREADS CONNECTIONS DURATION
+export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE
 
 python3 - <<'PY'
 import re, json, os
@@ -138,6 +144,7 @@ OUT_DIR = os.environ["OUT_DIR"]
 THREADS = os.environ["THREADS"]
 CONNECTIONS = os.environ["CONNECTIONS"]
 DURATION = os.environ["DURATION"]
+WRK_IMAGE = os.environ["WRK_IMAGE"]
 
 def parse_wrk(path):
     """Parse wrk --latency output into a structured dict.
@@ -204,7 +211,8 @@ performance = {
     "config": {
         "threads": int(THREADS),
         "connections": int(CONNECTIONS),
-        "duration": DURATION
+        "duration": DURATION,
+        "wrk_image": WRK_IMAGE
     },
     "waf_requests": waf.get("requests"),
     "waf_errors": waf.get("errors"),
