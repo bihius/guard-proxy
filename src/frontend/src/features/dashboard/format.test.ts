@@ -71,6 +71,12 @@ describe("formatBucketLabel", () => {
   it("degrades gracefully on an unparsable timestamp", () => {
     expect(formatBucketLabel("not-a-date", 3600)).toBe("—");
   });
+
+  it("treats a timezone-less timestamp as UTC, not local time", () => {
+    expect(formatBucketLabel("2026-07-29T13:35:00", 300)).toBe(
+      formatBucketLabel("2026-07-29T13:35:00Z", 300),
+    );
+  });
 });
 
 describe("formatRelativeTime", () => {
@@ -88,5 +94,9 @@ describe("formatRelativeTime", () => {
 
   it("degrades gracefully on an unparsable timestamp", () => {
     expect(formatRelativeTime("nope", now)).toBe("—");
+  });
+
+  it("treats a timezone-less timestamp (as returned by the backend) as UTC", () => {
+    expect(formatRelativeTime("2026-07-29T11:30:00", now)).toMatch(/30 minutes/);
   });
 });

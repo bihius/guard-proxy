@@ -17,6 +17,8 @@ import { DashboardPage } from "./DashboardPage";
 
 vi.mock("@/features/dashboard/api");
 vi.mock("@/features/logs/api");
+
+const refreshRuntimeStatusMock = vi.fn();
 vi.mock("@/features/runtime/use-runtime-status", () => ({
   useRuntimeStatus: () => ({
     data: {
@@ -40,7 +42,7 @@ vi.mock("@/features/runtime/use-runtime-status", () => ({
     },
     isLoading: false,
     error: null,
-    refresh: vi.fn(),
+    refresh: refreshRuntimeStatusMock,
   }),
 }));
 
@@ -236,6 +238,25 @@ describe("DashboardPage", () => {
     );
   });
 
+  it("refreshes both dashboard stats and runtime status on manual refresh", async () => {
+    mockHappyPath();
+    refreshRuntimeStatusMock.mockClear();
+    const user = userEvent.setup();
+
+    renderPage();
+    await screen.findByText("4,128");
+
+    const callsBeforeClick = vi.mocked(dashboardApi.fetchOverview).mock.calls.length;
+    await user.click(screen.getByRole("button", { name: /refresh/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(dashboardApi.fetchOverview).mock.calls.length).toBeGreaterThan(
+        callsBeforeClick,
+      ),
+    );
+    expect(refreshRuntimeStatusMock).toHaveBeenCalled();
+  });
+
   it("moves between windows with the arrow keys", async () => {
     mockHappyPath();
     const user = userEvent.setup();
@@ -313,6 +334,15 @@ describe("DashboardPage", () => {
 
     expect(await screen.findByText(/runtime api unavailable/i)).toBeInTheDocument();
     expect(screen.getByText("312")).toBeInTheDocument();
+  });
+
+  it("shows the current user's role in the header", async () => {
+    mockHappyPath();
+
+    renderPage();
+
+    await screen.findByText("4,128");
+    expect(screen.getByText("Admin")).toBeInTheDocument();
   });
 
   it("hides the banned-IP tile from viewers", async () => {

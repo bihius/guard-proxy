@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.log import Log, LogAction, LogSeverity
 from app.models.policy import Policy
+from app.models.policy_binding import PolicyBinding
 from app.models.vhost import VHost
 from app.services import ban_list_service, stats_service
 
@@ -144,6 +145,60 @@ def test_overview_counts_protected_vhosts_and_active_policies(
     assert body["protected_vhosts"] == 1
     assert body["total_vhosts"] == 2
     assert body["active_policies"] == 1
+
+
+def test_overview_excludes_vhosts_bound_only_to_an_inactive_policy(
+    client: TestClient,
+    viewer_token: dict[str, str],
+    db: Session,
+) -> None:
+    """A vhost pointing at a deactivated policy is not actually protected —
+    config generation excludes inactive policies — so it must not inflate
+    protected_vhosts, whether the link is direct or via a PolicyBinding."""
+    active_policy = Policy(name="Active policy", is_active=True)
+    inactive_policy = Policy(name="Draft policy", is_active=False)
+    db.add_all([active_policy, inactive_policy])
+    db.flush()
+    direct_inactive = VHost(
+        domain="direct-inactive.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+        policy_id=inactive_policy.id,
+    )
+    bound_inactive = VHost(
+        domain="bound-inactive.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+    )
+    bound_active = VHost(
+        domain="bound-active.example.com",
+        backend_url="http://backend:8000",
+        is_active=True,
+    )
+    db.add_all([direct_inactive, bound_inactive, bound_active])
+    db.flush()
+    db.add_all(
+        [
+            PolicyBinding(
+                vhost_id=bound_inactive.id,
+                policy_id=inactive_policy.id,
+                path_prefix="/",
+                priority=0,
+            ),
+            PolicyBinding(
+                vhost_id=bound_active.id,
+                policy_id=active_policy.id,
+                path_prefix="/",
+                priority=0,
+            ),
+        ]
+    )
+    db.commit()
+
+    body = client.get("/stats/overview", headers=viewer_token).json()
+
+    assert body["protected_vhosts"] == 1
+    assert body["total_vhosts"] == 3
 
 
 def test_overview_hides_banned_ips_from_viewers(

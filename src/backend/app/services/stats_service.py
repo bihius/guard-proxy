@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Integer, SQLColumnExpression, case, cast, func, or_, select
-from sqlalchemy.orm import Query, Session
+from sqlalchemy.orm import Query, Session, aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.log import Log, LogAction, LogSeverity
@@ -198,14 +198,27 @@ class StatsService:
         )
 
     def _protected_vhost_count(self) -> int:
-        """Active vhosts covered by a policy, directly or via a path binding."""
+        """Active vhosts covered by an active policy, directly or via a path binding.
+
+        A vhost pointing at a deactivated policy is not actually protected —
+        config generation excludes inactive policies — so both the direct
+        `VHost.policy_id` link and any `PolicyBinding` must resolve to a
+        policy with `is_active=True` to count.
+        """
+        direct_policy = aliased(Policy)
+        binding_policy = aliased(Policy)
         statement = (
             select(func.count(func.distinct(VHost.id)))
             .select_from(VHost)
+            .outerjoin(direct_policy, direct_policy.id == VHost.policy_id)
             .outerjoin(PolicyBinding, PolicyBinding.vhost_id == VHost.id)
+            .outerjoin(binding_policy, binding_policy.id == PolicyBinding.policy_id)
             .where(
                 VHost.is_active.is_(True),
-                or_(VHost.policy_id.is_not(None), PolicyBinding.id.is_not(None)),
+                or_(
+                    direct_policy.is_active.is_(True),
+                    binding_policy.is_active.is_(True),
+                ),
             )
         )
         return self.db.execute(statement).scalar_one()

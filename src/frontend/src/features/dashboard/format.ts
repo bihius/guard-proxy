@@ -17,9 +17,19 @@ export function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+/**
+ * The backend serializes naive UTC timestamps (no `Z`/offset suffix), which
+ * `new Date()` would otherwise interpret as local time. Treat a timestamp
+ * without a timezone designator as UTC.
+ */
+function parseUtc(iso: string): Date {
+  const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso);
+  return new Date(hasTimezone ? iso : `${iso}Z`);
+}
+
 /** Bucket labels drop to a date once buckets span a day or more. */
 export function formatBucketLabel(iso: string, bucketSeconds: number): string {
-  const date = new Date(iso);
+  const date = parseUtc(iso);
   if (Number.isNaN(date.getTime())) return "—";
   if (bucketSeconds >= 86_400) {
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -37,7 +47,7 @@ export function formatBucketLabel(iso: string, bucketSeconds: number): string {
 
 /** "4 minutes ago" reads faster than a timestamp when scanning for freshness. */
 export function formatRelativeTime(iso: string, now: Date = new Date()): string {
-  const target = new Date(iso);
+  const target = parseUtc(iso);
   if (Number.isNaN(target.getTime())) return "—";
 
   const seconds = Math.round((now.getTime() - target.getTime()) / 1000);

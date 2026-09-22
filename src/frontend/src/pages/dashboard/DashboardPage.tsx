@@ -6,6 +6,7 @@ import { AlertTriangleIcon, BanIcon, PulseIcon, ServerIcon } from "@/components/
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { RoleBadge } from "@/components/shared/RoleBadge";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ import { useAuth } from "@/hooks/use-auth";
 const DEFAULT_WINDOW: StatsWindow = "24h";
 
 export function DashboardPage() {
-  const { hasRole } = useAuth();
+  const { hasRole, role } = useAuth();
   const isAdmin = hasRole("admin");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,6 +50,11 @@ export function DashboardPage() {
   const runtimeStatus = useRuntimeStatus();
   const { overview, timeseries, top, recentBlocks, lastUpdatedAt, refresh } =
     useDashboardData(window);
+
+  const refreshAll = () => {
+    refresh();
+    runtimeStatus.refresh();
+  };
 
   const windowLabel = STATS_WINDOW_LABELS[window];
   const overviewData = overview.data;
@@ -84,11 +90,12 @@ export function DashboardPage() {
         description={`Traffic, threats and deployment state over the last ${windowLabel}.`}
         actions={
           <>
+            {role ? <RoleBadge role={role} /> : null}
             <TimeRangeTabs value={window} onChange={setWindow} />
             <Button
               variant="outline"
               size="sm"
-              onClick={refresh}
+              onClick={refreshAll}
               className="cursor-pointer gap-2"
             >
               <RefreshCw aria-hidden="true" />
