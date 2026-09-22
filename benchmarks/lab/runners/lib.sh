@@ -17,7 +17,10 @@ CORE_ENV="${REPO_ROOT}/docker/.env"
 LAB_ENV="${LAB_DIR}/.env"
 
 # Docker network shared by the real stack and lab targets.
-DOCKER_NETWORK="guard-proxy_gp_internal"
+# Compose derives the network name from the project name (directory name by
+# default). Override via COMPOSE_PROJECT_NAME when running the lab alongside
+# another guard-proxy deployment on the same host.
+DOCKER_NETWORK="${COMPOSE_PROJECT_NAME:-guard-proxy}_gp_internal"
 
 # ── Environment helpers ────────────────────────────────────────────────────
 
