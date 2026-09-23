@@ -188,7 +188,7 @@ describe("DashboardPage", () => {
     // Critical went 0 -> 1: no percentage baseline exists, so it reads "new".
     expect(screen.getByText("new")).toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: /request activity across 2 intervals/i }),
+      screen.getByRole("img", { name: /waf event activity across 2 intervals/i }),
     ).toBeInTheDocument();
   });
 
@@ -198,7 +198,7 @@ describe("DashboardPage", () => {
     renderPage();
 
     const table = await screen.findByRole("table", {
-      name: /request activity per interval/i,
+      name: /waf event activity per interval/i,
     });
     expect(within(table).getByRole("columnheader", { name: "Blocked" })).toBeVisible();
     expect(within(table).getAllByRole("row")).toHaveLength(3); // header + 2 buckets
@@ -307,8 +307,8 @@ describe("DashboardPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText(/no traffic in the last 24 hours/i)).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /request activity/i })).toBeNull();
+    expect(await screen.findByText(/no waf events in the last 24 hours/i)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /waf event activity/i })).toBeNull();
   });
 
   it("keeps the chart when only the metrics endpoint fails", async () => {
@@ -319,7 +319,7 @@ describe("DashboardPage", () => {
 
     expect(await screen.findByText(/could not load metrics/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: /request activity across 2 intervals/i }),
+      screen.getByRole("img", { name: /waf event activity across 2 intervals/i }),
     ).toBeInTheDocument();
   });
 

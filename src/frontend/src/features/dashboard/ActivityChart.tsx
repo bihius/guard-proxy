@@ -67,10 +67,10 @@ export function ActivityChart({ buckets, bucketSeconds }: ActivityChartProps) {
   const slotWidth = 100 / Math.max(1, buckets.length);
   const barWidth = slotWidth * (1 - BAR_GAP_RATIO);
 
-  const summary = `Request activity across ${buckets.length} intervals: ${totals.reduce(
+  const summary = `WAF event activity across ${buckets.length} intervals: ${totals.reduce(
     (sum, value) => sum + value,
     0,
-  )} requests total, ${buckets.reduce((sum, b) => sum + b.deny, 0)} blocked.`;
+  )} events total, ${buckets.reduce((sum, b) => sum + b.deny, 0)} blocked.`;
 
   const active = hovered === null ? null : buckets[hovered];
 
@@ -84,7 +84,7 @@ export function ActivityChart({ buckets, bucketSeconds }: ActivityChartProps) {
         className="h-40 w-full sm:h-52"
         onMouseLeave={() => setHovered(null)}
       >
-        <title>Request activity over time</title>
+        <title>WAF event activity over time</title>
         <desc>{summary}</desc>
 
         {[0.25, 0.5, 0.75].map((fraction) => (
@@ -182,7 +182,7 @@ export function ActivityChart({ buckets, bucketSeconds }: ActivityChartProps) {
       {/* Screen-reader and colour-blind fallback: the same numbers as a table,
           so nothing in this chart is conveyed by colour alone. */}
       <table className="sr-only">
-        <caption>Request activity per interval</caption>
+        <caption>WAF event activity per interval</caption>
         <thead>
           <tr>
             <th scope="col">Interval</th>

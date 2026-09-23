@@ -87,7 +87,7 @@ export function DashboardPage() {
     <section className="space-y-4">
       <PageHeader
         title="Security operations"
-        description={`Traffic, threats and deployment state over the last ${windowLabel}.`}
+        description={`WAF events, threats and deployment state over the last ${windowLabel}.`}
         actions={
           <>
             {role ? <RoleBadge role={role} /> : null}
@@ -125,7 +125,7 @@ export function DashboardPage() {
               <p className="tabular-figures mt-1 font-mono text-4xl leading-none font-semibold text-foreground">
                 {overviewData ? formatCount(overviewData.requests.current) : "—"}
                 <span className="ml-2 font-sans text-sm font-normal text-muted-foreground">
-                  requests
+                  WAF events
                 </span>
               </p>
             </div>
@@ -142,8 +142,8 @@ export function DashboardPage() {
             />
           ) : isChartEmpty ? (
             <EmptyState
-              title={`No traffic in the last ${windowLabel}`}
-              description="Once a protected vhost starts receiving requests, activity will appear here."
+              title={`No WAF events in the last ${windowLabel}`}
+              description="The WAF logs a request only when a rule fires on a protected vhost; those events will appear here."
               action={
                 <Link
                   to={appRoutes.vhosts}

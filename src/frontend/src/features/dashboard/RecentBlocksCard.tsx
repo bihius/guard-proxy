@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { appRoutes } from "@/app/routes";
 import type { Log, LogSeverity } from "@/features/logs/types";
 
+import { formatClockTime } from "./format";
 import type { Resource } from "./use-dashboard-data";
 
 type RecentBlocksCardProps = {
@@ -20,14 +21,6 @@ const severityTone: Record<LogSeverity, "error" | "warning" | "info" | "neutral"
   warning: "warning",
   info: "info",
 };
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 /** Live feed of the most recent denied requests, each a jump-off into the logs. */
 export function RecentBlocksCard({ blocks }: RecentBlocksCardProps) {
@@ -91,7 +84,7 @@ export function RecentBlocksCard({ blocks }: RecentBlocksCardProps) {
               className="flex w-full cursor-pointer items-center gap-3 py-2.5 text-left transition-colors duration-150 hover:bg-surface-hover/60"
             >
               <span className="tabular-figures shrink-0 font-mono text-xs text-muted-foreground">
-                {formatTime(log.event_at)}
+                {formatClockTime(log.event_at)}
               </span>
               <span className="shrink-0 font-mono text-xs text-foreground">
                 {log.source_ip}

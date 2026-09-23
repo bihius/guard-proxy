@@ -37,7 +37,7 @@ describe("ActivityChart", () => {
 
     expect(
       screen.getByRole("img", {
-        name: /100 requests total, 50 blocked/i,
+        name: /100 events total, 50 blocked/i,
       }),
     ).toBeInTheDocument();
   });
@@ -45,7 +45,7 @@ describe("ActivityChart", () => {
   it("mirrors every value in a table so colour is never the only channel", () => {
     renderChart();
 
-    const table = screen.getByRole("table", { name: /request activity per interval/i });
+    const table = screen.getByRole("table", { name: /waf event activity per interval/i });
     const rows = within(table).getAllByRole("row");
 
     expect(rows).toHaveLength(3); // header + 2 buckets

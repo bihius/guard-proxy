@@ -27,6 +27,17 @@ function parseUtc(iso: string): Date {
   return new Date(hasTimezone ? iso : `${iso}Z`);
 }
 
+/** Wall-clock time (local zone) of a backend timestamp, e.g. for event feeds. */
+export function formatClockTime(iso: string): string {
+  const date = parseUtc(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 /** Bucket labels drop to a date once buckets span a day or more. */
 export function formatBucketLabel(iso: string, bucketSeconds: number): string {
   const date = parseUtc(iso);
