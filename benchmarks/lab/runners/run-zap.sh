@@ -30,7 +30,7 @@ ZAP_CONF="${REPO_ROOT}/benchmarks/lab/scenarios/zap/zap-baseline.conf"
 # Making the vhost genuinely resolvable via --add-host (aliased to HAProxy's
 # container IP) and pointing ZAP straight at it sends the correct Host header
 # naturally, without needing the replacer to touch it at all.
-HAPROXY_CONTAINER="$(docker ps --filter "name=haproxy" --format "{{.Names}}" | head -1 || true)"
+HAPROXY_CONTAINER="$(compose_container_id haproxy)"
 HAPROXY_IP="$(docker inspect -f "{{(index .NetworkSettings.Networks \"${DOCKER_NETWORK}\").IPAddress}}" "${HAPROXY_CONTAINER}" 2>/dev/null || true)"
 if [[ -z "${HAPROXY_IP}" ]]; then
   echo "Could not resolve HAProxy container IP on network ${DOCKER_NETWORK}." >&2

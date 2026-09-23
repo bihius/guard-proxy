@@ -167,7 +167,9 @@ copy_audit_log_snapshot() {
   local out_dir="$1"
   local out_file="${2:-${out_dir}/coraza-audit.log}"
   local coraza_id
-  coraza_id="$(docker ps --filter "name=coraza" --format "{{.ID}}" | head -1 || true)"
+  # Compose lookup, not a name filter: on a shared host "coraza" also
+  # matches other guard-proxy deployments' containers.
+  coraza_id="$(compose_container_id coraza)"
   if [[ -z "${coraza_id}" ]]; then
     echo "Note: coraza container not found; audit snapshot skipped." >&2
     return 0

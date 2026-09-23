@@ -16,42 +16,30 @@ local eval_run = os.getenv("EVAL_RUN_ID") or "manual"
 local eval_scenario = os.getenv("EVAL_SCENARIO") or "load"
 local eval_case = os.getenv("EVAL_CASE") or "wrk"
 
--- Request pool: realistic paths for the target application.
--- Add/remove paths to match the target's URL surface.
+-- Request pool: realistic paths for the target application. Every entry
+-- must return 2xx directly from the target, so any non-2xx through the WAF
+-- is a false positive rather than an application error.
+--
+-- GET-only on purpose. The previous login POST hit a route Juice Shop does
+-- not have (/api/v1/user/login, always 500). A real login
+-- (POST /rest/user/login) takes over 2s under this load, so even at 1 in 20
+-- requests it produced ~230 wrk timeouts per 30s run and dominated p95/p99.
+-- An invalid login would be a non-2xx, which the rule above excludes.
 local get_requests = {
   { method = "GET",  path = "/",                         body = nil },
   { method = "GET",  path = "/index.html",               body = nil },
   { method = "GET",  path = "/rest/admin/application-version", body = nil },
-  { method = "GET",  path = "/api/v1/status",            body = nil },
   { method = "GET",  path = "/search?q=apple",           body = nil },
   { method = "GET",  path = "/search?q=login",           body = nil },
   { method = "GET",  path = "/robots.txt",               body = nil },
   { method = "GET",  path = "/favicon.ico",              body = nil },
 }
 
--- juice-shop hashes login passwords with bcryptjs, a pure-JS *synchronous*
--- implementation that blocks Node's single event loop thread for the
--- duration of the hash. Cycling it in at the same rate as the cheap GETs
--- (1 in 9) serialises concurrent connections behind it and collapses the
--- direct (no-WAF) baseline under socket errors instead of measuring it.
--- Sending it rarely keeps it in the mix (WAF rule coverage for the login
--- path) without turning the benign load test into a bcrypt stress test.
-local login_request = {
-  method = "POST", path = "/api/v1/user/login",
-  body = '{"email":"user@example.com","password":"password123"}',
-}
-local LOGIN_EVERY_N = 20
-
 local idx = 0
 
 function request()
   idx = idx + 1
-  local r
-  if idx % LOGIN_EVERY_N == 0 then
-    r = login_request
-  else
-    r = get_requests[(idx % #get_requests) + 1]
-  end
+  local r = get_requests[(idx % #get_requests) + 1]
   local hdrs = {
     ["Host"]         = vhost,
     ["User-Agent"]   = "Mozilla/5.0 (eval-lab/1.0)",

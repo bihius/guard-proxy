@@ -32,7 +32,7 @@ echo "=== Aggregating metrics for run ${RUN_ID} ==="
 # ── Optional: extract audit log from Docker volume ─────────────────────────
 if [[ -z "${AUDIT_LOG}" ]]; then
   AUDIT_LOG="${RUN_DIR}/coraza-audit.log"
-  if ! docker cp "$(docker ps --filter "name=coraza" --format "{{.ID}}" | head -1)":/var/log/coraza/audit.log \
+  if ! docker cp "$(compose_container_id coraza)":/var/log/coraza/audit.log \
        "${AUDIT_LOG}" 2>/dev/null; then
     echo "Note: could not copy audit log from coraza container. Skipping log cross-reference."
     AUDIT_LOG=""

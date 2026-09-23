@@ -157,14 +157,22 @@ Two runs per target:
 1. **Through HAProxy+Coraza** — production WAF path
 2. **Direct to target container** — bypasses HAProxy (port mapped inside `gp_internal`)
 
+The target container is restarted and waited on before each run. Juice Shop
+retains memory on its dynamic routes under this load: one 30-second run from a
+fresh start takes the container from about 150 MB to about 2.4 GB of memory.
+Near Node's default heap limit of about 2 GB, it pauses for seconds in
+garbage collection and then aborts. Without the restart, whichever run came
+second measured a degraded or crashing target instead of the WAF. The runner
+records how often the target restarted during each run
+(`waf_target_restarts`, `baseline_target_restarts` in `performance.json`); a
+non-zero value invalidates that measurement.
+
 Overhead = WAF_value − direct_value.  
-Config: 2 threads, 20 connections, 30-second duration. Lowered from an
-earlier 4/50/60s configuration, which was enough to overload Juice Shop's
-single-threaded Node process (its login endpoint hashes passwords with a
-synchronous bcrypt implementation) and invalidate the WAF-vs-direct
-comparison instead of measuring it. The benign-mix request pool also sends
-the login POST only 1 in 20 requests (not 1 in 9) to keep it out of the
-critical path for the same reason.
+Config: 2 threads, 20 connections, 30-second duration. The benign mix is
+GET-only and every request in it returns 2xx directly from Juice Shop, so any
+non-2xx response through the WAF is a false positive. A real login
+(`POST /rest/user/login`) was left out because it takes over 2 seconds under
+this load and would dominate the tail latencies with wrk timeouts.
 
 ---
 
