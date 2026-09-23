@@ -56,12 +56,21 @@ def test_compute_delta_pct_is_none_without_baseline() -> None:
     assert compute_delta_pct(0, 0) is None
 
 
-def test_bucket_index_expression_differs_per_dialect() -> None:
-    """SQLite grouping must not silently leak into a Postgres deployment."""
+def test_postgres_bucket_index_uses_integer_division() -> None:
+    """CI has no Postgres: guard against a numeric quotient being rounded.
+
+    Postgres casts numeric to integer by rounding, so a true-division bucket
+    index moves every event in the second half of a bucket into the next one.
+    """
+    from sqlalchemy.dialects import postgresql
+
     from app.models.log import Log
 
-    sqlite_sql = str(bucket_index_expression("sqlite", Log.event_at, 0, 3600))
-    postgres_sql = str(bucket_index_expression("postgresql", Log.event_at, 0, 3600))
+    sql = str(
+        bucket_index_expression("postgresql", Log.event_at, 0, 3600).compile(
+            dialect=postgresql.dialect()
+        )
+    )
 
-    assert "strftime" in sqlite_sql
-    assert "strftime" not in postgres_sql
+    assert "NUMERIC" not in sql.upper()
+    assert "floor(" in sql.lower()

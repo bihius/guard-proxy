@@ -105,15 +105,15 @@ def _epoch_seconds(
     dialect_name: str,
     column: SQLColumnExpression[Any],
 ) -> ColumnElement[int]:
-    """Epoch seconds for a naive-UTC datetime column, per SQL dialect.
+    """Whole epoch seconds for a naive-UTC datetime column, per SQL dialect.
 
-    SQLite is the only dialect the product ships with today; the Postgres
-    branch exists so switching engines never requires rewriting the grouping
-    logic.
+    Production runs PostgreSQL; SQLite backs the test suite. Postgres
+    `extract(epoch ...)` returns a fractional numeric and casting numeric to
+    integer rounds, so it is floored first to match SQLite's truncation.
     """
     if dialect_name == "sqlite":
         return cast(func.strftime("%s", column), Integer)
-    return cast(func.extract("epoch", column), Integer)
+    return cast(func.floor(func.extract("epoch", column)), Integer)
 
 
 def bucket_index_expression(
@@ -127,10 +127,10 @@ def bucket_index_expression(
     Grouping on an integer index rather than a formatted date string keeps
     sub-hour and multi-hour buckets (5 min, 6 h) on the same code path.
     """
-    return cast(
-        (_epoch_seconds(dialect_name, column) - start_epoch) / bucket_seconds,
-        Integer,
-    )
+    # Floor division: true division would make Postgres cast a numeric
+    # quotient back to integer by rounding, shifting every event in the
+    # second half of a bucket into the next one.
+    return (_epoch_seconds(dialect_name, column) - start_epoch) // bucket_seconds
 
 
 def _to_epoch(value: datetime) -> int:
