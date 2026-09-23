@@ -198,6 +198,26 @@ describe("PolicyDetailPage", () => {
     expect(within(settingsSection).queryByText("Ban threshold")).not.toBeInTheDocument();
   });
 
+  it("shows auto-ban as disabled when DDoS protection is off", async () => {
+    mockSuccessfulLoad({
+      ...mockPolicy,
+      ddos_protection_enabled: false,
+      auto_ban_enabled: true,
+      ban_threshold: 3,
+    });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Default WAF" })).toBeInTheDocument(),
+    );
+    const settingsSection = screen.getByText("Policy settings").closest("section");
+    if (!settingsSection) throw new Error("policy settings section not found");
+
+    expect(within(settingsSection).queryByText("Enabled")).not.toBeInTheDocument();
+    expect(within(settingsSection).queryByText("Ban threshold")).not.toBeInTheDocument();
+  });
+
   it("shows error state and retries loading", async () => {
     vi.mocked(policiesApi.getPolicy)
       .mockRejectedValueOnce(new Error("Network error"))

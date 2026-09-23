@@ -279,6 +279,10 @@ export function PolicyDetailPage() {
       : []),
   ];
 
+  // Auto-ban is only generated into HAProxy config when DDoS protection is on,
+  // so a stored auto_ban_enabled flag alone does not mean IPs are being banned.
+  const autoBanActive = Boolean(policy?.ddos_protection_enabled && policy.auto_ban_enabled);
+
   return (
     <section className="space-y-8">
       <PageHeader
@@ -390,12 +394,12 @@ export function PolicyDetailPage() {
                 <dt className="font-medium text-muted-foreground">Automatic IP banning</dt>
                 <dd className="mt-1">
                   <StatusBadge
-                    label={policy.auto_ban_enabled ? "Enabled" : "Disabled"}
-                    tone={policy.auto_ban_enabled ? "success" : "neutral"}
+                    label={autoBanActive ? "Enabled" : "Disabled"}
+                    tone={autoBanActive ? "success" : "neutral"}
                   />
                 </dd>
               </div>
-              {policy.auto_ban_enabled && (
+              {autoBanActive && (
                 <>
                   <div>
                     <dt className="font-medium text-muted-foreground">Ban threshold</dt>
