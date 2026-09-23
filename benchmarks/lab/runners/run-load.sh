@@ -31,12 +31,21 @@ DIRECT_PORT="${DIRECT_PORT:-3000}"         # Target app port (no HAProxy)
 # NOTE: ghcr.io/williamyeh/wrk:4.2.0 is not pullable (registry denies access).
 # williamyeh/wrk (Docker Hub, no ghcr.io prefix, "latest" tag) is the same
 # wrk 4.2.0 build and is publicly pullable.
-WRK_IMAGE="williamyeh/wrk:latest"
+# williamyeh/wrk is amd64-only and segfaults under emulation on arm64 hosts
+# (Apple Silicon); elswork/wrk ships native amd64+arm64 builds of the same tool.
+# Pinned by digest (not ":latest") so re-runs always use the same binary and
+# results stay comparable across runs; the digest is also recorded in
+# performance.json below.
+WRK_IMAGE="elswork/wrk@sha256:529f8fe35924e549cc270d4128406d5863043e756c31395afd08acccc74ada79"
 LUA_SCRIPT="${REPO_ROOT}/benchmarks/lab/scenarios/load/benign-mix.lua"
 
-THREADS="${LOAD_THREADS:-4}"
-CONNECTIONS="${LOAD_CONNECTIONS:-50}"
-DURATION="${LOAD_DURATION:-60s}"
+# A sustained 50-connection burst was enough to OOM-crash the juiceshop
+# target (its /api/v1/user/login path runs bcrypt on every hit), which
+# invalidated the WAF-vs-direct comparison rather than measuring it. Lower
+# defaults trade some load-test realism for a target that survives the run.
+THREADS="${LOAD_THREADS:-2}"
+CONNECTIONS="${LOAD_CONNECTIONS:-20}"
+DURATION="${LOAD_DURATION:-30s}"
 
 write_manifest
 SCENARIO="load-${TARGET_VHOST}"
@@ -94,6 +103,14 @@ copy_audit_log_snapshot "${OUT_DIR}"
 
 echo "--- Run 2: direct to ${DIRECT_HOST}:${DIRECT_PORT} ---"
 
+# Run 1 leaves Juice Shop's single-threaded Node process backlogged (its
+# request queue keeps draining well after wrk's client-side connections
+# close). Starting Run 2 too soon throws it straight into that backlog:
+# observed as tens of thousands of spurious "write" socket errors even
+# though the underlying requests eventually succeed. 3s was not enough;
+# 15s reliably drains it (verified: 0 socket errors vs ~289k at 3s).
+sleep 15
+
 docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
   -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
@@ -114,39 +131,51 @@ echo "Direct run complete. Output: ${OUT_DIR}/direct.txt"
 
 echo "Parsing results..."
 
+# Exported rather than interpolated into the heredoc below: the heredoc is
+# quoted ('PY') so its regex backslashes are not shell-expanded, which means
+# shell variables inside it are not substituted either — os.environ is the
+# only reliable way to pass values in.
+export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE
+
 python3 - <<'PY'
 import re, json, os
 
+OUT_DIR = os.environ["OUT_DIR"]
+THREADS = os.environ["THREADS"]
+CONNECTIONS = os.environ["CONNECTIONS"]
+DURATION = os.environ["DURATION"]
+WRK_IMAGE = os.environ["WRK_IMAGE"]
+
 def parse_wrk(path):
-    """Parse wrk --latency output into a structured dict."""
+    """Parse wrk --latency output into a structured dict.
+
+    Reads the WRK_SUMMARY line emitted by benign-mix.lua's done() callback
+    rather than the human-readable histogram: wrk's default histogram only
+    prints the 50/75/90/99 percentiles (no 95%), and Lua's
+    latency:percentile() gives exact values instead of bucketed ones.
+    """
     if not os.path.exists(path):
         return {}
     text = open(path).read()
 
-    def find_us(pattern):
-        m = re.search(pattern, text, re.IGNORECASE)
-        if not m: return None
-        val, unit = float(m.group(1)), m.group(2).lower()
-        multipliers = {"us": 1, "ms": 1000, "s": 1_000_000}
-        return val * multipliers.get(unit, 1)
-
-    # Latency percentiles from the --latency histogram section.
-    p50  = find_us(r'50%\s+([\d.]+)(\w+)')
-    p95  = find_us(r'95%\s+([\d.]+)(\w+)')
-    p99  = find_us(r'99%\s+([\d.]+)(\w+)')
-
-    # RPS from the summary line: "Requests/sec: 1234.56"
-    rps_m = re.search(r'Requests/sec:\s+([\d.]+)', text)
-    rps = float(rps_m.group(1)) if rps_m else None
+    m = re.search(
+        r'WRK_SUMMARY\s+requests=(\d+)\s+duration_us=(\d+)\s+rps=([\d.]+)\s+'
+        r'lat_p50_us=(\d+)\s+lat_p95_us=(\d+)\s+lat_p99_us=(\d+)\s+errors=(\d+)',
+        text,
+    )
+    if not m:
+        return {}
 
     return {
-        "latency_us": {"p50": p50, "p95": p95, "p99": p99},
-        "rps": rps,
+        "latency_us": {"p50": float(m.group(4)), "p95": float(m.group(5)), "p99": float(m.group(6))},
+        "rps": float(m.group(3)),
+        "requests": int(m.group(1)),
+        "errors": int(m.group(7)),
         "raw_path": path
     }
 
-waf    = parse_wrk("${OUT_DIR}/waf.txt")
-direct = parse_wrk("${OUT_DIR}/direct.txt")
+waf    = parse_wrk(f"{OUT_DIR}/waf.txt")
+direct = parse_wrk(f"{OUT_DIR}/direct.txt")
 
 def us_to_ms(us):
     return round(us / 1000, 3) if us is not None else None
@@ -180,15 +209,20 @@ performance = {
         "p99": us_to_ms((waf_lat.get("p99") or 0) - (direct_lat.get("p99") or 0)),
     },
     "config": {
-        "threads": int("${THREADS}"),
-        "connections": int("${CONNECTIONS}"),
-        "duration": "${DURATION}"
-    }
+        "threads": int(THREADS),
+        "connections": int(CONNECTIONS),
+        "duration": DURATION,
+        "wrk_image": WRK_IMAGE
+    },
+    "waf_requests": waf.get("requests"),
+    "waf_errors": waf.get("errors"),
+    "baseline_requests": direct.get("requests"),
+    "baseline_errors": direct.get("errors")
 }
 
 print(json.dumps(performance, indent=2))
 
-with open("${OUT_DIR}/performance.json", "w") as f:
+with open(f"{OUT_DIR}/performance.json", "w") as f:
     json.dump(performance, f, indent=2)
 PY
 
