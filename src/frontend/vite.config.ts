@@ -24,5 +24,8 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["tests/*.test.mjs"],
+    // A non-UTC zone, so tests of "backend timestamps are UTC" fail when a
+    // naive timestamp is read as local time (CI runners default to UTC).
+    env: { TZ: "Europe/Warsaw" },
   },
 });

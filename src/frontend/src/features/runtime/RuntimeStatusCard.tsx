@@ -3,6 +3,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Alert } from "@/components/ui/alert";
+import { formatDateTime } from "@/lib/datetime";
 
 import type { DeploymentState, RuntimeStatusResponse } from "./types";
 
@@ -31,10 +32,6 @@ const deploymentLabelMap: Record<DeploymentState, string> = {
   failed: "Failed",
   never_deployed: "Never deployed",
 };
-
-function formatTimestamp(iso: string) {
-  return new Date(iso).toLocaleString();
-}
 
 function truncateChecksum(checksum: string | null) {
   if (!checksum) return "—";
@@ -84,7 +81,7 @@ export function RuntimeStatusCard({ status }: RuntimeStatusCardProps) {
             />
             <StatusRow
               label="Last reload"
-              value={formatTimestamp(latest_reload.created_at)}
+              value={formatDateTime(latest_reload.created_at)}
             />
             {latest_reload.status === "failed" && latest_reload.message ? (
               <Alert variant="destructive">

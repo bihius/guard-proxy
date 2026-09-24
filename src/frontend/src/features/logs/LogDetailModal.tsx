@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Modal } from "@/components/shared/Modal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { formatDateTime } from "@/lib/datetime";
 
 import type { Log, LogAction, LogSeverity } from "./types";
 
@@ -52,7 +53,7 @@ export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
     >
       <div className="max-h-[60vh] overflow-y-auto">
         <dl className="divide-y divide-border-subtle">
-          <Field label="Timestamp">{new Date(log.event_at).toLocaleString()}</Field>
+          <Field label="Timestamp">{formatDateTime(log.event_at)}</Field>
           <Field label="VHost">{log.vhost}</Field>
           <Field label="Action">
             <StatusBadge label={log.action} tone={actionTone(log.action)} />

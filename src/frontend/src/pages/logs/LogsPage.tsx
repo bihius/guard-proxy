@@ -23,6 +23,7 @@ import {
   hasAnyFilter,
   toDateTimeLocal,
 } from "@/features/logs/url-filters";
+import { formatDateTime } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 function actionTone(action: LogAction) {
@@ -247,7 +248,7 @@ export function LogsPage() {
       header: "Timestamp",
       cell: (row) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {new Date(row.event_at).toLocaleString()}
+          {formatDateTime(row.event_at)}
         </span>
       ),
     },

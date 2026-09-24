@@ -1,3 +1,5 @@
+import { parseUtc } from "@/lib/datetime";
+
 import type { MetricValue } from "./types";
 
 /**
@@ -15,16 +17,6 @@ export type DeltaDisplay = {
 
 export function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
-}
-
-/**
- * The backend serializes naive UTC timestamps (no `Z`/offset suffix), which
- * `new Date()` would otherwise interpret as local time. Treat a timestamp
- * without a timezone designator as UTC.
- */
-export function parseUtc(iso: string): Date {
-  const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso);
-  return new Date(hasTimezone ? iso : `${iso}Z`);
 }
 
 /** Wall-clock time (local zone) of a backend timestamp, e.g. for event feeds. */
