@@ -279,6 +279,10 @@ export function PolicyDetailPage() {
       : []),
   ];
 
+  // Auto-ban is only generated into HAProxy config when DDoS protection is on,
+  // so a stored auto_ban_enabled flag alone does not mean IPs are being banned.
+  const autoBanActive = Boolean(policy?.ddos_protection_enabled && policy.auto_ban_enabled);
+
   return (
     <section className="space-y-8">
       <PageHeader
@@ -336,6 +340,77 @@ export function PolicyDetailPage() {
                 <dt className="font-medium text-muted-foreground">Inbound threshold</dt>
                 <dd className="mt-1 text-foreground">{policy.inbound_anomaly_threshold}</dd>
               </div>
+              <div>
+                <dt className="font-medium text-muted-foreground">GeoIP country filtering</dt>
+                <dd className="mt-1">
+                  <StatusBadge
+                    label={
+                      policy.geoip_mode === "off"
+                        ? "Off"
+                        : policy.geoip_mode === "allowlist"
+                          ? "Allowlist"
+                          : "Blocklist"
+                    }
+                    tone={
+                      policy.geoip_mode === "off"
+                        ? "neutral"
+                        : policy.geoip_mode === "allowlist"
+                          ? "info"
+                          : "warning"
+                    }
+                  />
+                </dd>
+              </div>
+              {policy.geoip_mode !== "off" && (
+                <div>
+                  <dt className="font-medium text-muted-foreground">Country codes</dt>
+                  <dd className="mt-1 text-foreground">{policy.geoip_countries.join(", ")}</dd>
+                </div>
+              )}
+              <div>
+                <dt className="font-medium text-muted-foreground">DDoS protection</dt>
+                <dd className="mt-1">
+                  <StatusBadge
+                    label={policy.ddos_protection_enabled ? "Enabled" : "Disabled"}
+                    tone={policy.ddos_protection_enabled ? "success" : "neutral"}
+                  />
+                </dd>
+              </div>
+              {policy.ddos_protection_enabled && (
+                <>
+                  <div>
+                    <dt className="font-medium text-muted-foreground">Rate limit</dt>
+                    <dd className="mt-1 text-foreground">
+                      {policy.rate_limit_requests} req / {policy.rate_limit_window_seconds}s
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-muted-foreground">Max connections per IP</dt>
+                    <dd className="mt-1 text-foreground">{policy.max_connections_per_ip}</dd>
+                  </div>
+                </>
+              )}
+              <div>
+                <dt className="font-medium text-muted-foreground">Automatic IP banning</dt>
+                <dd className="mt-1">
+                  <StatusBadge
+                    label={autoBanActive ? "Enabled" : "Disabled"}
+                    tone={autoBanActive ? "success" : "neutral"}
+                  />
+                </dd>
+              </div>
+              {autoBanActive && (
+                <>
+                  <div>
+                    <dt className="font-medium text-muted-foreground">Ban threshold</dt>
+                    <dd className="mt-1 text-foreground">{policy.ban_threshold} violations</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-muted-foreground">Ban duration</dt>
+                    <dd className="mt-1 text-foreground">{policy.ban_duration_seconds}s</dd>
+                  </div>
+                </>
+              )}
             </dl>
           </SectionCard>
 

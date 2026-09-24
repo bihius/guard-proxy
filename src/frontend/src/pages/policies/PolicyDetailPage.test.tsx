@@ -153,6 +153,71 @@ describe("PolicyDetailPage", () => {
     expect(screen.getByText("REQUEST_HEADERS:User-Agent")).toBeInTheDocument();
   });
 
+  it("shows GeoIP, DDoS, and auto-ban settings when enabled", async () => {
+    mockSuccessfulLoad({
+      ...mockPolicy,
+      ddos_protection_enabled: true,
+      rate_limit_requests: 50,
+      rate_limit_window_seconds: 5,
+      max_connections_per_ip: 15,
+      auto_ban_enabled: true,
+      ban_threshold: 3,
+      ban_duration_seconds: 900,
+      geoip_mode: "allowlist",
+      geoip_countries: ["PL", "DE"],
+    });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Default WAF" })).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Allowlist")).toBeInTheDocument();
+    expect(screen.getByText("PL, DE")).toBeInTheDocument();
+    expect(screen.getByText("50 req / 5s")).toBeInTheDocument();
+    expect(screen.getByText("15")).toBeInTheDocument();
+    expect(screen.getByText("3 violations")).toBeInTheDocument();
+    expect(screen.getByText("900s")).toBeInTheDocument();
+  });
+
+  it("shows GeoIP, DDoS, and auto-ban as disabled without leaking their detail fields", async () => {
+    mockSuccessfulLoad();
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Default WAF" })).toBeInTheDocument(),
+    );
+    const settingsSection = screen.getByText("Policy settings").closest("section");
+    if (!settingsSection) throw new Error("policy settings section not found");
+
+    expect(within(settingsSection).getByText("Off")).toBeInTheDocument();
+    expect(within(settingsSection).getAllByText("Disabled")).toHaveLength(2);
+    expect(within(settingsSection).queryByText("Country codes")).not.toBeInTheDocument();
+    expect(within(settingsSection).queryByText("Rate limit")).not.toBeInTheDocument();
+    expect(within(settingsSection).queryByText("Ban threshold")).not.toBeInTheDocument();
+  });
+
+  it("shows auto-ban as disabled when DDoS protection is off", async () => {
+    mockSuccessfulLoad({
+      ...mockPolicy,
+      ddos_protection_enabled: false,
+      auto_ban_enabled: true,
+      ban_threshold: 3,
+    });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Default WAF" })).toBeInTheDocument(),
+    );
+    const settingsSection = screen.getByText("Policy settings").closest("section");
+    if (!settingsSection) throw new Error("policy settings section not found");
+
+    expect(within(settingsSection).queryByText("Enabled")).not.toBeInTheDocument();
+    expect(within(settingsSection).queryByText("Ban threshold")).not.toBeInTheDocument();
+  });
+
   it("shows error state and retries loading", async () => {
     vi.mocked(policiesApi.getPolicy)
       .mockRejectedValueOnce(new Error("Network error"))
