@@ -132,6 +132,12 @@ for s in summaries:
         "lat_oh_p50_ms":      lat_oh.get("p50", ""),
         "lat_oh_p95_ms":      lat_oh.get("p95", ""),
         "lat_oh_p99_ms":      lat_oh.get("p99", ""),
+        "load_waf_errors":    perf.get("waf_errors", ""),
+        "load_direct_errors": perf.get("baseline_errors", ""),
+        # Non-zero: the target crashed mid-run, so this row's load numbers
+        # are invalid and must be discarded.
+        "load_waf_target_restarts": perf.get("waf_target_restarts", ""),
+        "load_direct_target_restarts": perf.get("baseline_target_restarts", ""),
         "coraza_mem_mb_peak": cor.get("mem_mb_peak", ""),
         "coraza_cpu_pct_avg": cor.get("cpu_pct_avg", ""),
         "haproxy_mem_mb_peak": hap.get("mem_mb_peak", ""),
