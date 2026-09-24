@@ -71,9 +71,12 @@ export function SystemStatusCard({ status, overview }: SystemStatusCardProps) {
 
   const data = status.data!;
   const { deployment_state, generated_config, latest_reload } = data;
+  // A failed reload is rolled back but still records the rejected candidate's
+  // checksum, so only a successful reload says what HAProxy is running.
+  const lastReloadSucceeded = latest_reload?.status === "success";
   const hasPendingChanges =
     generated_config.checksum !== null &&
-    generated_config.checksum !== latest_reload?.config_checksum;
+    (!lastReloadSucceeded || generated_config.checksum !== latest_reload?.config_checksum);
 
   return (
     <SectionCard
@@ -115,7 +118,7 @@ export function SystemStatusCard({ status, overview }: SystemStatusCardProps) {
             value={truncateChecksum(generated_config.checksum)}
           />
           <StatusRow
-            label="Running config"
+            label={lastReloadSucceeded ? "Running config" : "Last attempted config"}
             value={truncateChecksum(latest_reload?.config_checksum ?? null)}
           />
           <StatusRow

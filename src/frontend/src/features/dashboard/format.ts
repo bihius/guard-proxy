@@ -22,7 +22,7 @@ export function formatCount(value: number): string {
  * `new Date()` would otherwise interpret as local time. Treat a timestamp
  * without a timezone designator as UTC.
  */
-function parseUtc(iso: string): Date {
+export function parseUtc(iso: string): Date {
   const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso);
   return new Date(hasTimezone ? iso : `${iso}Z`);
 }

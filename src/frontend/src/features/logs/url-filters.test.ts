@@ -26,6 +26,15 @@ describe("filtersFromSearchParams", () => {
     expect(parse("rule_id=-3").rule_id).toBeNull();
   });
 
+  it("accepts date bounds only in the picker's local datetime format", () => {
+    const filters = parse("date_from=2026-07-29T11:00&date_to=2026-07-29T12:01");
+    expect(filters.date_from).toBe("2026-07-29T11:00");
+    expect(filters.date_to).toBe("2026-07-29T12:01");
+
+    expect(parse("date_from=yesterday").date_from).toBe("");
+    expect(parse("date_to=2026-07-29T12:00:00Z").date_to).toBe("");
+  });
+
   it("returns empty filters for an unrelated query string", () => {
     expect(parse("page=2&sort=asc")).toEqual(EMPTY_FILTERS);
   });

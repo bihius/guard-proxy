@@ -64,15 +64,8 @@ export type TopSourceIp = {
   is_banned: boolean;
 };
 
-export type TopVHost = {
-  vhost: string;
-  vhost_id: number | null;
-  count: number;
-};
-
 export type TopResponse = WindowBounds & {
   limit: number;
   rules: TopRule[];
   source_ips: TopSourceIp[];
-  vhosts: TopVHost[];
 };

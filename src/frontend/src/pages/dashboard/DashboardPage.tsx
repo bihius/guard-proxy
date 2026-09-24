@@ -18,13 +18,14 @@ import { SystemStatusCard } from "@/features/dashboard/SystemStatusCard";
 import { TimeRangeTabs } from "@/features/dashboard/TimeRangeTabs";
 import { TopList } from "@/features/dashboard/TopList";
 import type { TopListItem } from "@/features/dashboard/TopList";
-import { formatCount } from "@/features/dashboard/format";
+import { formatCount, parseUtc } from "@/features/dashboard/format";
 import { useDashboardData } from "@/features/dashboard/use-dashboard-data";
 import {
   STATS_WINDOW_LABELS,
   isStatsWindow,
   type StatsWindow,
 } from "@/features/dashboard/types";
+import { toDateTimeLocal } from "@/features/logs/url-filters";
 import { useRuntimeStatus } from "@/features/runtime/use-runtime-status";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -64,12 +65,25 @@ export function DashboardPage() {
       (bucket) => bucket.allow + bucket.deny + bucket.monitor === 0,
     ) ?? false;
 
+  // Bound the log viewer to the window the counts came from, or a rule shown
+  // with 12 hits would open on its all-time history. The picker has minute
+  // precision, so the end is rounded up to keep the last partial minute.
+  const logsWindowQuery = top.data
+    ? new URLSearchParams({
+        date_from: toDateTimeLocal(parseUtc(top.data.start_at)),
+        date_to: toDateTimeLocal(
+          new Date(Math.ceil(parseUtc(top.data.end_at).getTime() / 60_000) * 60_000),
+        ),
+      }).toString()
+    : "";
+
   const ruleItems: TopListItem[] = (top.data?.rules ?? []).map((rule) => ({
     id: String(rule.rule_id),
     label: String(rule.rule_id),
     caption: rule.rule_message,
     count: rule.count,
-    onSelect: () => navigate(`${appRoutes.logs}?action=deny&rule_id=${rule.rule_id}`),
+    onSelect: () =>
+      navigate(`${appRoutes.logs}?action=deny&rule_id=${rule.rule_id}&${logsWindowQuery}`),
   }));
 
   const ipItems: TopListItem[] = (top.data?.source_ips ?? []).map((entry) => ({
@@ -79,7 +93,7 @@ export function DashboardPage() {
     badge: entry.is_banned ? <StatusBadge label="Banned" tone="error" /> : null,
     onSelect: () =>
       navigate(
-        `${appRoutes.logs}?action=deny&source_ip=${encodeURIComponent(entry.source_ip)}`,
+        `${appRoutes.logs}?action=deny&source_ip=${encodeURIComponent(entry.source_ip)}&${logsWindowQuery}`,
       ),
   }));
 

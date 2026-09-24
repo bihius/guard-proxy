@@ -108,7 +108,6 @@ const mockTop: TopResponse = {
     { source_ip: "203.0.113.5", count: 90, is_banned: true },
     { source_ip: "203.0.113.9", count: 12, is_banned: false },
   ],
-  vhosts: [{ vhost: "app.example.com", vhost_id: 1, count: 160 }],
 };
 
 const mockLog = {

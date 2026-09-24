@@ -106,7 +106,9 @@ export function ActivityChart({ buckets, bucketSeconds }: ActivityChartProps) {
 
           return (
             <g
-              key={bucket.bucket_at}
+              // Index, not bucket_at: bucket timestamps shift on every poll, and
+              // new keys would remount every bar and replay the grow animation.
+              key={index}
               onMouseEnter={() => setHovered(index)}
               onFocus={() => setHovered(index)}
             >
@@ -194,8 +196,8 @@ export function ActivityChart({ buckets, bucketSeconds }: ActivityChartProps) {
           </tr>
         </thead>
         <tbody>
-          {buckets.map((bucket) => (
-            <tr key={bucket.bucket_at}>
+          {buckets.map((bucket, index) => (
+            <tr key={index}>
               <th scope="row">{formatBucketLabel(bucket.bucket_at, bucketSeconds)}</th>
               {SERIES.map((series) => (
                 <td key={series.key}>{bucket[series.key as SeriesKey]}</td>

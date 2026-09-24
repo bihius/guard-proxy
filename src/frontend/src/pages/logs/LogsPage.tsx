@@ -18,7 +18,11 @@ import { LogDetailModal } from "@/features/logs/LogDetailModal";
 import { useLogs } from "@/features/logs/use-logs";
 import type { Log, LogAction, LogFilters } from "@/features/logs/types";
 import { EMPTY_FILTERS } from "@/features/logs/types";
-import { filtersFromSearchParams, hasAnyFilter } from "@/features/logs/url-filters";
+import {
+  filtersFromSearchParams,
+  hasAnyFilter,
+  toDateTimeLocal,
+} from "@/features/logs/url-filters";
 import { cn } from "@/lib/utils";
 
 function actionTone(action: LogAction) {
@@ -66,24 +70,6 @@ const dateRangePresets: DateRangePreset[] = [
     },
   },
 ];
-
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function toDateTimeLocal(date: Date) {
-  return [
-    date.getFullYear(),
-    "-",
-    pad(date.getMonth() + 1),
-    "-",
-    pad(date.getDate()),
-    "T",
-    pad(date.getHours()),
-    ":",
-    pad(date.getMinutes()),
-  ].join("");
-}
 
 function splitDateTime(value: string) {
   const [date = "", time = ""] = value.split("T");
