@@ -27,6 +27,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TARGET_VHOST="${TARGET_VHOST:-${LAB_JUICESHOP_DOMAIN}}"
 DIRECT_HOST="${DIRECT_HOST:-juiceshop}"    # Docker service name for direct access
+TARGET_SERVICE="${TARGET_SERVICE:-${DIRECT_HOST}}"  # Compose service restarted before each run
 DIRECT_PORT="${DIRECT_PORT:-3000}"         # Target app port (no HAProxy)
 # NOTE: ghcr.io/williamyeh/wrk:4.2.0 is not pullable (registry denies access).
 # williamyeh/wrk (Docker Hub, no ghcr.io prefix, "latest" tag) is the same
@@ -39,13 +40,48 @@ DIRECT_PORT="${DIRECT_PORT:-3000}"         # Target app port (no HAProxy)
 WRK_IMAGE="elswork/wrk@sha256:529f8fe35924e549cc270d4128406d5863043e756c31395afd08acccc74ada79"
 LUA_SCRIPT="${REPO_ROOT}/benchmarks/lab/scenarios/load/benign-mix.lua"
 
-# A sustained 50-connection burst was enough to OOM-crash the juiceshop
-# target (its /api/v1/user/login path runs bcrypt on every hit), which
-# invalidated the WAF-vs-direct comparison rather than measuring it. Lower
-# defaults trade some load-test realism for a target that survives the run.
+# A sustained 50-connection burst was enough to crash the juiceshop target
+# (V8 heap exhaustion, see reset_target below), which invalidated the
+# WAF-vs-direct comparison rather than measuring it. Lower defaults trade
+# some load-test realism for a target that survives the run.
 THREADS="${LOAD_THREADS:-2}"
 CONNECTIONS="${LOAD_CONNECTIONS:-20}"
 DURATION="${LOAD_DURATION:-30s}"
+
+# Juice Shop retains memory on its dynamic routes under sustained load: from a
+# fresh start, one 30s run of this mix takes the container from ~150MB to
+# ~2.4GB. Near Node's default heap limit (~2GB) it spends seconds per request
+# in mark-compact GC and then aborts ("JavaScript heap out of memory";
+# restarted by Docker). Whichever run came second therefore measured a
+# GC-thrashing or crashing target rather than the WAF. Restarting the target
+# before each run gives both runs the same starting state, and the restart
+# count shows whether it still crashed mid-run.
+TARGET_CONTAINER="$(compose_container_id "${TARGET_SERVICE}")"
+if [[ -z "${TARGET_CONTAINER}" ]]; then
+  echo "Could not find the ${TARGET_SERVICE} container for compose project ${COMPOSE_PROJECT_NAME:-guard-proxy}." >&2
+  exit 1
+fi
+
+target_restart_count() {
+  docker inspect -f '{{.RestartCount}}' "${TARGET_CONTAINER}"
+}
+
+reset_target() {
+  echo "Restarting ${TARGET_SERVICE} for a clean starting state..."
+  docker restart "${TARGET_CONTAINER}" >/dev/null
+  local deadline=$(( SECONDS + 120 ))
+  until docker run --rm --network "${DOCKER_NETWORK}" curlimages/curl:8.11.1 \
+      --silent --fail --output /dev/null --max-time 5 \
+      "http://${DIRECT_HOST}:${DIRECT_PORT}/"; do
+    if (( SECONDS >= deadline )); then
+      echo "${TARGET_SERVICE} did not become ready within 120s." >&2
+      exit 1
+    fi
+    sleep 2
+  done
+  # Let startup work (DB seeding, challenge setup) finish before measuring.
+  sleep 5
+}
 
 write_manifest
 SCENARIO="load-${TARGET_VHOST}"
@@ -62,9 +98,12 @@ echo ""
 
 echo "--- Run 1: through HAProxy+Coraza ---"
 
+reset_target
+WAF_RESTARTS_BEFORE="$(target_restart_count)"
+
 # Start resource sampling in the background during this run.
-CORAZA_CONTAINER="$(docker ps --filter "name=coraza" --format "{{.Names}}" | head -1 || true)"
-HAPROXY_CONTAINER="$(docker ps --filter "name=haproxy" --format "{{.Names}}" | head -1 || true)"
+CORAZA_CONTAINER="$(compose_container_id coraza)"
+HAPROXY_CONTAINER="$(compose_container_id haproxy)"
 
 # Convert duration string to seconds for sampler.
 DURATION_S="$(echo "${DURATION}" | sed 's/s$//')"
@@ -92,6 +131,7 @@ docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   "http://haproxy:80/" \
   > "${OUT_DIR}/waf.txt" 2>&1
 
+WAF_TARGET_RESTARTS=$(( $(target_restart_count) - WAF_RESTARTS_BEFORE ))
 # Wait for samplers to finish.
 wait "${SAMPLER_CORAZA_PID:-}" 2>/dev/null || true
 wait "${SAMPLER_HAPROXY_PID:-}" 2>/dev/null || true
@@ -103,13 +143,8 @@ copy_audit_log_snapshot "${OUT_DIR}"
 
 echo "--- Run 2: direct to ${DIRECT_HOST}:${DIRECT_PORT} ---"
 
-# Run 1 leaves Juice Shop's single-threaded Node process backlogged (its
-# request queue keeps draining well after wrk's client-side connections
-# close). Starting Run 2 too soon throws it straight into that backlog:
-# observed as tens of thousands of spurious "write" socket errors even
-# though the underlying requests eventually succeed. 3s was not enough;
-# 15s reliably drains it (verified: 0 socket errors vs ~289k at 3s).
-sleep 15
+reset_target
+DIRECT_RESTARTS_BEFORE="$(target_restart_count)"
 
 docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
@@ -125,6 +160,7 @@ docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   "http://${DIRECT_HOST}:${DIRECT_PORT}/" \
   > "${OUT_DIR}/direct.txt" 2>&1
 
+DIRECT_TARGET_RESTARTS=$(( $(target_restart_count) - DIRECT_RESTARTS_BEFORE ))
 echo "Direct run complete. Output: ${OUT_DIR}/direct.txt"
 
 # ── Parse & compute overhead ───────────────────────────────────────────────
@@ -135,7 +171,7 @@ echo "Parsing results..."
 # quoted ('PY') so its regex backslashes are not shell-expanded, which means
 # shell variables inside it are not substituted either — os.environ is the
 # only reliable way to pass values in.
-export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE
+export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE WAF_TARGET_RESTARTS DIRECT_TARGET_RESTARTS
 
 python3 - <<'PY'
 import re, json, os
@@ -145,6 +181,8 @@ THREADS = os.environ["THREADS"]
 CONNECTIONS = os.environ["CONNECTIONS"]
 DURATION = os.environ["DURATION"]
 WRK_IMAGE = os.environ["WRK_IMAGE"]
+WAF_TARGET_RESTARTS = int(os.environ["WAF_TARGET_RESTARTS"])
+DIRECT_TARGET_RESTARTS = int(os.environ["DIRECT_TARGET_RESTARTS"])
 
 def parse_wrk(path):
     """Parse wrk --latency output into a structured dict.
@@ -217,7 +255,11 @@ performance = {
     "waf_requests": waf.get("requests"),
     "waf_errors": waf.get("errors"),
     "baseline_requests": direct.get("requests"),
-    "baseline_errors": direct.get("errors")
+    "baseline_errors": direct.get("errors"),
+    # Non-zero means the target crashed during that run and its numbers
+    # describe the crash, not the WAF.
+    "waf_target_restarts": WAF_TARGET_RESTARTS,
+    "baseline_target_restarts": DIRECT_TARGET_RESTARTS
 }
 
 print(json.dumps(performance, indent=2))
@@ -252,5 +294,7 @@ print(f"WAF RPS     : {rps_waf:.1f}")
 print(f"Direct RPS  : {rps_direct:.1f}")
 print(f"Degradation : {rps_deg}%")
 print(f"Latency (WAF) p50={lat.get('p50')}ms  p95={lat.get('p95')}ms  p99={lat.get('p99')}ms")
+if p.get("waf_target_restarts") or p.get("baseline_target_restarts"):
+    print("WARNING: the target restarted during a run; these numbers are not valid.")
 PY
 echo "Results → ${OUT_DIR}/"

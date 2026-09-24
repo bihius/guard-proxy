@@ -32,7 +32,7 @@ echo "=== Aggregating metrics for run ${RUN_ID} ==="
 # ── Optional: extract audit log from Docker volume ─────────────────────────
 if [[ -z "${AUDIT_LOG}" ]]; then
   AUDIT_LOG="${RUN_DIR}/coraza-audit.log"
-  if ! docker cp "$(docker ps --filter "name=coraza" --format "{{.ID}}" | head -1)":/var/log/coraza/audit.log \
+  if ! docker cp "$(compose_container_id coraza)":/var/log/coraza/audit.log \
        "${AUDIT_LOG}" 2>/dev/null; then
     echo "Note: could not copy audit log from coraza container. Skipping log cross-reference."
     AUDIT_LOG=""
@@ -132,6 +132,12 @@ for s in summaries:
         "lat_oh_p50_ms":      lat_oh.get("p50", ""),
         "lat_oh_p95_ms":      lat_oh.get("p95", ""),
         "lat_oh_p99_ms":      lat_oh.get("p99", ""),
+        "load_waf_errors":    perf.get("waf_errors", ""),
+        "load_direct_errors": perf.get("baseline_errors", ""),
+        # Non-zero: the target crashed mid-run, so this row's load numbers
+        # are invalid and must be discarded.
+        "load_waf_target_restarts": perf.get("waf_target_restarts", ""),
+        "load_direct_target_restarts": perf.get("baseline_target_restarts", ""),
         "coraza_mem_mb_peak": cor.get("mem_mb_peak", ""),
         "coraza_cpu_pct_avg": cor.get("cpu_pct_avg", ""),
         "haproxy_mem_mb_peak": hap.get("mem_mb_peak", ""),
