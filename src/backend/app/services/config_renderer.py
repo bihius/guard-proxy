@@ -10,7 +10,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from app.models.custom_rule import RuleOperator, RulePhase
 from app.models.policy import PolicyEnforcementMode
-from app.models.rule_exclusion import TargetType
+from app.models.rule_exclusion import TARGET_VALUE_PATTERN, TargetType
 from app.models.rule_override import RuleAction
 
 # HAProxy identifiers (ACL names, backend names, server names): letters, digits,
@@ -27,7 +27,6 @@ _HAPROXY_HEALTH_PATH_RE = re.compile(r"^[A-Za-z0-9_./:-]+$")
 _ISO_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 _HAPROXY_MAP_PATH_RE = re.compile(r"^/[A-Za-z0-9._/-]+$")
 _MODSEC_LINE_BREAK_RE = re.compile(r"[\r\n]")
-_MODSEC_TARGET_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:/@-]+$")
 _MODSEC_VARIABLES_RE = re.compile(r"^[A-Za-z0-9_.:|@-]+$")
 
 _PHASE_BY_RULE_PHASE = {
@@ -530,7 +529,7 @@ def _ensure_unique(values: Iterable[str], field: str) -> None:
 def _validate_modsec_target_value(value: str, field: str) -> None:
     if not value:
         raise ValueError(f"{field} must not be empty")
-    if not _MODSEC_TARGET_VALUE_RE.match(value):
+    if not TARGET_VALUE_PATTERN.match(value):
         raise ValueError(
             f"{field} {value!r} contains characters unsafe for generated "
             "Coraza target syntax"

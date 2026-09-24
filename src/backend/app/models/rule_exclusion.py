@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,12 @@ class TargetType(enum.StrEnum):
     ARGS = "args"
     ARGS_NAMES = "args_names"
     REQUEST_HEADERS = "request_headers"
+
+
+# Characters a target value may contain so it can be written verbatim into
+# generated `ctl:ruleRemoveTargetById=<id>;<VARIABLE>:<value>` syntax. Checked
+# on create/update and again at config generation.
+TARGET_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_.:/@-]+$")
 
 
 class RuleExclusion(Base):

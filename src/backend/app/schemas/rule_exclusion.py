@@ -4,7 +4,30 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.models.rule_exclusion import TargetType
+from app.models.rule_exclusion import TARGET_VALUE_PATTERN, TargetType
+
+# Validated at write time, not only when config is generated: an exclusion the
+# generator cannot render would make every later config apply fail.
+
+
+def _validate_target_value(value: str) -> str:
+    if not value.strip():
+        raise ValueError("Target value must not be blank")
+    if not TARGET_VALUE_PATTERN.match(value):
+        raise ValueError(
+            "Target value may only contain letters, digits and _ . : / @ -"
+        )
+    return value
+
+
+def _validate_scope_path(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not value.startswith("/"):
+        raise ValueError("Scope path must start with /")
+    if "\r" in value or "\n" in value:
+        raise ValueError("Scope path must not contain line breaks")
+    return value
 
 
 class RuleExclusionCreate(BaseModel):
@@ -26,11 +49,13 @@ class RuleExclusionCreate(BaseModel):
 
     @field_validator("target_value")
     @classmethod
-    def target_value_must_not_be_blank(cls, value: str) -> str:
-        """Require the target value to be a non-empty string."""
-        if not value.strip():
-            raise ValueError("Target value must not be blank")
-        return value
+    def target_value_must_be_renderable(cls, value: str) -> str:
+        return _validate_target_value(value)
+
+    @field_validator("scope_path")
+    @classmethod
+    def scope_path_must_be_renderable(cls, value: str | None) -> str | None:
+        return _validate_scope_path(value)
 
 
 class RuleExclusionUpdate(BaseModel):
@@ -52,11 +77,13 @@ class RuleExclusionUpdate(BaseModel):
 
     @field_validator("target_value")
     @classmethod
-    def target_value_must_not_be_blank(cls, value: str | None) -> str | None:
-        """If target_value is provided, it must be a non-empty string."""
-        if value is not None and not value.strip():
-            raise ValueError("Target value must not be blank")
-        return value
+    def target_value_must_be_renderable(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_target_value(value)
+
+    @field_validator("scope_path")
+    @classmethod
+    def scope_path_must_be_renderable(cls, value: str | None) -> str | None:
+        return _validate_scope_path(value)
 
 
 class RuleExclusionResponse(BaseModel):
@@ -72,3 +99,21 @@ class RuleExclusionResponse(BaseModel):
     scope_path: str | None
     comment: str | None
     created_at: datetime
+
+
+class RuleExclusionSuggestion(BaseModel):
+    """Response body for POST /logs/{log_id}/suggest-exclusion.
+
+    A draft for the admin to review, not a saved exclusion. `target_type` and
+    `target_value` are null when the matched variable could not be read from
+    the event or cannot be expressed as an exclusion target;
+    `matched_variable` then says what Coraza actually matched, if known.
+    """
+
+    policy_id: int
+    rule_id: int
+    target_type: TargetType | None
+    target_value: str | None
+    scope_path: str | None
+    comment: str
+    matched_variable: str | None
