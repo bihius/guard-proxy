@@ -6,11 +6,14 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthContext } from "@/features/auth/auth-context.shared";
 import type { AuthContextValue } from "@/features/auth/auth-context.types";
 import * as logsApi from "@/features/logs/api";
+import * as policiesApi from "@/features/policies/api";
+import { ConfigChangedProvider } from "@/features/runtime/config-changed-provider";
 import * as vhostsApi from "@/features/vhosts/api";
 
 import { LogsPage } from "./LogsPage";
 
 vi.mock("@/features/logs/api");
+vi.mock("@/features/policies/api");
 vi.mock("@/features/vhosts/api");
 
 function makeAuthContext(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
@@ -56,14 +59,24 @@ const mockLog = {
 const mockListResponse = { items: [mockLog], total: 1, page: 1, page_size: 50 };
 const emptyListResponse = { items: [], total: 0, page: 1, page_size: 50 };
 
-function renderPage(initialEntry = "/logs") {
+function renderPage(initialEntry = "/logs", auth: Partial<AuthContextValue> = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <AuthContext.Provider value={makeAuthContext()}>
-        <LogsPage />
+      <AuthContext.Provider value={makeAuthContext(auth)}>
+        <ConfigChangedProvider>
+          <LogsPage />
+        </ConfigChangedProvider>
       </AuthContext.Provider>
     </MemoryRouter>,
   );
+}
+
+async function openEventDetails(auth: Partial<AuthContextValue> = {}) {
+  vi.mocked(logsApi.listLogs).mockResolvedValue(mockListResponse);
+  vi.mocked(vhostsApi.listAllPolicies).mockResolvedValue(mockPolicies);
+  renderPage("/logs", auth);
+  await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
+  await userEvent.click(screen.getByRole("button", { name: /view/i }));
 }
 
 describe("LogsPage", () => {
@@ -344,5 +357,64 @@ describe("LogsPage", () => {
     expect(rawContext).toHaveClass("whitespace-pre-wrap");
     expect(rawContext).toHaveClass("break-words");
     expect(rawContext).toHaveClass("overflow-x-hidden");
+  });
+
+  it("creates an exclusion pre-filled from the event", async () => {
+    vi.mocked(logsApi.suggestExclusion).mockResolvedValue({
+      policy_id: 1,
+      rule_id: 942100,
+      target_type: "args",
+      target_value: "username",
+      scope_path: "/login",
+      comment: "Created from log #42: SQL injection attack detected",
+      matched_variable: "ARGS:username",
+    });
+    vi.mocked(policiesApi.createRuleExclusion).mockResolvedValue({} as never);
+    await openEventDetails();
+
+    await userEvent.click(screen.getByRole("button", { name: /create exclusion/i }));
+
+    expect(await screen.findByLabelText("Target value")).toHaveValue("username");
+    expect(screen.getByLabelText("Scope path")).toHaveValue("/login");
+    await userEvent.clear(screen.getByLabelText("Scope path"));
+    await userEvent.type(screen.getByLabelText("Scope path"), "/login/");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(vi.mocked(policiesApi.createRuleExclusion)).toHaveBeenCalledWith("test-token", 1, {
+        rule_id: 942100,
+        target_type: "args",
+        target_value: "username",
+        scope_path: "/login/",
+        comment: "Created from log #42: SQL injection attack detected",
+      }),
+    );
+    expect(await screen.findByText(/takes effect after you apply/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create exclusion/i })).not.toBeInTheDocument();
+  });
+
+  it("explains when the matched variable cannot be an exclusion target", async () => {
+    vi.mocked(logsApi.suggestExclusion).mockResolvedValue({
+      policy_id: 1,
+      rule_id: 942100,
+      target_type: null,
+      target_value: null,
+      scope_path: "/login",
+      comment: "Created from log #42",
+      matched_variable: "REQUEST_URI_RAW",
+    });
+    await openEventDetails();
+
+    await userEvent.click(screen.getByRole("button", { name: /create exclusion/i }));
+
+    expect(await screen.findByText(/matched REQUEST_URI_RAW, which an exclusion cannot target/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Target value")).toHaveValue("");
+  });
+
+  it("does not offer exclusions to viewers", async () => {
+    await openEventDetails({ role: "viewer", hasRole: vi.fn().mockReturnValue(false) });
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create exclusion/i })).not.toBeInTheDocument();
   });
 });

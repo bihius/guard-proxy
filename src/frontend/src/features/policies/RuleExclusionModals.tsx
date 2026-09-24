@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { Alert } from "@/components/ui/alert";
@@ -14,6 +14,7 @@ import {
 import type {
   RuleExclusion,
   RuleExclusionCreate,
+  RuleExclusionSuggestion,
   RuleExclusionTargetType,
   RuleExclusionUpdate,
 } from "@/features/policies/types";
@@ -37,6 +38,10 @@ type RuleExclusionFormModalProps = {
   mode: "create" | "edit";
   policyId: number;
   exclusion?: RuleExclusion;
+  /** Create mode only: pre-fill the form, e.g. from a WAF event. */
+  suggestion?: RuleExclusionSuggestion;
+  /** Shown above the fields, e.g. to explain where the pre-filled values came from. */
+  intro?: ReactNode;
   onSuccess: () => void;
   onClose: () => void;
 };
@@ -45,17 +50,20 @@ export function RuleExclusionFormModal({
   mode,
   policyId,
   exclusion,
+  suggestion,
+  intro,
   onSuccess,
   onClose,
 }: RuleExclusionFormModalProps) {
   const { accessToken } = useAuth();
-  const [ruleId, setRuleId] = useState(String(exclusion?.rule_id ?? ""));
+  const initial = exclusion ?? suggestion;
+  const [ruleId, setRuleId] = useState(String(initial?.rule_id ?? ""));
   const [targetType, setTargetType] = useState<RuleExclusionTargetType>(
-    exclusion?.target_type ?? "args",
+    initial?.target_type ?? "args",
   );
-  const [targetValue, setTargetValue] = useState(exclusion?.target_value ?? "");
-  const [scopePath, setScopePath] = useState(exclusion?.scope_path ?? "");
-  const [comment, setComment] = useState(exclusion?.comment ?? "");
+  const [targetValue, setTargetValue] = useState(initial?.target_value ?? "");
+  const [scopePath, setScopePath] = useState(initial?.scope_path ?? "");
+  const [comment, setComment] = useState(initial?.comment ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -125,6 +133,7 @@ export function RuleExclusionFormModal({
         onSubmit={(e) => void handleSubmit(e)}
         className="space-y-4"
       >
+        {intro}
         {serverError && (
           <Alert
             variant="destructive"

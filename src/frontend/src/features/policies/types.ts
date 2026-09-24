@@ -76,6 +76,18 @@ export type RuleExclusionCreate = {
   comment?: string | null;
 };
 
+/** Draft exclusion derived from a WAF event (POST /logs/{id}/suggest-exclusion). */
+export type RuleExclusionSuggestion = {
+  policy_id: number;
+  rule_id: number;
+  target_type: RuleExclusionTargetType | null;
+  target_value: string | null;
+  scope_path: string | null;
+  comment: string;
+  /** What Coraza matched, e.g. "ARGS:q"; set even when it is not a valid target. */
+  matched_variable: string | null;
+};
+
 export type RuleExclusionUpdate = {
   rule_id?: number;
   target_type?: RuleExclusionTargetType;

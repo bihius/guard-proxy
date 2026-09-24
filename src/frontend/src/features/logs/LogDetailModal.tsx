@@ -1,10 +1,19 @@
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
+import { getPolicyDetailPath } from "@/app/routes";
 import { Modal } from "@/components/shared/Modal";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { RuleExclusionFormModal } from "@/features/policies/RuleExclusionModals";
+import type { RuleExclusionSuggestion } from "@/features/policies/types";
+import { useConfigChanged } from "@/features/runtime/use-config-changed";
+import { useAuth } from "@/hooks/use-auth";
+import { ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/datetime";
 
+import { suggestExclusion } from "./api";
 import type { Log, LogAction, LogSeverity } from "./types";
 
 type LogDetailModalProps = {
@@ -37,8 +46,70 @@ function Nullable({ value }: { value: string | number | null | undefined }) {
   return value !== null && value !== undefined ? <>{value}</> : <span className="text-muted-foreground">—</span>;
 }
 
+function SuggestionIntro({ suggestion }: { suggestion: RuleExclusionSuggestion }) {
+  if (suggestion.target_type !== null) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Pre-filled from this event. Rule {suggestion.rule_id} matched{" "}
+        <span className="font-mono text-foreground">{suggestion.matched_variable}</span>. Review
+        the values before saving.
+      </p>
+    );
+  }
+  return (
+    <Alert>
+      {suggestion.matched_variable
+        ? `Rule ${suggestion.rule_id} matched ${suggestion.matched_variable}, which an exclusion cannot target directly. `
+        : `The variable rule ${suggestion.rule_id} matched could not be read from this event. `}
+      Choose the target type and value yourself.
+    </Alert>
+  );
+}
+
 export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
+  const { accessToken, hasRole } = useAuth();
+  const { notifyConfigChanged } = useConfigChanged();
   const [showRawContext, setShowRawContext] = useState(false);
+  const [suggestion, setSuggestion] = useState<RuleExclusionSuggestion | null>(null);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [createdInPolicy, setCreatedInPolicy] = useState<number | null>(null);
+
+  // Exclusions belong to a policy and target one rule, so events without
+  // either cannot produce one; creating them is admin-only.
+  const canCreateExclusion = hasRole("admin") && log.rule_id !== null && log.policy_id !== null;
+
+  async function startExclusion() {
+    if (!accessToken) return;
+    setIsSuggesting(true);
+    setSuggestError(null);
+    try {
+      setSuggestion(await suggestExclusion(accessToken, log.id));
+    } catch (err) {
+      setSuggestError(err instanceof ApiError ? err.detail : "Could not prepare the exclusion");
+    } finally {
+      setIsSuggesting(false);
+    }
+  }
+
+  // Swap the dialogs instead of stacking them: one modal at a time keeps
+  // focus handling and Escape predictable.
+  if (suggestion !== null) {
+    return (
+      <RuleExclusionFormModal
+        mode="create"
+        policyId={suggestion.policy_id}
+        suggestion={suggestion}
+        intro={<SuggestionIntro suggestion={suggestion} />}
+        onSuccess={() => {
+          notifyConfigChanged();
+          setCreatedInPolicy(suggestion.policy_id);
+          setSuggestion(null);
+        }}
+        onClose={() => setSuggestion(null)}
+      />
+    );
+  }
 
   return (
     <Modal
@@ -46,11 +117,32 @@ export function LogDetailModal({ log, onClose }: LogDetailModalProps) {
       onClose={onClose}
       contentClassName="max-w-[min(80vw,72rem)]"
       footer={
-        <Button type="button" onClick={onClose} variant="outline">
-          Close
-        </Button>
+        <>
+          {canCreateExclusion && createdInPolicy === null && (
+            <Button type="button" onClick={() => void startExclusion()} disabled={isSuggesting}>
+              {isSuggesting ? "Preparing..." : "Create exclusion"}
+            </Button>
+          )}
+          <Button type="button" onClick={onClose} variant="outline">
+            Close
+          </Button>
+        </>
       }
     >
+      {suggestError && (
+        <Alert variant="destructive" aria-live="assertive" className="mb-3">
+          {suggestError}
+        </Alert>
+      )}
+      {createdInPolicy !== null && (
+        <Alert aria-live="polite" className="mb-3">
+          Exclusion saved to{" "}
+          <Link to={getPolicyDetailPath(createdInPolicy)} className="font-medium underline">
+            {log.policy_name ?? "the policy"}
+          </Link>
+          . It takes effect after you apply the configuration.
+        </Alert>
+      )}
       <div className="max-h-[60vh] overflow-y-auto">
         <dl className="divide-y divide-border-subtle">
           <Field label="Timestamp">{formatDateTime(log.event_at)}</Field>

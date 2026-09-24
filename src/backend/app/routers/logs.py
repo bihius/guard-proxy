@@ -21,6 +21,8 @@ from app.schemas.log import (
     LogListResponse,
     LogResponse,
 )
+from app.schemas.rule_exclusion import RuleExclusionSuggestion
+from app.services.exclusion_suggestion import suggest_exclusion
 from app.services.log_retention import purge_logs_older_than
 
 router = APIRouter(prefix="/logs", tags=["logs"])
@@ -208,6 +210,36 @@ def cleanup_logs(
         deleted=deleted,
         retention_days=settings.log_retention_days,
     )
+
+
+@router.post("/{log_id}/suggest-exclusion", response_model=RuleExclusionSuggestion)
+def suggest_log_exclusion(
+    log_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> RuleExclusionSuggestion:
+    """Draft a rule exclusion from a WAF event for the admin to review (admin only).
+
+    Nothing is saved: the admin edits the draft and creates it through
+    POST /policies/{policy_id}/exclusions.
+    """
+    log = db.get(Log, log_id)
+    if log is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Log not found"
+        )
+    if log.rule_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="This event has no matched rule to exclude",
+        )
+    if log.policy_id is None or db.get(Policy, log.policy_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="This event's vhost has no policy to add an exclusion to",
+        )
+    return suggest_exclusion(log, log.policy_id, log.rule_id)
+
 
 
 def _ip_to_string(address: IPvAnyAddress) -> str:

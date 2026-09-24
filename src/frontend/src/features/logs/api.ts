@@ -1,3 +1,4 @@
+import type { RuleExclusionSuggestion } from "@/features/policies/types";
 import { apiRequest } from "@/lib/api-client";
 
 import type { LogAction, LogListResponse, LogSeverity } from "./types";
@@ -39,6 +40,13 @@ export function listLogs(token: string, params: ListLogsParams, signal?: AbortSi
   if (isoTo) query.append("date_to", isoTo);
 
   return apiRequest<LogListResponse>(`/logs?${query.toString()}`, { token, signal });
+}
+
+export function suggestExclusion(token: string, logId: number) {
+  return apiRequest<RuleExclusionSuggestion>(`/logs/${logId}/suggest-exclusion`, {
+    method: "POST",
+    token,
+  });
 }
 
 type LogTotalParams = {
