@@ -76,18 +76,9 @@ class TopSourceIp(BaseModel):
     is_banned: bool = False
 
 
-class TopVHost(BaseModel):
-    """A vhost ranked by how many requests were denied against it."""
-
-    vhost: str
-    vhost_id: int | None = None
-    count: int
-
-
 class TopResponse(WindowBounds):
     """Response body returned by GET /stats/top."""
 
     limit: int = Field(ge=1, le=20)
     rules: list[TopRule]
     source_ips: list[TopSourceIp]
-    vhosts: list[TopVHost]

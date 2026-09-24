@@ -31,7 +31,6 @@ from app.schemas.stats import (
     TopResponse,
     TopRule,
     TopSourceIp,
-    TopVHost,
 )
 from app.services.ban_list_service import BanListError, BanListService
 
@@ -307,7 +306,7 @@ class StatsService:
         include_ban_state: bool,
         now: datetime | None = None,
     ) -> TopResponse:
-        """Most frequent denied rules, source IPs and vhosts in the window."""
+        """Most frequent denied rules and source IPs in the window."""
         start_at, end_at, _ = resolve_window(window, now)
 
         def denied() -> Query[Log]:
@@ -336,14 +335,6 @@ class StatsService:
             .limit(limit)
             .all()
         )
-        vhost_rows = (
-            denied()
-            .with_entities(Log.vhost, func.max(Log.vhost_id), total)
-            .group_by(Log.vhost)
-            .order_by(total.desc(), Log.vhost)
-            .limit(limit)
-            .all()
-        )
 
         banned = self._banned_ip_set() if include_ban_state else set()
 
@@ -359,10 +350,6 @@ class StatsService:
             source_ips=[
                 TopSourceIp(source_ip=ip, count=count, is_banned=ip in banned)
                 for ip, count in ip_rows
-            ],
-            vhosts=[
-                TopVHost(vhost=vhost, vhost_id=vhost_id, count=count)
-                for vhost, vhost_id, count in vhost_rows
             ],
         )
 

@@ -325,7 +325,7 @@ def test_timeseries_bucket_timestamps_are_ordered_and_evenly_spaced(
 # --- top-N -------------------------------------------------------------------
 
 
-def test_top_ranks_rules_ips_and_vhosts_by_denies(
+def test_top_ranks_rules_and_ips_by_denies(
     client: TestClient,
     viewer_token: dict[str, str],
     db: Session,
@@ -346,8 +346,6 @@ def test_top_ranks_rules_ips_and_vhosts_by_denies(
         "203.0.113.5",
         "203.0.113.9",
     ]
-    assert body["vhosts"][0]["vhost"] == "app.example.com"
-    assert body["vhosts"][0]["count"] == 4
 
 
 def test_top_respects_the_limit(
