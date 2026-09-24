@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CalendarClock, SlidersHorizontal } from "lucide-react";
 
 import type { DataTableColumn } from "@/components/shared/DataTable";
@@ -17,6 +18,11 @@ import { LogDetailModal } from "@/features/logs/LogDetailModal";
 import { useLogs } from "@/features/logs/use-logs";
 import type { Log, LogAction, LogFilters } from "@/features/logs/types";
 import { EMPTY_FILTERS } from "@/features/logs/types";
+import {
+  filtersFromSearchParams,
+  hasAnyFilter,
+  toDateTimeLocal,
+} from "@/features/logs/url-filters";
 import { cn } from "@/lib/utils";
 
 function actionTone(action: LogAction) {
@@ -64,24 +70,6 @@ const dateRangePresets: DateRangePreset[] = [
     },
   },
 ];
-
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function toDateTimeLocal(date: Date) {
-  return [
-    date.getFullYear(),
-    "-",
-    pad(date.getMonth() + 1),
-    "-",
-    pad(date.getDate()),
-    "T",
-    pad(date.getHours()),
-    ":",
-    pad(date.getMinutes()),
-  ].join("");
-}
 
 function splitDateTime(value: string) {
   const [date = "", time = ""] = value.split("T");
@@ -230,10 +218,23 @@ function DateTimeEndpoint({
 export function LogsPage() {
   const { logs, total, page, pageSize, policies, isLoading, error, setPage, applyFilters, refresh } =
     useLogs();
-  const [draft, setDraft] = useState<LogFilters>(EMPTY_FILTERS);
-  const [appliedFilters, setAppliedFilters] = useState<LogFilters>(EMPTY_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [initialFilters] = useState<LogFilters>(() =>
+    filtersFromSearchParams(searchParams),
+  );
+  const [draft, setDraft] = useState<LogFilters>(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState<LogFilters>(initialFilters);
+  const [filtersOpen, setFiltersOpen] = useState(() => hasAnyFilter(initialFilters));
   const [selected, setSelected] = useState<Log | null>(null);
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    // One-shot: `useLogs` fetches unfiltered on mount, so deep-linked filters
+    // need an explicit apply. Guarded so later edits are not overwritten.
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    if (hasAnyFilter(initialFilters)) applyFilters(initialFilters);
+  }, [applyFilters, initialFilters]);
 
   const activeFilterCount = Object.values(appliedFilters).filter(
     (value) => value !== "" && value !== null,
