@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -247,6 +248,51 @@ def test_create_custom_rule_blank_variables_returns_422(
     )
 
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        # The generator escapes only `"` and keeps backslashes, so these two
+        # have no valid SecLang form; saving them would break every apply.
+        ("operator_argument", "C:\\\\temp\\\\"),
+        ("operator_argument", 'say \\"hi\\"'),
+        ("actions", "deny\\"),
+        ("variables", "ARGS REQUEST_HEADERS"),
+    ],
+)
+def test_create_custom_rule_unrenderable_value_returns_422(
+    client: TestClient, admin_token: dict[str, str], field: str, value: str
+) -> None:
+    policy = _create_policy(client, admin_token, name=f"Unrenderable {field}")
+    body = {
+        "rule_id": 9000001,
+        "phase": "request_headers",
+        "variables": "REQUEST_FILENAME",
+        "operator": "rx",
+        "operator_argument": "^/probe\\.b$",
+        "actions": "deny,status:403",
+        field: value,
+    }
+
+    resp = client.post(
+        f"/policies/{policy['id']}/custom-rules", headers=admin_token, json=body
+    )
+
+    assert resp.status_code == 422
+
+
+def test_create_custom_rule_keeps_regex_backslashes(
+    client: TestClient, admin_token: dict[str, str]
+) -> None:
+    """A regex escape is stored exactly as typed (issue #297)."""
+    policy = _create_policy(client, admin_token, name="Regex escapes")
+
+    rule = _create_custom_rule(
+        client, admin_token, policy["id"], operator_argument="^/probe\\.b$"
+    )
+
+    assert rule["operator_argument"] == "^/probe\\.b$"
 
 
 def test_create_custom_rule_duplicate_rule_id_returns_409(

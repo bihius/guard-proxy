@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
+from app.coraza_syntax import VARIABLES_PATTERN, quoted_value_error
 from app.models.custom_rule import RuleOperator, RulePhase
 from app.models.policy import PolicyEnforcementMode
 from app.models.rule_exclusion import TargetType, target_error
@@ -26,8 +27,6 @@ _HAPROXY_ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 _HAPROXY_HEALTH_PATH_RE = re.compile(r"^[A-Za-z0-9_./:-]+$")
 _ISO_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 _HAPROXY_MAP_PATH_RE = re.compile(r"^/[A-Za-z0-9._/-]+$")
-_MODSEC_LINE_BREAK_RE = re.compile(r"[\r\n]")
-_MODSEC_VARIABLES_RE = re.compile(r"^[A-Za-z0-9_.:|@-]+$")
 
 _PHASE_BY_RULE_PHASE = {
     RulePhase.REQUEST_HEADERS: 1,
@@ -551,7 +550,7 @@ def _ensure_unique(values: Iterable[str], field: str) -> None:
 def _validate_modsec_variables(value: str, field: str) -> None:
     if not value:
         raise ValueError(f"{field} must not be empty")
-    if not _MODSEC_VARIABLES_RE.match(value):
+    if not VARIABLES_PATTERN.match(value):
         raise ValueError(
             f"{field} {value!r} contains characters unsafe for generated "
             "Coraza variable syntax"
@@ -559,12 +558,11 @@ def _validate_modsec_variables(value: str, field: str) -> None:
 
 
 def _validate_modsec_quoted_value(value: str, field: str) -> None:
-    if not value:
-        raise ValueError(f"{field} must not be empty")
-    if _MODSEC_LINE_BREAK_RE.search(value):
-        raise ValueError(f"{field} must not contain line breaks")
+    error = quoted_value_error(value)
+    if error is not None:
+        raise ValueError(f"{field} {error}")
 
 
 def _quote_modsec(value: str) -> str:
     _validate_modsec_quoted_value(value, "quoted Coraza value")
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return value.replace('"', '\\"')

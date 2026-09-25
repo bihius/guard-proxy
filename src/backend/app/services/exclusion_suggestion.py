@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from app.coraza_syntax import quoted_value_error
 from app.models.log import Log
 from app.models.rule_exclusion import TargetType, target_error
 from app.schemas.rule_exclusion import RuleExclusionSuggestion
@@ -114,7 +115,7 @@ def exclusion_target(
 def scope_path_for(request_uri: str) -> str | None:
     """Request path usable as an exclusion scope (no query string or fragment)."""
     path = request_uri.split("?", 1)[0].split("#", 1)[0]
-    if path.startswith("/") and "\r" not in path and "\n" not in path:
+    if path.startswith("/") and quoted_value_error(path) is None:
         return path
     return None
 

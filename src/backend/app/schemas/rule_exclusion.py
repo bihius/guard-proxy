@@ -5,6 +5,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from app.coraza_syntax import quoted_value_error
 from app.models.rule_exclusion import TARGET_VALUE_PATTERN, TargetType, target_error
 
 # Validated at write time, not only when config is generated: an exclusion the
@@ -26,8 +27,9 @@ def _validate_scope_path(value: str | None) -> str | None:
         return None
     if not value.startswith("/"):
         raise ValueError("Scope path must start with /")
-    if "\r" in value or "\n" in value:
-        raise ValueError("Scope path must not contain line breaks")
+    error = quoted_value_error(value)
+    if error is not None:
+        raise ValueError(f"Scope path {error}")
     return value
 
 

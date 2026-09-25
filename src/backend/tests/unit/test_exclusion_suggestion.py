@@ -180,6 +180,8 @@ def test_suggestion_without_raw_context_keeps_rule_and_path() -> None:
         ("target_value", "user agent", "may only contain"),
         ("scope_path", "api/login", "must start with /"),
         ("scope_path", "/api\nlogin", "line breaks"),
+        ("scope_path", "/api\\", "end with a backslash"),
+        ("scope_path", '/a\\"b', "backslash followed by a quote"),
     ],
 )
 def test_create_rejects_values_the_config_generator_cannot_render(

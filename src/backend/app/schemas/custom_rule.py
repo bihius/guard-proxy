@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.coraza_syntax import VARIABLES_PATTERN, quoted_value_error
 from app.models.custom_rule import (
     CUSTOM_RULE_ID_MAX,
     CUSTOM_RULE_ID_MIN,
@@ -25,6 +26,28 @@ def _validate_not_blank(value: str, field_label: str) -> str:
     """Require a string field to be non-empty."""
     if not value.strip():
         raise ValueError(f"{field_label} must not be blank")
+    return value
+
+
+# Checked at write time as well as during config generation: a stored rule
+# the generator cannot render would make every config apply fail.
+
+
+def _validate_variables(value: str) -> str:
+    _validate_not_blank(value, "Variables")
+    if not VARIABLES_PATTERN.match(value):
+        raise ValueError(
+            "Variables may only contain letters, digits and _ . : | @ -, "
+            "e.g. ARGS|REQUEST_HEADERS:User-Agent"
+        )
+    return value
+
+
+def _validate_quoted(value: str, field_label: str) -> str:
+    _validate_not_blank(value, field_label)
+    error = quoted_value_error(value)
+    if error is not None:
+        raise ValueError(f"{field_label} {error}")
     return value
 
 
@@ -63,21 +86,21 @@ class CustomRuleCreate(BaseModel):
 
     @field_validator("variables")
     @classmethod
-    def variables_must_not_be_blank(cls, value: str) -> str:
-        """Require the variables field to be a non-empty string."""
-        return _validate_not_blank(value, "Variables")
+    def variables_must_be_renderable(cls, value: str) -> str:
+        """Require a variable list the config generator can render."""
+        return _validate_variables(value)
 
     @field_validator("operator_argument")
     @classmethod
-    def operator_argument_must_not_be_blank(cls, value: str) -> str:
-        """Require the operator argument to be a non-empty string."""
-        return _validate_not_blank(value, "Operator argument")
+    def operator_argument_must_be_renderable(cls, value: str) -> str:
+        """Require an operator argument the config generator can render."""
+        return _validate_quoted(value, "Operator argument")
 
     @field_validator("actions")
     @classmethod
-    def actions_must_not_be_blank(cls, value: str) -> str:
-        """Require the actions field to be a non-empty string."""
-        return _validate_not_blank(value, "Actions")
+    def actions_must_be_renderable(cls, value: str) -> str:
+        """Require actions the config generator can render."""
+        return _validate_quoted(value, "Actions")
 
 
 class CustomRuleUpdate(BaseModel):
@@ -110,27 +133,27 @@ class CustomRuleUpdate(BaseModel):
 
     @field_validator("variables")
     @classmethod
-    def variables_must_not_be_blank(cls, value: str | None) -> str | None:
-        """If variables is provided, it must be a non-empty string."""
+    def variables_must_be_renderable(cls, value: str | None) -> str | None:
+        """If variables is provided, the config generator must be able to render it."""
         if value is None:
             return None
-        return _validate_not_blank(value, "Variables")
+        return _validate_variables(value)
 
     @field_validator("operator_argument")
     @classmethod
-    def operator_argument_must_not_be_blank(cls, value: str | None) -> str | None:
-        """If operator_argument is provided, it must be a non-empty string."""
+    def operator_argument_must_be_renderable(cls, value: str | None) -> str | None:
+        """If operator_argument is provided, the generator must be able to render it."""
         if value is None:
             return None
-        return _validate_not_blank(value, "Operator argument")
+        return _validate_quoted(value, "Operator argument")
 
     @field_validator("actions")
     @classmethod
-    def actions_must_not_be_blank(cls, value: str | None) -> str | None:
-        """If actions is provided, it must be a non-empty string."""
+    def actions_must_be_renderable(cls, value: str | None) -> str | None:
+        """If actions is provided, the config generator must be able to render it."""
         if value is None:
             return None
-        return _validate_not_blank(value, "Actions")
+        return _validate_quoted(value, "Actions")
 
 
 class CustomRuleResponse(BaseModel):
