@@ -59,7 +59,7 @@ function SuggestionIntro({ suggestion }: { suggestion: RuleExclusionSuggestion }
   return (
     <Alert>
       {suggestion.matched_variable
-        ? `Rule ${suggestion.rule_id} matched ${suggestion.matched_variable}, which an exclusion cannot target directly. `
+        ? `Rule ${suggestion.rule_id} matched ${suggestion.matched_variable}, which Guard Proxy cannot exclude yet. `
         : `The variable rule ${suggestion.rule_id} matched could not be read from this event. `}
       Choose the target type and value yourself.
     </Alert>

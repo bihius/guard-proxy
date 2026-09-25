@@ -27,12 +27,18 @@ export type RuleExclusionModalState =
   | { type: "edit"; policyId: number; exclusion: RuleExclusion }
   | { type: "delete"; policyId: number; exclusion: RuleExclusion };
 
-const TARGET_TYPE_OPTIONS: { value: RuleExclusionTargetType; label: string }[] = [
-  { value: "request_uri", label: "Request URI" },
-  { value: "args", label: "Args" },
-  { value: "args_names", label: "Args names" },
-  { value: "request_headers", label: "Request headers" },
-];
+/** `takesKey`: the Coraza variable is a collection, so the exclusion names one member. */
+const TARGET_TYPES: Record<RuleExclusionTargetType, { label: string; takesKey: boolean }> = {
+  args: { label: "Args", takesKey: true },
+  args_names: { label: "Args names", takesKey: true },
+  request_headers: { label: "Request headers", takesKey: true },
+  request_headers_names: { label: "Request header names", takesKey: true },
+  request_cookies: { label: "Request cookies", takesKey: true },
+  request_cookies_names: { label: "Request cookie names", takesKey: true },
+  request_uri: { label: "Request URI", takesKey: false },
+  request_uri_raw: { label: "Request URI (raw)", takesKey: false },
+  request_filename: { label: "Request filename (path)", takesKey: false },
+};
 
 type RuleExclusionFormModalProps = {
   mode: "create" | "edit";
@@ -77,7 +83,8 @@ export function RuleExclusionFormModal({
       return;
     }
 
-    if (!targetValue.trim()) {
+    const takesKey = TARGET_TYPES[targetType].takesKey;
+    if (takesKey && !targetValue.trim()) {
       setServerError("Target value must not be blank");
       return;
     }
@@ -88,7 +95,7 @@ export function RuleExclusionFormModal({
     const body: RuleExclusionCreate | RuleExclusionUpdate = {
       rule_id: parsedRuleId,
       target_type: targetType,
-      target_value: targetValue,
+      target_value: takesKey ? targetValue : null,
       scope_path: scopePath || null,
       comment: comment || null,
     };
@@ -167,27 +174,29 @@ export function RuleExclusionFormModal({
             value={targetType}
             onChange={(e) => setTargetType(e.target.value as RuleExclusionTargetType)}
           >
-            {TARGET_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {Object.entries(TARGET_TYPES).map(([value, { label }]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
           </Select>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="rule-exclusion-target-value" className="text-foreground">
-            Target value
-          </Label>
-          <Input
-            id="rule-exclusion-target-value"
-            type="text"
-            required
-            value={targetValue}
-            onChange={(e) => setTargetValue(e.target.value)}
-            placeholder="token"
-          />
-        </div>
+        {TARGET_TYPES[targetType].takesKey && (
+          <div className="space-y-1.5">
+            <Label htmlFor="rule-exclusion-target-value" className="text-foreground">
+              Target value
+            </Label>
+            <Input
+              id="rule-exclusion-target-value"
+              type="text"
+              required
+              value={targetValue}
+              onChange={(e) => setTargetValue(e.target.value)}
+              placeholder="token"
+            />
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="rule-exclusion-scope-path" className="text-foreground">

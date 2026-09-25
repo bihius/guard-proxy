@@ -53,16 +53,21 @@ export type RuleOverrideUpdate = {
 
 export type RuleExclusionTargetType =
   | "request_uri"
+  | "request_uri_raw"
+  | "request_filename"
   | "args"
   | "args_names"
-  | "request_headers";
+  | "request_headers"
+  | "request_headers_names"
+  | "request_cookies"
+  | "request_cookies_names";
 
 export type RuleExclusion = {
   id: number;
   policy_id: number;
   rule_id: number;
   target_type: RuleExclusionTargetType;
-  target_value: string;
+  target_value: string | null;
   scope_path: string | null;
   comment: string | null;
   created_at: string;
@@ -71,7 +76,7 @@ export type RuleExclusion = {
 export type RuleExclusionCreate = {
   rule_id: number;
   target_type: RuleExclusionTargetType;
-  target_value: string;
+  target_value: string | null;
   scope_path?: string | null;
   comment?: string | null;
 };
@@ -91,7 +96,7 @@ export type RuleExclusionSuggestion = {
 export type RuleExclusionUpdate = {
   rule_id?: number;
   target_type?: RuleExclusionTargetType;
-  target_value?: string;
+  target_value?: string | null;
   scope_path?: string | null;
   comment?: string | null;
 };

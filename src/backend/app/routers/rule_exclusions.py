@@ -15,6 +15,7 @@ from app.schemas.rule_exclusion import (
 from app.services.exclusion_service import (
     ExclusionDisallowedFieldError,
     ExclusionFieldCannotBeNullError,
+    ExclusionInvalidTargetError,
     ExclusionNotFoundError,
     ExclusionPolicyNotFoundError,
     ExclusionService,
@@ -127,7 +128,7 @@ def update_rule_exclusion(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
         ) from error
-    except ExclusionFieldCannotBeNullError as error:
+    except (ExclusionFieldCannotBeNullError, ExclusionInvalidTargetError) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),

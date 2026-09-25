@@ -111,8 +111,8 @@ def test_suggestion_is_a_valid_exclusion_for_a_named_argument() -> None:
     RuleExclusionCreate.model_validate(suggestion.model_dump())
 
 
-def test_suggestion_leaves_target_empty_when_it_would_not_take_effect() -> None:
-    """REQUEST_URI_RAW is not REQUEST_URI: removing the latter would not help."""
+def test_suggestion_for_a_single_value_variable_has_no_key() -> None:
+    """930100 matches REQUEST_URI_RAW, which is not REQUEST_URI."""
     log = _log(
         _context(
             _message(941100, "Matched Data: /../ found within REQUEST_URI_RAW: /?f=..")
@@ -122,26 +122,44 @@ def test_suggestion_leaves_target_empty_when_it_would_not_take_effect() -> None:
 
     suggestion = suggest_exclusion(log, policy_id=3, rule_id=941100)
 
-    assert suggestion.target_type is None
+    assert suggestion.target_type == TargetType.REQUEST_URI_RAW
     assert suggestion.target_value is None
-    assert suggestion.matched_variable == "REQUEST_URI_RAW"
     assert suggestion.scope_path == "/"
+    RuleExclusionCreate.model_validate(suggestion.model_dump())
 
 
-def test_suggestion_leaves_target_empty_for_an_unrenderable_name() -> None:
-    log = _log(
-        _context(
-            _message(
-                941100,
-                'Matched Data: x found within ARGS_NAMES:{\\"a\\":1}: {\\"a\\":1}',
-            )
-        )
-    )
+def test_suggestion_leaves_target_empty_for_an_unsupported_variable() -> None:
+    """ARGS_GET is not ARGS: removing ARGS:q would not stop a match on it."""
+    log = _log(_context(_message(941100, "Matched Data: x found within ARGS_GET:q: x")))
+
+    suggestion = suggest_exclusion(log, policy_id=3, rule_id=941100)
+
+    assert (suggestion.target_type, suggestion.target_value) == (None, None)
+    assert suggestion.matched_variable == "ARGS_GET:q"
+
+
+@pytest.mark.parametrize(
+    ("data", "matched_variable"),
+    [
+        ('x found within ARGS_NAMES:{\\"a\\":1}: {\\"a\\":1}', 'ARGS_NAMES:{"a":1}'),
+        # A flattened JSON body with ": " inside the name: parsing stops at the
+        # first ": ", so the name is cut short, but it still is not a valid
+        # target, so no wrong exclusion is suggested.
+        (
+            'x found within ARGS_NAMES:{\\"a\\": 1, \\"b\\": 2}: {\\"a\\": 1}',
+            'ARGS_NAMES:{"a"',
+        ),
+    ],
+)
+def test_suggestion_leaves_target_empty_for_an_unrenderable_name(
+    data: str, matched_variable: str
+) -> None:
+    log = _log(_context(_message(941100, f"Matched Data: {data}")))
 
     suggestion = suggest_exclusion(log, policy_id=3, rule_id=941100)
 
     assert suggestion.target_type is None
-    assert suggestion.matched_variable == 'ARGS_NAMES:{"a":1}'
+    assert suggestion.matched_variable == matched_variable
 
 
 def test_suggestion_without_raw_context_keeps_rule_and_path() -> None:

@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from app.models.log import Log
-from app.models.rule_exclusion import TARGET_VALUE_PATTERN, TargetType
+from app.models.rule_exclusion import TargetType, target_error
 from app.schemas.rule_exclusion import RuleExclusionSuggestion
 
 # coraza-spoa writes each matched rule as one `error_message` of bracketed
@@ -17,17 +17,17 @@ _DATA_RE = re.compile(r'\[data "((?:[^"\\]|\\.)*)"\]')
 # `within <COLLECTION>: <value>` or `within <COLLECTION>:<name>: <value>`. The
 # name ends at the first ": " — it may itself contain ":" (e.g. a JSON body
 # parsed as one argument name) — or at the end when Coraza truncated the text.
+# A name that itself contains ": " is cut short; such names contain a space,
+# which no target value may, so in practice this yields no target rather than
+# a wrong one.
 _WITHIN_RE = re.compile(r"within ([A-Z_]+)(?:: |:(.*?)(?:: |$))")
 
-# Exact collection names only. The generator emits
-# `ctl:ruleRemoveTargetById=<id>;<COLLECTION>[:<name>]`, which removes exactly
-# that variable: mapping e.g. REQUEST_URI_RAW or ARGS_GET onto a neighbouring
-# target type would save an exclusion that never takes effect.
-_TARGET_TYPE_BY_COLLECTION = {
-    "ARGS": TargetType.ARGS,
-    "ARGS_NAMES": TargetType.ARGS_NAMES,
-    "REQUEST_HEADERS": TargetType.REQUEST_HEADERS,
-    "REQUEST_URI": TargetType.REQUEST_URI,
+# Exact variable names only. The generator emits
+# `ctl:ruleRemoveTargetById=<id>;<VARIABLE>[:<name>]`, which removes exactly
+# that variable: mapping e.g. ARGS_GET onto ARGS would save an exclusion
+# that never takes effect.
+_TARGET_TYPE_BY_VARIABLE = {
+    target_type.variable: target_type for target_type in TargetType
 }
 
 _COMMENT_MAX_LENGTH = 200
@@ -76,15 +76,11 @@ def suggest_exclusion(
     if matched is not None:
         collection, name = matched
         matched_variable = collection if name is None else f"{collection}:{name}"
-        target_type = _TARGET_TYPE_BY_COLLECTION.get(collection)
-        if target_type == TargetType.REQUEST_URI:
-            # The generator ignores the value for REQUEST_URI but still
-            # requires a renderable one.
-            target_value = "REQUEST_URI"
-        elif target_type is not None and name and TARGET_VALUE_PATTERN.match(name):
-            target_value = name
-        else:
-            target_type = None
+        target_type = _TARGET_TYPE_BY_VARIABLE.get(collection)
+        if target_type is not None:
+            target_value = name if target_type.takes_key else None
+            if target_error(target_type, target_value) is not None:
+                target_type, target_value = None, None
 
     path = log.request_uri.split("?", 1)[0].split("#", 1)[0]
     scope_path = (

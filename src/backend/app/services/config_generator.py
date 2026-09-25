@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -33,6 +34,8 @@ from app.services.config_renderer import (
 # same file through /etc/haproxy/generated. Deliberately outside
 # releases/<id>/ because the map is refreshed on its own daily schedule.
 HAPROXY_GEOIP_MAP_PATH = "/etc/haproxy/generated/geoip/country.map"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -376,16 +379,30 @@ def _to_rule_exclusion_contexts(
     exclusions: list[RuleExclusion],
 ) -> tuple[RuleExclusionRenderContext, ...]:
     control_rule_ids = _control_rule_ids_for_scoped_exclusions(exclusions)
-    return tuple(
-        RuleExclusionRenderContext(
-            rule_id=exclusion.rule_id,
-            target_type=exclusion.target_type,
-            target_value=exclusion.target_value,
-            scope_path=exclusion.scope_path,
-            control_rule_id=control_rule_ids.get(id(exclusion)),
-        )
-        for exclusion in exclusions
-    )
+    contexts: list[RuleExclusionRenderContext] = []
+    for exclusion in exclusions:
+        try:
+            contexts.append(
+                RuleExclusionRenderContext(
+                    rule_id=exclusion.rule_id,
+                    target_type=exclusion.target_type,
+                    target_value=exclusion.target_value,
+                    scope_path=exclusion.scope_path,
+                    control_rule_id=control_rule_ids.get(id(exclusion)),
+                )
+            )
+        except ValueError as error:
+            # Rows saved before write-time validation existed can hold values
+            # the generator cannot render. Failing here would block every
+            # config apply until someone deletes the row; skipping it only
+            # leaves that one rule inspecting the target (fail-safe).
+            logger.warning(
+                "Skipping rule exclusion %s of policy %s: %s",
+                exclusion.id,
+                exclusion.policy_id,
+                error,
+            )
+    return tuple(contexts)
 
 
 def _control_rule_ids_for_scoped_exclusions(

@@ -312,21 +312,31 @@ def test_patch_rule_exclusion_null_target_type_returns_422(
     assert "target_type" in resp.json()["detail"]
 
 
-def test_patch_rule_exclusion_null_target_value_returns_422(
+def test_patch_rule_exclusion_target_must_fit_target_type(
     client: TestClient, admin_token: dict[str, str]
 ) -> None:
-    """Explicitly setting target_value to null in PATCH returns 422."""
-    policy = _create_policy(client, admin_token, name="Patch null target_value")
+    """A collection needs a key; a single-value variable must not have one."""
+    policy = _create_policy(client, admin_token, name="Patch target consistency")
     created = _create_rule_exclusion(client, admin_token, policy["id"])
+    url = f"/policies/{policy['id']}/exclusions/{created['id']}"
 
-    resp = client.patch(
-        f"/policies/{policy['id']}/exclusions/{created['id']}",
-        headers=admin_token,
-        json={"target_value": None},
+    cleared = client.patch(url, headers=admin_token, json={"target_value": None})
+    keyed_single = client.patch(
+        url, headers=admin_token, json={"target_type": "request_uri_raw"}
     )
+    assert (cleared.status_code, keyed_single.status_code) == (422, 422)
+    assert client.get(url, headers=admin_token).json()["target_value"] == "token"
 
-    assert resp.status_code == 422
-    assert "target_value" in resp.json()["detail"]
+    switched = client.patch(
+        url,
+        headers=admin_token,
+        json={"target_type": "request_uri_raw", "target_value": None},
+    )
+    assert switched.status_code == 200
+    assert (switched.json()["target_type"], switched.json()["target_value"]) == (
+        "request_uri_raw",
+        None,
+    )
 
 
 def test_delete_rule_exclusion_admin_returns_204(

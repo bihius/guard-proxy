@@ -3,9 +3,9 @@
 from sqlalchemy.orm import Session
 
 from app.models.policy import Policy
-from app.models.rule_exclusion import RuleExclusion, TargetType
+from app.models.rule_exclusion import RuleExclusion, TargetType, target_error
 
-NON_NULLABLE_PATCH_FIELDS = {"rule_id", "target_type", "target_value"}
+NON_NULLABLE_PATCH_FIELDS = {"rule_id", "target_type"}
 
 # scope_path and comment are intentionally included: they are nullable and may be
 # set to None.
@@ -46,6 +46,10 @@ class ExclusionDisallowedFieldError(ExclusionError):
         super().__init__(f"Field '{field_name}' cannot be patched")
 
 
+class ExclusionInvalidTargetError(ExclusionError):
+    """Raised when a PATCH leaves target_type and target_value inconsistent."""
+
+
 class ExclusionService:
     """Encapsulates rule exclusion CRUD business rules.
 
@@ -63,7 +67,7 @@ class ExclusionService:
         *,
         rule_id: int,
         target_type: TargetType,
-        target_value: str,
+        target_value: str | None,
         scope_path: str | None,
         comment: str | None,
     ) -> RuleExclusion:
@@ -105,6 +109,13 @@ class ExclusionService:
         self._get_policy_or_raise(policy_id)
         exclusion = self._get_exclusion_or_raise(policy_id, exclusion_id)
         self._validate_patch_data(patch_data)
+
+        error = target_error(
+            patch_data.get("target_type", exclusion.target_type),  # type: ignore[arg-type]
+            patch_data.get("target_value", exclusion.target_value),  # type: ignore[arg-type]
+        )
+        if error is not None:
+            raise ExclusionInvalidTargetError(error)
 
         for field, value in patch_data.items():
             setattr(exclusion, field, value)

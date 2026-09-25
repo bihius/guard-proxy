@@ -10,7 +10,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from app.models.custom_rule import RuleOperator, RulePhase
 from app.models.policy import PolicyEnforcementMode
-from app.models.rule_exclusion import TARGET_VALUE_PATTERN, TargetType
+from app.models.rule_exclusion import TargetType, target_error
 from app.models.rule_override import RuleAction
 
 # HAProxy identifiers (ACL names, backend names, server names): letters, digits,
@@ -51,13 +51,6 @@ _OPERATOR_BY_RULE_OPERATOR = {
     RuleOperator.PM: "pm",
     RuleOperator.WITHIN: "within",
     RuleOperator.IP_MATCH: "ipMatch",
-}
-
-_TARGET_BY_TARGET_TYPE = {
-    TargetType.REQUEST_URI: "REQUEST_URI",
-    TargetType.ARGS: "ARGS",
-    TargetType.ARGS_NAMES: "ARGS_NAMES",
-    TargetType.REQUEST_HEADERS: "REQUEST_HEADERS",
 }
 
 
@@ -315,17 +308,16 @@ class RuleExclusionRenderContext:
 
     rule_id: int
     target_type: TargetType
-    target_value: str
+    target_value: str | None
     scope_path: str | None = None
     control_rule_id: int | None = None
 
     def __post_init__(self) -> None:
         if self.rule_id <= 0:
             raise ValueError("RuleExclusionRenderContext.rule_id must be positive")
-        _validate_modsec_target_value(
-            self.target_value,
-            "RuleExclusionRenderContext.target_value",
-        )
+        error = target_error(self.target_type, self.target_value)
+        if error is not None:
+            raise ValueError(f"RuleExclusionRenderContext target: {error}")
         if self.scope_path is not None:
             _validate_modsec_quoted_value(
                 self.scope_path,
@@ -347,10 +339,9 @@ class RuleExclusionRenderContext:
 
     @property
     def target(self) -> str:
-        variable = _TARGET_BY_TARGET_TYPE[self.target_type]
-        if self.target_type == TargetType.REQUEST_URI:
-            return variable
-        return f"{variable}:{self.target_value}"
+        if self.target_value is None:
+            return self.target_type.variable
+        return f"{self.target_type.variable}:{self.target_value}"
 
     @property
     def quoted_scope_path(self) -> str:
@@ -497,7 +488,7 @@ def _sorted_exclusions(
             exclusion.scope_path or "",
             exclusion.rule_id,
             exclusion.target_type.value,
-            exclusion.target_value,
+            exclusion.target_value or "",
         ),
     )
     global_exclusions = [
@@ -524,16 +515,6 @@ def _ensure_unique(values: Iterable[str], field: str) -> None:
         if value in seen:
             raise ValueError(f"{field} contains duplicate HAProxy identifier {value!r}")
         seen.add(value)
-
-
-def _validate_modsec_target_value(value: str, field: str) -> None:
-    if not value:
-        raise ValueError(f"{field} must not be empty")
-    if not TARGET_VALUE_PATTERN.match(value):
-        raise ValueError(
-            f"{field} {value!r} contains characters unsafe for generated "
-            "Coraza target syntax"
-        )
 
 
 def _validate_modsec_variables(value: str, field: str) -> None:

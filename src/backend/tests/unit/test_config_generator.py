@@ -689,6 +689,57 @@ def test_generate_one_vhost_with_policy_exclusion_and_custom_rule() -> None:
     ) in generated.rule_overrides_conf
 
 
+def test_generate_skips_an_unrenderable_legacy_exclusion(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A row saved before write-time validation must not block config apply."""
+    vhost = VHost(
+        id=1,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+    )
+    legacy = RuleExclusion(
+        id=7,
+        policy_id=10,
+        rule_id=942100,
+        target_type=TargetType.ARGS,
+        target_value="user agent",
+    )
+    valid = RuleExclusion(
+        id=8,
+        policy_id=10,
+        rule_id=930100,
+        target_type=TargetType.REQUEST_URI_RAW,
+        target_value=None,
+    )
+
+    generated = generate(
+        vhosts=[vhost],
+        policies=[policy],
+        rule_overrides=[],
+        rule_exclusions=[legacy, valid],
+    )
+
+    assert "user agent" not in generated.rule_overrides_conf
+    assert (
+        "SecRuleRemoveTargetById 930100 REQUEST_URI_RAW"
+        in generated.rule_overrides_conf
+    )
+    assert "Skipping rule exclusion 7 of policy 10" in caplog.text
+
+
 def test_generate_uses_policy_from_path_binding() -> None:
     vhost = VHost(
         id=1,

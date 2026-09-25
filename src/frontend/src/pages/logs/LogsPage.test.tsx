@@ -401,14 +401,41 @@ describe("LogsPage", () => {
       target_value: null,
       scope_path: "/login",
       comment: "Created from log #42",
-      matched_variable: "REQUEST_URI_RAW",
+      matched_variable: "ARGS_GET:q",
     });
     await openEventDetails();
 
     await userEvent.click(screen.getByRole("button", { name: /create exclusion/i }));
 
-    expect(await screen.findByText(/matched REQUEST_URI_RAW, which an exclusion cannot target/)).toBeInTheDocument();
+    expect(await screen.findByText(/matched ARGS_GET:q, which Guard Proxy cannot exclude yet/)).toBeInTheDocument();
     expect(screen.getByLabelText("Target value")).toHaveValue("");
+  });
+
+  it("saves an exclusion on a single-value variable without a target value", async () => {
+    vi.mocked(logsApi.suggestExclusion).mockResolvedValue({
+      policy_id: 1,
+      rule_id: 930100,
+      target_type: "request_uri_raw",
+      target_value: null,
+      scope_path: "/files",
+      comment: "Created from log #42",
+      matched_variable: "REQUEST_URI_RAW",
+    });
+    vi.mocked(policiesApi.createRuleExclusion).mockResolvedValue({} as never);
+    await openEventDetails();
+
+    await userEvent.click(screen.getByRole("button", { name: /create exclusion/i }));
+    expect(await screen.findByLabelText("Target type")).toHaveValue("request_uri_raw");
+    expect(screen.queryByLabelText("Target value")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(vi.mocked(policiesApi.createRuleExclusion)).toHaveBeenCalledWith(
+        "test-token",
+        1,
+        expect.objectContaining({ target_type: "request_uri_raw", target_value: null }),
+      ),
+    );
   });
 
   it("does not offer exclusions to viewers", async () => {
