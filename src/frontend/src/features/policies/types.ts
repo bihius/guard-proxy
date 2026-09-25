@@ -53,16 +53,21 @@ export type RuleOverrideUpdate = {
 
 export type RuleExclusionTargetType =
   | "request_uri"
+  | "request_uri_raw"
+  | "request_filename"
   | "args"
   | "args_names"
-  | "request_headers";
+  | "request_headers"
+  | "request_headers_names"
+  | "request_cookies"
+  | "request_cookies_names";
 
 export type RuleExclusion = {
   id: number;
   policy_id: number;
   rule_id: number;
   target_type: RuleExclusionTargetType;
-  target_value: string;
+  target_value: string | null;
   scope_path: string | null;
   comment: string | null;
   created_at: string;
@@ -71,15 +76,27 @@ export type RuleExclusion = {
 export type RuleExclusionCreate = {
   rule_id: number;
   target_type: RuleExclusionTargetType;
-  target_value: string;
+  target_value: string | null;
   scope_path?: string | null;
   comment?: string | null;
+};
+
+/** Draft exclusion derived from a WAF event (POST /logs/{id}/suggest-exclusion). */
+export type RuleExclusionSuggestion = {
+  policy_id: number;
+  rule_id: number;
+  target_type: RuleExclusionTargetType | null;
+  target_value: string | null;
+  scope_path: string | null;
+  comment: string;
+  /** What Coraza matched, e.g. "ARGS:q"; set even when it is not a valid target. */
+  matched_variable: string | null;
 };
 
 export type RuleExclusionUpdate = {
   rule_id?: number;
   target_type?: RuleExclusionTargetType;
-  target_value?: string;
+  target_value?: string | null;
   scope_path?: string | null;
   comment?: string | null;
 };

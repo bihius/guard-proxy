@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { Alert } from "@/components/ui/alert";
@@ -14,6 +14,7 @@ import {
 import type {
   RuleExclusion,
   RuleExclusionCreate,
+  RuleExclusionSuggestion,
   RuleExclusionTargetType,
   RuleExclusionUpdate,
 } from "@/features/policies/types";
@@ -26,17 +27,27 @@ export type RuleExclusionModalState =
   | { type: "edit"; policyId: number; exclusion: RuleExclusion }
   | { type: "delete"; policyId: number; exclusion: RuleExclusion };
 
-const TARGET_TYPE_OPTIONS: { value: RuleExclusionTargetType; label: string }[] = [
-  { value: "request_uri", label: "Request URI" },
-  { value: "args", label: "Args" },
-  { value: "args_names", label: "Args names" },
-  { value: "request_headers", label: "Request headers" },
-];
+/** `takesKey`: the Coraza variable is a collection, so the exclusion names one member. */
+const TARGET_TYPES: Record<RuleExclusionTargetType, { label: string; takesKey: boolean }> = {
+  args: { label: "Args", takesKey: true },
+  args_names: { label: "Args names", takesKey: true },
+  request_headers: { label: "Request headers", takesKey: true },
+  request_headers_names: { label: "Request header names", takesKey: true },
+  request_cookies: { label: "Request cookies", takesKey: true },
+  request_cookies_names: { label: "Request cookie names", takesKey: true },
+  request_uri: { label: "Request URI", takesKey: false },
+  request_uri_raw: { label: "Request URI (raw)", takesKey: false },
+  request_filename: { label: "Request filename (path)", takesKey: false },
+};
 
 type RuleExclusionFormModalProps = {
   mode: "create" | "edit";
   policyId: number;
   exclusion?: RuleExclusion;
+  /** Create mode only: pre-fill the form, e.g. from a WAF event. */
+  suggestion?: RuleExclusionSuggestion;
+  /** Shown above the fields, e.g. to explain where the pre-filled values came from. */
+  intro?: ReactNode;
   onSuccess: () => void;
   onClose: () => void;
 };
@@ -45,17 +56,20 @@ export function RuleExclusionFormModal({
   mode,
   policyId,
   exclusion,
+  suggestion,
+  intro,
   onSuccess,
   onClose,
 }: RuleExclusionFormModalProps) {
   const { accessToken } = useAuth();
-  const [ruleId, setRuleId] = useState(String(exclusion?.rule_id ?? ""));
+  const initial = exclusion ?? suggestion;
+  const [ruleId, setRuleId] = useState(String(initial?.rule_id ?? ""));
   const [targetType, setTargetType] = useState<RuleExclusionTargetType>(
-    exclusion?.target_type ?? "args",
+    initial?.target_type ?? "args",
   );
-  const [targetValue, setTargetValue] = useState(exclusion?.target_value ?? "");
-  const [scopePath, setScopePath] = useState(exclusion?.scope_path ?? "");
-  const [comment, setComment] = useState(exclusion?.comment ?? "");
+  const [targetValue, setTargetValue] = useState(initial?.target_value ?? "");
+  const [scopePath, setScopePath] = useState(initial?.scope_path ?? "");
+  const [comment, setComment] = useState(initial?.comment ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -69,7 +83,8 @@ export function RuleExclusionFormModal({
       return;
     }
 
-    if (!targetValue.trim()) {
+    const takesKey = TARGET_TYPES[targetType].takesKey;
+    if (takesKey && !targetValue.trim()) {
       setServerError("Target value must not be blank");
       return;
     }
@@ -80,7 +95,7 @@ export function RuleExclusionFormModal({
     const body: RuleExclusionCreate | RuleExclusionUpdate = {
       rule_id: parsedRuleId,
       target_type: targetType,
-      target_value: targetValue,
+      target_value: takesKey ? targetValue : null,
       scope_path: scopePath || null,
       comment: comment || null,
     };
@@ -125,6 +140,7 @@ export function RuleExclusionFormModal({
         onSubmit={(e) => void handleSubmit(e)}
         className="space-y-4"
       >
+        {intro}
         {serverError && (
           <Alert
             variant="destructive"
@@ -158,27 +174,29 @@ export function RuleExclusionFormModal({
             value={targetType}
             onChange={(e) => setTargetType(e.target.value as RuleExclusionTargetType)}
           >
-            {TARGET_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {Object.entries(TARGET_TYPES).map(([value, { label }]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
           </Select>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="rule-exclusion-target-value" className="text-foreground">
-            Target value
-          </Label>
-          <Input
-            id="rule-exclusion-target-value"
-            type="text"
-            required
-            value={targetValue}
-            onChange={(e) => setTargetValue(e.target.value)}
-            placeholder="token"
-          />
-        </div>
+        {TARGET_TYPES[targetType].takesKey && (
+          <div className="space-y-1.5">
+            <Label htmlFor="rule-exclusion-target-value" className="text-foreground">
+              Target value
+            </Label>
+            <Input
+              id="rule-exclusion-target-value"
+              type="text"
+              required
+              value={targetValue}
+              onChange={(e) => setTargetValue(e.target.value)}
+              placeholder="token"
+            />
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="rule-exclusion-scope-path" className="text-foreground">

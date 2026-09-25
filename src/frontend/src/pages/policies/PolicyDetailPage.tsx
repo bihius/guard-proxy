@@ -161,7 +161,7 @@ export function PolicyDetailPage() {
   const exclusionColumns: DataTableColumn<RuleExclusion>[] = [
     { key: "rule_id", header: "Rule ID", cell: (row) => String(row.rule_id) },
     { key: "target_type", header: "Target type", cell: (row) => row.target_type },
-    { key: "target_value", header: "Target value", cell: (row) => row.target_value },
+    { key: "target_value", header: "Target value", cell: (row) => row.target_value ?? "—" },
     {
       key: "scope_path",
       header: "Scope path",

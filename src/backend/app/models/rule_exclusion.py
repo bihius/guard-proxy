@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -16,16 +17,60 @@ if TYPE_CHECKING:
 
 
 class TargetType(enum.StrEnum):
-    """CRS variable a rule exclusion narrows inspection on.
+    """Coraza variable a rule exclusion removes from one rule's inspection.
 
-    Mirrors the targets supported by SecRuleRemoveTargetById:
-    REQUEST_URI, ARGS, ARGS_NAMES, REQUEST_HEADERS.
+    Each value is the lower-cased Coraza variable name, rendered as
+    `ctl:ruleRemoveTargetById=<rule>;<VARIABLE>[:<key>]`. The names must match
+    exactly: removing REQUEST_URI does nothing for a rule that matched
+    REQUEST_URI_RAW.
     """
 
+    # Single-value variables: the exclusion has no key (target_value is null).
     REQUEST_URI = "request_uri"
+    REQUEST_URI_RAW = "request_uri_raw"
+    REQUEST_FILENAME = "request_filename"
+    # Collections: the exclusion names one member (target_value is required).
     ARGS = "args"
     ARGS_NAMES = "args_names"
     REQUEST_HEADERS = "request_headers"
+    REQUEST_HEADERS_NAMES = "request_headers_names"
+    REQUEST_COOKIES = "request_cookies"
+    REQUEST_COOKIES_NAMES = "request_cookies_names"
+
+    @property
+    def variable(self) -> str:
+        """Coraza variable name, e.g. REQUEST_URI_RAW."""
+        return self.value.upper()
+
+    @property
+    def takes_key(self) -> bool:
+        return self not in _SINGLE_VALUE_TARGET_TYPES
+
+
+_SINGLE_VALUE_TARGET_TYPES = frozenset(
+    {TargetType.REQUEST_URI, TargetType.REQUEST_URI_RAW, TargetType.REQUEST_FILENAME}
+)
+
+# Characters a target value may contain so it can be written verbatim into
+# generated `ctl:ruleRemoveTargetById=<id>;<VARIABLE>:<value>` syntax. Checked
+# on create/update and again at config generation.
+TARGET_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_.:/@-]+$")
+
+
+def target_error(target_type: TargetType, target_value: str | None) -> str | None:
+    """Why this target cannot be rendered, or None when it is valid."""
+    if not target_type.takes_key:
+        if target_value is not None:
+            return f"{target_type.variable} has no key; target value must be empty"
+        return None
+    if target_value is None or not target_value.strip():
+        return (
+            f"Target value must not be blank: {target_type.variable} needs a key, "
+            "e.g. an argument name"
+        )
+    if not TARGET_VALUE_PATTERN.match(target_value):
+        return "Target value may only contain letters, digits and _ . : / @ -"
+    return None
 
 
 class RuleExclusion(Base):
@@ -60,8 +105,9 @@ class RuleExclusion(Base):
         nullable=False,
     )
 
-    # The specific target, for example an argument name like "token".
-    target_value: Mapped[str] = mapped_column(Text, nullable=False)
+    # The collection member, e.g. the argument name "token". Null for
+    # single-value target types (see TargetType.takes_key).
+    target_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Optional path prefix that scopes the exclusion, for example "/api/login".
     # Nullable: a missing scope_path means the exclusion applies to all paths.
