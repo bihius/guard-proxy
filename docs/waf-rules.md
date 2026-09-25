@@ -18,6 +18,7 @@ This guide explains what each entry does, what fields you must fill in, and what
 - [Rule overrides](#rule-overrides)
 - [Rule exclusions](#rule-exclusions)
 - [From log to exclusion — a worked example](#from-log-to-exclusion--a-worked-example)
+- [Learning mode — suggested exclusions](#learning-mode--suggested-exclusions)
 - [Custom rules](#custom-rules)
 - [API cheat-sheet](#api-cheat-sheet)
 - [What the generated config looks like](#what-the-generated-config-looks-like)
@@ -95,12 +96,21 @@ Instead of turning a whole rule off, you tell the WAF: *"Rule X should stop look
 
 ### Target types
 
-| `target_type` value | What it means | Example `target_value` |
+`target_type` must match the variable the rule actually matched (the log's raw context shows it, e.g. `within ARGS:q`). Removing `REQUEST_URI` does nothing for a rule that matched `REQUEST_URI_RAW`.
+
+| `target_type` value | What it means | `target_value` |
 |---|---|---|
-| `args` | A query-string or body parameter | `"token"`, `"search"` |
-| `args_names` | The *name* of a parameter (rarely needed) | `"old_name"` |
-| `request_headers` | A request header | `"X-Signature"`, `"User-Agent"` |
-| `request_uri` | The full request URI | Leave empty / same as target type (excludes the whole URI from inspection for that rule) |
+| `args` | A query-string or body parameter | Required, e.g. `"token"`, `"search"` |
+| `args_names` | The *name* of a parameter (rarely needed) | Required, e.g. `"old_name"` |
+| `request_headers` | A request header | Required, e.g. `"X-Signature"`, `"User-Agent"` |
+| `request_headers_names` | The *name* of a request header | Required, e.g. `"X-Debug"` |
+| `request_cookies` | A cookie value | Required, e.g. `"session"` |
+| `request_cookies_names` | The *name* of a cookie | Required, e.g. `"session"` |
+| `request_uri` | The decoded request URI | Must be `null` (single value, no key) |
+| `request_uri_raw` | The raw, undecoded request URI (path-traversal rules such as 930100 match this) | Must be `null` |
+| `request_filename` | The request path without the query string | Must be `null` |
+
+`target_value` may only contain letters, digits and `_ . : / @ -`; `scope_path` must start with `/`. Both are checked when the exclusion is saved.
 
 ### Examples
 
@@ -245,8 +255,6 @@ POST /policies/3/exclusions
 
 ---
 
-
-
 ### Quick checklist for every log
 
 1. **Find the Rule ID** and read its message. What is the rule trying to protect against?
@@ -254,6 +262,29 @@ POST /policies/3/exclusions
 3. **If it is an attack** → do nothing. Let the rule block.
 4. **If it is a false positive** → identify the **smallest possible target** (one argument, one header) and create a **rule exclusion** scoped to the specific path.
 5. **Only as a last resort** — if the rule is completely incompatible with your application and you cannot narrow it down — use a **rule override** to disable the entire rule.
+
+---
+
+## Learning mode — suggested exclusions
+
+Reviewing logs one event at a time does not scale when a new application goes live. Learning mode does the first pass for you:
+
+1. Put the application's policy in **detect only** mode. Requests are logged but not blocked.
+2. Every night Guard Proxy analyzes the last 24 hours of events of each active detect-only policy. On the policy page, **Tuning suggestions → Analyze now** runs the same analysis on demand, for any policy.
+3. Every rule match in every event (not only the event's main rule) is grouped by *(rule, matched target)*. A group with at least 3 events becomes a suggestion, scoped to the narrowest path prefix that covers all its events.
+4. Each suggestion gets a **confidence** score (0–100) that it is a false positive:
+
+   | Signal | Weight | Why |
+   |---|---|---|
+   | Distinct clients (saturates at 10) | 35 | Real users trip false positives; scans and attacks come from few addresses. Also makes poisoning the learning window harder. |
+   | Event count (saturates at 20) | 20 | A rule that keeps firing on the same input is systematic. |
+   | Hours with events (saturates at 6) | 20 | False positives follow normal traffic; attacks come in bursts. |
+   | Share of events where this was the only rule that fired | 25 | Attacks usually trip several rules at once. |
+
+   New suggestions below 30 are not created at all: a single-client burst tripping several rules is an attack, not a tuning candidate.
+5. **Review** opens the exclusion form pre-filled from the suggestion. Narrow the scope or change the target, then **Approve** to create the exclusion. **Reject** dismisses the suggestion for good; the analyzer will not propose it again. Nothing is ever applied automatically, and approved exclusions take effect only after **Apply config**.
+
+Treat the score as a sorting aid, not a verdict: use **View events** to open the matching logs before approving anything.
 
 ---
 
@@ -379,6 +410,12 @@ All endpoints below require an `Authorization: Bearer <token>` header. `POST`, `
 | Get one | `/policies/{id}/exclusions/{rule_exclusion_id}` | `GET` |
 | Update | `/policies/{id}/exclusions/{rule_exclusion_id}` | `PATCH` |
 | Delete | `/policies/{id}/exclusions/{rule_exclusion_id}` | `DELETE` |
+| Draft from a log event | `/logs/{log_id}/suggest-exclusion` | `POST` |
+| **Tuning suggestions (learning mode)** | | |
+| List (default `?status=pending`) | `/policies/{id}/suggestions` | `GET` |
+| Analyze now (`?window_hours=24`) | `/policies/{id}/suggestions/analyze` | `POST` |
+| Approve (body = exclusion to create) | `/policies/{id}/suggestions/{suggestion_id}/approve` | `POST` |
+| Reject | `/policies/{id}/suggestions/{suggestion_id}/reject` | `POST` |
 | **Custom rules** | | |
 | Create | `/policies/{id}/custom-rules` | `POST` |
 | List | `/policies/{id}/custom-rules` | `GET` |

@@ -16,6 +16,7 @@ from app.models.runtime_operation import (
     RuntimeOperationStatus,
     RuntimeOperationType,
 )
+from app.models.tuning_suggestion import SuggestionStatus, TuningSuggestion
 from app.models.user import User, UserRole
 from app.models.vhost import VHost
 from app.models.vhost_backend import VHostBackend
@@ -41,4 +42,6 @@ __all__ = [
     "CustomRule",
     "RulePhase",
     "RuleOperator",
+    "TuningSuggestion",
+    "SuggestionStatus",
 ]

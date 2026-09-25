@@ -45,9 +45,15 @@ type RuleExclusionFormModalProps = {
   policyId: number;
   exclusion?: RuleExclusion;
   /** Create mode only: pre-fill the form, e.g. from a WAF event. */
-  suggestion?: RuleExclusionSuggestion;
+  suggestion?: Pick<
+    RuleExclusionSuggestion,
+    "rule_id" | "target_type" | "target_value" | "scope_path" | "comment"
+  >;
   /** Shown above the fields, e.g. to explain where the pre-filled values came from. */
   intro?: ReactNode;
+  /** Create mode only: save through another endpoint, e.g. approving a suggestion. */
+  createExclusion?: (body: RuleExclusionCreate) => Promise<unknown>;
+  submitLabel?: string;
   onSuccess: () => void;
   onClose: () => void;
 };
@@ -58,6 +64,8 @@ export function RuleExclusionFormModal({
   exclusion,
   suggestion,
   intro,
+  createExclusion,
+  submitLabel = "Save",
   onSuccess,
   onClose,
 }: RuleExclusionFormModalProps) {
@@ -103,6 +111,8 @@ export function RuleExclusionFormModal({
     try {
       if (mode === "edit" && exclusion) {
         await updateRuleExclusion(accessToken, policyId, exclusion.id, body);
+      } else if (createExclusion) {
+        await createExclusion(body as RuleExclusionCreate);
       } else {
         await createRuleExclusion(accessToken, policyId, body as RuleExclusionCreate);
       }
@@ -130,7 +140,7 @@ export function RuleExclusionFormModal({
             form="rule-exclusion-form"
             disabled={submitting}
           >
-            {submitting ? "Saving..." : "Save"}
+            {submitting ? "Saving..." : submitLabel}
           </Button>
         </>
       }

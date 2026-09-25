@@ -31,6 +31,7 @@ import type {
   RuleExclusion,
   RuleOverride,
 } from "@/features/policies/types";
+import { TuningSuggestionsCard } from "@/features/policies/TuningSuggestionsCard";
 import { useConfigChanged } from "@/features/runtime/use-config-changed";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -463,6 +464,14 @@ export function PolicyDetailPage() {
               emptyDescription="No CRS rule targets are currently excluded for this policy."
             />
           </SectionCard>
+
+          <TuningSuggestionsCard
+            policyId={policy.id}
+            onExclusionCreated={() => {
+              load();
+              notifyConfigChanged();
+            }}
+          />
 
           <SectionCard
             title="Custom rules"

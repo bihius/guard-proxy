@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from app.models.policy_binding import PolicyBinding
     from app.models.rule_exclusion import RuleExclusion
     from app.models.rule_override import RuleOverride
+    from app.models.tuning_suggestion import TuningSuggestion
     from app.models.vhost import VHost
 
 
@@ -215,6 +216,12 @@ class Policy(Base):
     # cascade="all, delete-orphan" removes custom_rules when deleting policy.
     custom_rules: Mapped[list[CustomRule]] = relationship(
         "CustomRule",
+        back_populates="policy",
+        cascade="all, delete-orphan",
+    )
+
+    tuning_suggestions: Mapped[list[TuningSuggestion]] = relationship(
+        "TuningSuggestion",
         back_populates="policy",
         cascade="all, delete-orphan",
     )

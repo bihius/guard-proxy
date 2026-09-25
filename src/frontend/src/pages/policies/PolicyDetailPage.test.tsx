@@ -127,6 +127,7 @@ describe("PolicyDetailPage", () => {
     vi.mocked(policiesApi.createCustomRule).mockResolvedValue(mockCustomRule);
     vi.mocked(policiesApi.updateCustomRule).mockResolvedValue(mockCustomRule);
     vi.mocked(policiesApi.deleteCustomRule).mockResolvedValue(undefined);
+    vi.mocked(policiesApi.listTuningSuggestions).mockResolvedValue([]);
   });
 
   it("shows loading state initially", () => {

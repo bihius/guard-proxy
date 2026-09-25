@@ -11,6 +11,7 @@ from app.models.vhost import VHost
 from app.services import geoip_service
 from app.services.certbot_service import CertbotError, CertbotService
 from app.services.log_retention import purge_logs_older_than
+from app.services.tuning_service import analyze_detect_only_policies
 
 logger = logging.getLogger(__name__)
 
@@ -87,10 +88,26 @@ def refresh_geoip_database() -> None:
     result = geoip_service.refresh()
     logger.info("GeoIP refresh: %s", result.message)
 
+def analyze_learning_policies() -> None:
+    """Learning mode: turn the last day of detect-only WAF events into suggestions."""
+    with SessionLocal() as db:
+        results = analyze_detect_only_policies(db, window=timedelta(days=1))
+    for policy_id, result in results.items():
+        logger.info(
+            "Tuning analysis for policy %s: %s events, %s new, %s updated suggestions",
+            policy_id,
+            result.events_scanned,
+            result.created,
+            result.updated,
+        )
+
 def start_scheduler() -> None:
     """Start the background scheduler."""
     scheduler.add_job(renew_certificates, 'interval', days=1, id='renew_certificates')
     scheduler.add_job(purge_old_logs, 'interval', days=1, id='purge_old_logs')
+    scheduler.add_job(
+        analyze_learning_policies, 'interval', days=1, id='analyze_learning_policies'
+    )
     # next_run_time fires an initial refresh shortly after boot instead of
     # waiting a full interval. Without it the country map stays the empty stub
     # for a whole interval after every start, silently failing open. The short

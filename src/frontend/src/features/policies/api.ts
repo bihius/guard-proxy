@@ -15,6 +15,8 @@ import type {
   RuleOverride,
   RuleOverrideCreate,
   RuleOverrideUpdate,
+  TuningAnalysis,
+  TuningSuggestion,
 } from "./types";
 
 export type ListPoliciesParams = {
@@ -239,5 +241,36 @@ export function deleteCustomRule(
       token,
       responseType: "empty",
     },
+  );
+}
+
+export function listTuningSuggestions(token: string, policyId: number, signal?: AbortSignal) {
+  return apiRequest<TuningSuggestion[]>(`/policies/${policyId}/suggestions`, { token, signal });
+}
+
+export function analyzeTuningSuggestions(token: string, policyId: number) {
+  return apiRequest<TuningAnalysis>(`/policies/${policyId}/suggestions/analyze`, {
+    method: "POST",
+    token,
+  });
+}
+
+/** Creates `exclusion` (the admin-reviewed version) and marks the suggestion approved. */
+export function approveTuningSuggestion(
+  token: string,
+  policyId: number,
+  suggestionId: number,
+  exclusion: RuleExclusionCreate,
+) {
+  return apiRequest<TuningSuggestion>(
+    `/policies/${policyId}/suggestions/${suggestionId}/approve`,
+    { method: "POST", token, body: exclusion },
+  );
+}
+
+export function rejectTuningSuggestion(token: string, policyId: number, suggestionId: number) {
+  return apiRequest<TuningSuggestion>(
+    `/policies/${policyId}/suggestions/${suggestionId}/reject`,
+    { method: "POST", token },
   );
 }
