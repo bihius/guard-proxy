@@ -59,8 +59,9 @@ services:
     restart: unless-stopped
     environment:
       # Explicit base URL is optional. If unset, the frontend uses relative
-      # paths and expects HAProxy to route /api/v1 to the backend.
+      # paths and the frontend server proxies /api/v1 to the backend below.
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+      VITE_DEV_SERVER_PROXY_TARGET: "http://backend:8000"
     depends_on:
       backend:
         condition: service_healthy
