@@ -313,14 +313,24 @@ export function VHostFormModal(props: VHostFormModalProps) {
             id="vhost-policy"
             value={policyId}
             onChange={(e) => setPolicyId(e.target.value)}
+            aria-describedby={policyId === "" ? "vhost-policy-hint" : undefined}
           >
-            <option value="">None (default policy)</option>
+            <option value="">None</option>
             {policies.map((p) => (
               <option key={p.id} value={String(p.id)}>
                 {p.name}
               </option>
             ))}
           </Select>
+          {/* CRS settings are global (one active policy), so "no policy"
+              means "whatever the other vhosts use", or the detect-only
+              fallback when none of them has a policy. */}
+          {policyId === "" && (
+            <p id="vhost-policy-hint" className="text-xs text-muted-foreground">
+              Without a policy this vhost follows the policy of the other vhosts. If none
+              of them has one, requests are only logged, never blocked.
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5 pt-2">
