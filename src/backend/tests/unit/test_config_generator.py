@@ -864,6 +864,47 @@ def test_generate_skips_an_unrenderable_legacy_exclusion(
     assert "Skipping rule exclusion 7 of policy 10" in caplog.text
 
 
+def test_generate_skips_a_legacy_exclusion_with_an_unquotable_scope(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A scope ending in a backslash cannot be quoted; skip it, don't fail apply."""
+    vhost = VHost(
+        id=1,
+        domain="api.example.com",
+        backend_url="http://api-backend:9000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Strict",
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+    )
+    legacy = RuleExclusion(
+        id=7,
+        policy_id=10,
+        rule_id=942100,
+        target_type=TargetType.ARGS,
+        target_value="q",
+        scope_path="/api\\",
+    )
+
+    generated = generate(
+        vhosts=[vhost],
+        policies=[policy],
+        rule_overrides=[],
+        rule_exclusions=[legacy],
+    )
+
+    assert "ARGS:q" not in generated.rule_overrides_conf
+    assert "Skipping rule exclusion 7 of policy 10" in caplog.text
+
+
 def test_generate_uses_policy_from_path_binding() -> None:
     vhost = VHost(
         id=1,
@@ -1018,7 +1059,9 @@ def _make_single_route_context(
     )
 
 
-def test_render_haproxy_cfg_multi_raises_on_duplicate_acl_name_across_contexts() -> None:  # noqa: E501
+def test_render_haproxy_cfg_multi_raises_on_duplicate_acl_name_across_contexts() -> (
+    None
+):  # noqa: E501
     ctx_a = _make_single_route_context("host_a", "be_a")
     ctx_b = _make_single_route_context("host_a", "be_b")  # duplicate ACL name
 
@@ -1026,7 +1069,9 @@ def test_render_haproxy_cfg_multi_raises_on_duplicate_acl_name_across_contexts()
         render_haproxy_cfg_multi([ctx_a, ctx_b])
 
 
-def test_render_haproxy_cfg_multi_raises_on_duplicate_backend_name_across_contexts() -> None:  # noqa: E501
+def test_render_haproxy_cfg_multi_raises_on_duplicate_backend_name_across_contexts() -> (
+    None
+):  # noqa: E501
     ctx_a = _make_single_route_context("host_a", "be_shared")
     ctx_b = _make_single_route_context("host_b", "be_shared")  # duplicate backend name
 

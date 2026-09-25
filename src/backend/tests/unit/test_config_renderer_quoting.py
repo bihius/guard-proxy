@@ -17,7 +17,7 @@ def test_quote_modsec_escapes_quotes_but_preserves_backslashes() -> None:
 
 def test_quote_modsec_rejects_unparseable_edge_cases() -> None:
     # A trailing backslash would escape the closing quote of the directive.
-    with pytest.raises(ValueError, match="ending in a backslash"):
+    with pytest.raises(ValueError, match="end with a backslash"):
         _quote_modsec(r"C:\temp\\")
 
     # A backslash before a quote becomes \\" when the quote is escaped, which
