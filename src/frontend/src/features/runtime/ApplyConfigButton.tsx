@@ -35,7 +35,11 @@ export function ApplyConfigButton({
     !!data.generated_config.checksum &&
     data.generated_config.checksum !== data.latest_reload?.config_checksum;
 
-  if (!hasRole("admin") || !hasPendingChanges) return null;
+  // Changes the generator cannot render are pending too. Keep the button so
+  // the admin can apply and read why it fails, instead of seeing nothing.
+  const cannotGenerate = !!data?.generated_config.error;
+
+  if (!hasRole("admin") || !(hasPendingChanges || cannotGenerate)) return null;
 
   async function handleClick() {
     if (isApplying || !accessToken) return;

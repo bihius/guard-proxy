@@ -98,14 +98,23 @@ def apply_config(
         custom_rules = db.query(CustomRule).all()
         policy_bindings = db.query(PolicyBinding).all()
 
-        generated = generate(
-            vhosts,
-            policies,
-            rule_overrides,
-            rule_exclusions,
-            custom_rules,
-            policy_bindings,
-        )
+        try:
+            generated = generate(
+                vhosts,
+                policies,
+                rule_overrides,
+                rule_exclusions,
+                custom_rules,
+                policy_bindings,
+            )
+        except ValueError as error:
+            # The stored configuration cannot be rendered, e.g. vhosts bound to
+            # two different active policies. Nothing was written or reloaded;
+            # the admin has to change the configuration, so say what is wrong.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Cannot generate the configuration: {error}",
+            ) from error
         result = _apply(generated)
         _record_runtime_operations(db, result)
 

@@ -98,6 +98,23 @@ describe("ApplyConfigButton", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("stays available when the configuration cannot be generated", () => {
+    mockedUseAuth.mockReturnValue(makeAuth("admin"));
+    const brokenStatus: RuntimeStatusResponse = {
+      ...pendingStatus,
+      generated_config: {
+        can_generate: false,
+        checksum: null,
+        generated_at: null,
+        error: "Generated config supports one active CRS policy for MVP",
+      },
+    };
+
+    render(<ApplyConfigButton runtimeStatus={{ data: brokenStatus, refresh: vi.fn() }} />);
+
+    expect(screen.getByRole("button", { name: /apply config/i })).toBeInTheDocument();
+  });
+
   it("disables the button while in-flight and re-enables after", async () => {
     mockedUseAuth.mockReturnValue(makeAuth("admin"));
 
