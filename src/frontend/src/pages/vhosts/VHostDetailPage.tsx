@@ -21,12 +21,10 @@ import type { Policy, VHostDetail } from "@/features/vhosts/types";
 import { useConfigChanged } from "@/features/runtime/use-config-changed";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/datetime";
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatDateTime(value, { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function VHostDetailPage() {

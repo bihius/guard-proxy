@@ -18,7 +18,7 @@ import { SystemStatusCard } from "@/features/dashboard/SystemStatusCard";
 import { TimeRangeTabs } from "@/features/dashboard/TimeRangeTabs";
 import { TopList } from "@/features/dashboard/TopList";
 import type { TopListItem } from "@/features/dashboard/TopList";
-import { formatCount, parseUtc } from "@/features/dashboard/format";
+import { formatCount } from "@/features/dashboard/format";
 import { useDashboardData } from "@/features/dashboard/use-dashboard-data";
 import {
   STATS_WINDOW_LABELS,
@@ -26,6 +26,7 @@ import {
   type StatsWindow,
 } from "@/features/dashboard/types";
 import { toDateTimeLocal } from "@/features/logs/url-filters";
+import { parseUtc } from "@/lib/datetime";
 import { useRuntimeStatus } from "@/features/runtime/use-runtime-status";
 import { useAuth } from "@/hooks/use-auth";
 
