@@ -22,11 +22,13 @@ import sys
 # running this script directly.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from pydantic import ValidationError  # noqa: E402
 from sqlalchemy.exc import IntegrityError  # noqa: E402
 
 from app.database import SessionLocal  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
+from app.schemas.user import UserCreate  # noqa: E402
 
 
 def seed_admin(email: str, password: str, full_name: str = "Administrator") -> None:
@@ -79,9 +81,6 @@ def seed_admin(email: str, password: str, full_name: str = "Administrator") -> N
         db.close()
 
 
-MIN_PASSWORD_LENGTH = 12
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create initial admin user")
     parser.add_argument("--email", default=os.getenv("ADMIN_EMAIL"))
@@ -99,14 +98,25 @@ def main() -> None:
         )
         sys.exit(1)
 
-    if len(args.password) < MIN_PASSWORD_LENGTH:
-        print(
-            f"Error: password must be at least {MIN_PASSWORD_LENGTH} characters long.",
-            file=sys.stderr,
+    # Same rules as the login form and the users CLI: an address the login
+    # endpoint rejects (e.g. a reserved domain such as .local) would create
+    # an admin that can never sign in.
+    try:
+        validated = UserCreate(
+            email=args.email,
+            password=args.password,
+            full_name=args.full_name,
+            role=UserRole.admin,
         )
+    except ValidationError as exc:
+        messages = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in exc.errors()
+        )
+        print(f"Error: {messages}", file=sys.stderr)
         sys.exit(1)
 
-    seed_admin(args.email, args.password, args.full_name)
+    seed_admin(str(validated.email), validated.password, validated.full_name)
 
 
 if __name__ == "__main__":
