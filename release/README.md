@@ -109,8 +109,9 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 - No automated upgrade testing between beta versions yet — back up before
   upgrading.
 - Single-node only; no HA/clustering.
-- DDoS/rate-limit protection ships in a later beta (tracked as issue
-  #176) and is not present in this release.
+- One active WAF policy at a time: every vhost must use the same active
+  policy. Binding vhosts to different active policies makes
+  **Apply configuration** fail with an explanation until they agree.
 
 ## Reporting feedback
 
