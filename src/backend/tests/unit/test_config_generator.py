@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -679,14 +680,137 @@ def test_generate_one_vhost_with_policy_exclusion_and_custom_rule() -> None:
     )
 
     assert (
-        'SecRule REQUEST_URI "@beginsWith /api/login" '
-        '"id:9100042,phase:1,pass,nolog,'
+        'SecRule REQUEST_URI "@streq /api/login" '
+        '"id:9100126,phase:1,pass,nolog,'
         'ctl:ruleRemoveTargetById=942100;ARGS:token"'
     ) in generated.rule_overrides_conf
     assert (
         'SecRule REQUEST_HEADERS:User-Agent "@rx (?i)curl" '
         '"id:9000001,phase:1,deny,status:403,log"'
     ) in generated.rule_overrides_conf
+
+
+_CONTROL_RULE_RE = re.compile(
+    r'^SecRule REQUEST_URI "@(streq|beginsWith) (.+)" "id:(\d+),phase:1,pass,nolog,'
+    r'ctl:ruleRemoveTargetById=(\d+);(\S+)"$'
+)
+
+
+def _exclusion_applies(rule_overrides_conf: str, request_uri: str) -> bool:
+    """Whether any generated control rule removes the target for `request_uri`.
+
+    Mirrors Coraza's @streq / @beginsWith on the raw REQUEST_URI, which were
+    checked against the running WAF when fixing #295.
+    """
+    for line in rule_overrides_conf.splitlines():
+        match = _CONTROL_RULE_RE.match(line)
+        if match is None:
+            continue
+        operator, argument = match.group(1), match.group(2)
+        if operator == "streq" and request_uri == argument:
+            return True
+        if operator == "beginsWith" and request_uri.startswith(argument):
+            return True
+    return False
+
+
+@pytest.mark.parametrize(
+    ("scope_path", "request_uri", "applies"),
+    [
+        ("/rest/products", "/rest/products", True),
+        ("/rest/products", "/rest/products?q=1", True),
+        ("/rest/products", "/rest/products/search?q=1", True),
+        # Siblings sharing the string prefix are different paths (#295).
+        ("/rest/products", "/rest/productsXYZ/search?q=1", False),
+        ("/rest/products", "/rest/products-admin", False),
+        ("/rest/products", "/rest", False),
+        # A trailing-slash scope (as learning mode produces) covers the subtree.
+        ("/api/users/", "/api/users/7?x=1", True),
+        ("/api/users/", "/api/users", False),
+        ("/api/users/", "/api/usersX/7", False),
+    ],
+)
+def test_generated_scoped_exclusion_covers_only_its_path_segments(
+    scope_path: str, request_uri: str, applies: bool
+) -> None:
+    vhost = VHost(
+        id=1,
+        domain="shop.example.com",
+        backend_url="http://shop:3000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Shop",
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+    )
+    exclusion = RuleExclusion(
+        id=5,
+        policy_id=10,
+        rule_id=932160,
+        target_type=TargetType.ARGS,
+        target_value="q",
+        scope_path=scope_path,
+    )
+
+    generated = generate(
+        vhosts=[vhost],
+        policies=[policy],
+        rule_overrides=[],
+        rule_exclusions=[exclusion],
+    )
+
+    assert _exclusion_applies(generated.rule_overrides_conf, request_uri) is applies
+
+
+def test_generated_control_rule_ids_do_not_collide_across_exclusions() -> None:
+    vhost = VHost(
+        id=1,
+        domain="shop.example.com",
+        backend_url="http://shop:3000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=10,
+    )
+    policy = Policy(
+        id=10,
+        name="Shop",
+        paranoia_level=1,
+        inbound_anomaly_threshold=5,
+        outbound_anomaly_threshold=4,
+        enforcement_mode=PolicyEnforcementMode.block,
+        is_active=True,
+    )
+    exclusions = [
+        RuleExclusion(
+            id=exclusion_id,
+            policy_id=10,
+            rule_id=932160,
+            target_type=TargetType.ARGS,
+            target_value="q",
+            scope_path=f"/p{exclusion_id}",
+        )
+        for exclusion_id in (1, 2, 3)
+    ]
+
+    generated = generate(
+        vhosts=[vhost], policies=[policy], rule_overrides=[], rule_exclusions=exclusions
+    )
+
+    ids = [
+        int(match.group(3))
+        for line in generated.rule_overrides_conf.splitlines()
+        if (match := _CONTROL_RULE_RE.match(line))
+    ]
+    assert len(ids) == 9
+    assert len(set(ids)) == 9
+    assert min(ids) > 9099999  # above the custom rule range
 
 
 def test_generate_skips_an_unrenderable_legacy_exclusion(

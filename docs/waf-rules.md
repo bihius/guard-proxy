@@ -91,7 +91,7 @@ Instead of turning a whole rule off, you tell the WAF: *"Rule X should stop look
 | `rule_id` | Yes | CRS rule number you want to narrow down, e.g. `942100`. |
 | `target_type` | Yes | What kind of target you are excluding. See the table below. |
 | `target_value` | Yes | The concrete name of the target, e.g. `"token"`, `"X-Signature"`. |
-| `scope_path` | No | A URL path prefix (e.g. `/api/login`) where the exclusion is valid. If omitted the exclusion is **global** — it applies to every request handled by the policy. |
+| `scope_path` | No | A URL path (e.g. `/api/login`) where the exclusion is valid, matched on whole path segments: `/api/login` covers `/api/login`, `/api/login?...` and `/api/login/...`, but not `/api/login-admin`. A scope ending in `/` (e.g. `/api/users/`) covers everything under it. If omitted the exclusion is **global** — it applies to every request handled by the policy. |
 | `comment` | No | A note explaining why the exclusion exists. |
 
 ### Target types
@@ -449,15 +449,20 @@ A **global** exclusion (no `scope_path`) is emitted as:
 SecRuleRemoveTargetById 942100 ARGS:token
 ```
 
-A **path-scoped** exclusion (e.g. `/api/login`) becomes a small control rule:
+A **path-scoped** exclusion (e.g. `/api/login`) becomes small control rules, one per way the raw request URI can belong to the scope:
 
 ```apache
-SecRule REQUEST_URI "@beginsWith /api/login" \
-  "id:9990001,phase:1,pass,nolog,\
-   ctl:ruleRemoveTargetById=942100;ARGS:token"
+SecRule REQUEST_URI "@streq /api/login" \
+  "id:9100126,phase:1,pass,nolog,ctl:ruleRemoveTargetById=942100;ARGS:token"
+SecRule REQUEST_URI "@beginsWith /api/login?" \
+  "id:9100127,phase:1,pass,nolog,ctl:ruleRemoveTargetById=942100;ARGS:token"
+SecRule REQUEST_URI "@beginsWith /api/login/" \
+  "id:9100128,phase:1,pass,nolog,ctl:ruleRemoveTargetById=942100;ARGS:token"
 ```
 
-The control rule matches the request URI and then tells Coraza to remove the target for that single request only.
+A scope ending in `/` needs only the last form. Each control rule matches the request URI and then tells Coraza to remove the target for that single request only. Control rule ids are `9100000 + 3 × exclusion id` onwards, above the custom rule range.
+
+> **Scopes narrowed in this version (#295).** Scopes used to be plain string prefixes, so `/rest/products` also covered `/rest/productsXYZ` and `/rest/products-admin`. After upgrading and running **Apply config**, every existing path-scoped exclusion covers only its own path segments. This is a deliberate security fix, not a regression. If an exclusion was *meant* to cover sibling paths, change its scope to their common parent (e.g. `/rest/`) or add one exclusion per path.
 
 ### Custom rules
 

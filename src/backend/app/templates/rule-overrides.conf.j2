@@ -15,9 +15,9 @@ SecRuleRemoveTargetById {{ exclusion.rule_id }} {{ exclusion.target }}
 {% endfor %}
 
 # Path-scoped target exclusions.
-{% for exclusion in scoped_exclusions %}
-SecRule REQUEST_URI "@beginsWith {{ exclusion.quoted_scope_path }}" "id:{{ exclusion.control_rule_id }},phase:1,pass,nolog,ctl:ruleRemoveTargetById={{ exclusion.rule_id }};{{ exclusion.target }}"
-{% endfor %}
+{% for exclusion in scoped_exclusions %}{% for matcher in exclusion.scope_matchers %}
+SecRule REQUEST_URI "@{{ matcher.operator }} {{ matcher.quoted_argument }}" "id:{{ matcher.rule_id }},phase:1,pass,nolog,ctl:ruleRemoveTargetById={{ exclusion.rule_id }};{{ exclusion.target }}"
+{% endfor %}{% endfor %}
 
 # Custom rules.
 {% for rule in active_custom_rules %}

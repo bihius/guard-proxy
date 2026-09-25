@@ -108,7 +108,14 @@ def test_rule_overrides_template_renders_global_exclusions_sorted() -> None:
     assert rendered.index(first) < rendered.index(second)
 
 
-def test_rule_overrides_template_renders_path_scoped_exclusion() -> None:
+def _control_rules(rendered: str) -> list[str]:
+    return [
+        line for line in rendered.splitlines() if line.startswith("SecRule REQUEST_URI")
+    ]
+
+
+def test_path_scoped_exclusion_matches_whole_path_segments() -> None:
+    """A scope must not match a sibling path sharing its prefix (#295)."""
     rendered = render_rule_overrides(
         _overrides([]),
         exclusions=(
@@ -117,16 +124,38 @@ def test_rule_overrides_template_renders_path_scoped_exclusion() -> None:
                 target_type=TargetType.ARGS,
                 target_value="token",
                 scope_path="/api/login",
-                control_rule_id=9100042,
+                control_rule_id=9100126,
             ),
         ),
     )
 
-    assert (
-        'SecRule REQUEST_URI "@beginsWith /api/login" '
-        '"id:9100042,phase:1,pass,nolog,'
-        'ctl:ruleRemoveTargetById=942100;ARGS:token"'
-    ) in rendered
+    ctl = "phase:1,pass,nolog,ctl:ruleRemoveTargetById=942100;ARGS:token"
+    assert _control_rules(rendered) == [
+        f'SecRule REQUEST_URI "@streq /api/login" "id:9100126,{ctl}"',
+        f'SecRule REQUEST_URI "@beginsWith /api/login?" "id:9100127,{ctl}"',
+        f'SecRule REQUEST_URI "@beginsWith /api/login/" "id:9100128,{ctl}"',
+    ]
+
+
+def test_trailing_slash_scope_is_a_single_prefix_rule() -> None:
+    rendered = render_rule_overrides(
+        _overrides([]),
+        exclusions=(
+            RuleExclusionRenderContext(
+                rule_id=930100,
+                target_type=TargetType.REQUEST_URI_RAW,
+                target_value=None,
+                scope_path="/api/users/",
+                control_rule_id=9100129,
+            ),
+        ),
+    )
+
+    assert _control_rules(rendered) == [
+        'SecRule REQUEST_URI "@beginsWith /api/users/" '
+        '"id:9100129,phase:1,pass,nolog,'
+        'ctl:ruleRemoveTargetById=930100;REQUEST_URI_RAW"'
+    ]
 
 
 def test_rule_overrides_template_requires_control_id_for_scoped_exclusion() -> None:
