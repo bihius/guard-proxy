@@ -14,6 +14,7 @@ from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
 from app.models.vhost import VHost
 from app.services.config_renderer import (
+    SCOPE_MATCHERS_PER_EXCLUSION,
     CrsPolicyRenderContext,
     CustomRuleRenderContext,
     HaproxyBackend,
@@ -72,8 +73,7 @@ def generate(
         return policies_by_id.get(vhost.policy_id)
 
     vhost_contexts = [
-        _to_haproxy_context(vhost, _policy_for_vhost(vhost))
-        for vhost in active_vhosts
+        _to_haproxy_context(vhost, _policy_for_vhost(vhost)) for vhost in active_vhosts
     ]
 
     active_policy, active_overrides, active_exclusions, active_custom_rules = (
@@ -215,9 +215,7 @@ def _add_effective_policy_id(
     effective_policy_ids.add(policy.id)
 
 
-def _to_haproxy_context(
-    vhost: VHost, policy: Policy | None
-) -> HaproxyRenderContext:
+def _to_haproxy_context(vhost: VHost, policy: Policy | None) -> HaproxyRenderContext:
     if vhost.id is None:
         raise ValueError(f"Active vhost {vhost.domain!r} has no persisted id")
     # Use the database id as the naming suffix so that domain names that only
@@ -417,7 +415,10 @@ def _control_rule_ids_for_scoped_exclusions(
                 "Path-scoped rule exclusion has no persisted id; "
                 "control rule ids require a persisted RuleExclusion"
             )
-        assigned[id(exclusion)] = 9100000 + exclusion.id
+        # Each exclusion owns a block of SCOPE_MATCHERS_PER_EXCLUSION ids, so
+        # control rules of different exclusions never collide. Ids start
+        # above the custom rule range (9000000-9099999).
+        assigned[id(exclusion)] = 9100000 + exclusion.id * SCOPE_MATCHERS_PER_EXCLUSION
     return assigned
 
 
@@ -440,7 +441,7 @@ def _to_custom_rule_contexts(
 
 def _extract_backend_address(backend_url: str) -> str:
     parsed = urlparse(backend_url)
-    
+
     if parsed.scheme:
         host = parsed.hostname
         if host is None:

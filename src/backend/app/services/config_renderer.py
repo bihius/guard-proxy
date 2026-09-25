@@ -303,6 +303,23 @@ class RuleOverrideRenderContext:
 
 
 @dataclass(frozen=True)
+class ScopeMatcher:
+    """One phase-1 control rule that applies a path-scoped exclusion."""
+
+    rule_id: int
+    operator: str
+    argument: str
+
+    @property
+    def quoted_argument(self) -> str:
+        return _quote_modsec(self.argument)
+
+
+# Control rules per path-scoped exclusion; see RuleExclusionRenderContext.
+SCOPE_MATCHERS_PER_EXCLUSION = 3
+
+
+@dataclass(frozen=True)
 class RuleExclusionRenderContext:
     """Rule exclusion fields needed to render CRS target removals."""
 
@@ -310,6 +327,8 @@ class RuleExclusionRenderContext:
     target_type: TargetType
     target_value: str | None
     scope_path: str | None = None
+    # First of SCOPE_MATCHERS_PER_EXCLUSION consecutive ids reserved for this
+    # exclusion's control rules.
     control_rule_id: int | None = None
 
     def __post_init__(self) -> None:
@@ -344,10 +363,26 @@ class RuleExclusionRenderContext:
         return f"{self.target_type.variable}:{self.target_value}"
 
     @property
-    def quoted_scope_path(self) -> str:
-        if self.scope_path is None:
-            raise ValueError("scope_path is required")
-        return _quote_modsec(self.scope_path)
+    def scope_matchers(self) -> tuple[ScopeMatcher, ...]:
+        """Control rules matching the scope on path segments of the raw URI.
+
+        A bare `@beginsWith /api` also matched /apiv2 and /api-admin (#295).
+        "/api" now covers exactly "/api", "/api?..." and "/api/..."; a scope
+        ending in "/" covers everything under it. REQUEST_URI is the raw,
+        undecoded URI including the query string: the decoded REQUEST_FILENAME
+        would also apply the exclusion to encoded variants such as
+        /api%2Fx, which a backend may route elsewhere.
+        """
+        if self.scope_path is None or self.control_rule_id is None:
+            raise ValueError("scope_path and control_rule_id are required")
+        base = self.control_rule_id
+        if self.scope_path.endswith("/"):
+            return (ScopeMatcher(base, "beginsWith", self.scope_path),)
+        return (
+            ScopeMatcher(base, "streq", self.scope_path),
+            ScopeMatcher(base + 1, "beginsWith", f"{self.scope_path}?"),
+            ScopeMatcher(base + 2, "beginsWith", f"{self.scope_path}/"),
+        )
 
 
 @dataclass(frozen=True)
@@ -426,11 +461,7 @@ def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
         "render_haproxy_cfg_multi routes.backend.name",
     )
     _ensure_unique(
-        (
-            server.server_name
-            for route in routes
-            for server in route.backend.servers
-        ),
+        (server.server_name for route in routes for server in route.backend.servers),
         "render_haproxy_cfg_multi routes.backend.server_name",
     )
     return _render_haproxy_routes(routes)
