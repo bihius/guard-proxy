@@ -21,7 +21,7 @@ between beta releases yet — back up `pgdata` before upgrading. See
 
 ## 1. Get the release kit
 
-Download and extract the `guard-proxy-release-v0.1.0-beta.3.tar.gz` asset
+Download and extract the `guard-proxy-release-v0.1.0-beta.4.tar.gz` asset
 from the [GitHub Releases page](https://github.com/bihius/guard-proxy/releases),
 or copy this `release/` directory if you already have the repository
 checked out. You should end up with:
@@ -45,7 +45,7 @@ cp .env.example .env
 Edit `.env` and replace every `change-me` placeholder:
 
 - `GUARD_PROXY_IMAGE_TAG` — pin this to the release you're installing,
-  e.g. `v0.1.0-beta.3`. Do not use a mutable tag like `beta` for anything
+  e.g. `v0.1.0-beta.4`. Do not use a mutable tag like `beta` for anything
   you want to reproduce later.
 - `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `LOG_INGEST_SHARED_SECRET` —
   generate real secrets, e.g. `openssl rand -hex 32`.
@@ -109,8 +109,9 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 - No automated upgrade testing between beta versions yet — back up before
   upgrading.
 - Single-node only; no HA/clustering.
-- DDoS/rate-limit protection ships in a later beta (tracked as issue
-  #176) and is not present in this release.
+- One active WAF policy at a time: every vhost must use the same active
+  policy. Binding vhosts to different active policies makes
+  **Apply configuration** fail with an explanation until they agree.
 
 ## Reporting feedback
 
