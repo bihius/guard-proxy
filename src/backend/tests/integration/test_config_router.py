@@ -108,6 +108,52 @@ def test_apply_validation_failure(
     assert "parse error" in body["validation_output"]
 
 
+def test_apply_with_two_active_policies_explains_instead_of_500(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The generator supports one active CRS policy; say so, don't crash."""
+    monkeypatch.setattr(
+        settings,
+        "runtime_generated_config_root",
+        str(tmp_path / "generated"),
+    )
+    reloads: list[None] = []
+    monkeypatch.setattr(
+        "app.services.config_apply._reload_haproxy",
+        lambda: reloads.append(None) or _mock_reload_ok(),
+    )
+    for index, domain in enumerate(("a.example.com", "b.example.com")):
+        policy = client.post(
+            "/policies",
+            headers=admin_token,
+            json={
+                "name": f"Policy {index}",
+                "paranoia_level": 1,
+                "inbound_anomaly_threshold": 5,
+                "outbound_anomaly_threshold": 4,
+            },
+        ).json()
+        created = client.post(
+            "/vhosts",
+            headers=admin_token,
+            json={
+                "domain": domain,
+                "backend_url": "http://app:8080",
+                "policy_id": policy["id"],
+            },
+        )
+        assert created.status_code == 201
+
+    resp = client.post("/config/apply", headers=admin_token)
+
+    assert resp.status_code == 422
+    assert "one active CRS policy" in resp.json()["detail"]
+    assert reloads == []
+
+
 # ---------------------------------------------------------------------------
 # Runtime operation recording (deployment status)
 # ---------------------------------------------------------------------------

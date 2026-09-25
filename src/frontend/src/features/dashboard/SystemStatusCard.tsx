@@ -96,6 +96,13 @@ export function SystemStatusCard({ status, overview }: SystemStatusCardProps) {
           </Alert>
         ) : null}
 
+        {generated_config.error ? (
+          <Alert variant="destructive">
+            The configuration cannot be generated, so recent changes are not live:{" "}
+            {generated_config.error}
+          </Alert>
+        ) : null}
+
         {latest_reload?.status === "failed" && latest_reload.message ? (
           <Alert variant="destructive">{latest_reload.message}</Alert>
         ) : null}
