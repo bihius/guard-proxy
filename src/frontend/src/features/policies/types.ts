@@ -93,6 +93,36 @@ export type RuleExclusionSuggestion = {
   matched_variable: string | null;
 };
 
+/** Learning mode: an exclusion proposed from repeated rule matches (#263). */
+export type TuningSuggestion = {
+  id: number;
+  policy_id: number;
+  rule_id: number;
+  rule_message: string | null;
+  target_type: RuleExclusionTargetType;
+  target_value: string | null;
+  scope_path: string | null;
+  /** 0-100 heuristic likelihood that the matches are false positives. */
+  confidence: number;
+  event_count: number;
+  source_ip_count: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  sample_log_ids: number[];
+  status: "pending" | "approved" | "rejected";
+  rule_exclusion_id: number | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+};
+
+export type TuningAnalysis = {
+  events_scanned: number;
+  created: number;
+  updated: number;
+  window_hours: number;
+};
+
 export type RuleExclusionUpdate = {
   rule_id?: number;
   target_type?: RuleExclusionTargetType;
