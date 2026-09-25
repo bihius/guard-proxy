@@ -107,6 +107,24 @@ function buildBody(body: ApiClientOptions["body"]) {
   return JSON.stringify(body);
 }
 
+type ValidationIssue = { msg?: unknown };
+
+/**
+ * FastAPI returns `detail` as a string for HTTPException but as a list of
+ * issues for request validation (422). Callers render `ApiError.detail`
+ * directly, so it must always be a string.
+ */
+function detailToString(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (!Array.isArray(detail)) return null;
+  const messages = detail
+    .map((issue: ValidationIssue) => (typeof issue?.msg === "string" ? issue.msg : null))
+    .filter((msg): msg is string => msg !== null)
+    // Pydantic prefixes messages raised from custom validators.
+    .map((msg) => msg.replace(/^Value error, /, ""));
+  return messages.length > 0 ? messages.join("; ") : null;
+}
+
 export function apiRequest<T>(
   path: string,
   options: ApiClientOptions = {}
@@ -162,8 +180,8 @@ async function executeRequest<T>(
 
     try {
       if (isJsonContentType(response.headers.get("content-type"))) {
-        const data = (await response.json()) as { detail?: string };
-        detail = data.detail ?? detail;
+        const data = (await response.json()) as { detail?: unknown };
+        detail = detailToString(data.detail) ?? detail;
       } else {
         const text = await response.text();
         detail = text || response.statusText || detail;

@@ -152,6 +152,31 @@ describe("apiRequest", () => {
     });
   });
 
+  it("turns a FastAPI validation error list into a readable message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              type: "value_error",
+              loc: ["body", "operator_argument"],
+              msg: "Value error, Operator argument must not end with a backslash",
+              input: "a\\",
+              ctx: { error: {} },
+            },
+            { type: "missing", loc: ["body", "actions"], msg: "Field required" },
+          ],
+        }),
+        { status: 422, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    await expect(apiRequest("/policies/1/custom-rules")).rejects.toMatchObject({
+      status: 422,
+      detail: "Operator argument must not end with a backslash; Field required",
+    });
+  });
+
   it("retries an authenticated request once after a 401 refresh", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
