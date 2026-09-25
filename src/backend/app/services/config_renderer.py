@@ -567,4 +567,8 @@ def _validate_modsec_quoted_value(value: str, field: str) -> None:
 
 def _quote_modsec(value: str) -> str:
     _validate_modsec_quoted_value(value, "quoted Coraza value")
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    if value.endswith("\\"):
+        raise ValueError("Coraza cannot parse strings ending in a backslash")
+    if '\\"' in value:
+        raise ValueError("Coraza cannot parse a backslash followed by a quote")
+    return value.replace('"', '\\"')
