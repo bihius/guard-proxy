@@ -128,16 +128,26 @@ def common_scope_path(paths: set[str | None]) -> str | None:
     return f"{prefix}/" if prefix else "/"
 
 
+def _within_scope(path: str, scope: str) -> bool:
+    """Segment-aware prefix: "/api" covers "/api" and "/api/x" but not "/apiv2".
+
+    A scope ending in "/" (as produced by common_scope_path) covers everything
+    under it.
+    """
+    if scope.endswith("/"):
+        return path.startswith(scope)
+    return path == scope or path.startswith(f"{scope}/")
+
+
 def _is_covered(
     existing: list[RuleExclusion], key: _Key, scope_path: str | None
 ) -> bool:
-    rule_id, target_type, target_value = key
     for exclusion in existing:
         if (exclusion.rule_id, exclusion.target_type, exclusion.target_value) != key:
             continue
         if exclusion.scope_path is None:
             return True
-        if scope_path is not None and scope_path.startswith(exclusion.scope_path):
+        if scope_path is not None and _within_scope(scope_path, exclusion.scope_path):
             return True
     return False
 

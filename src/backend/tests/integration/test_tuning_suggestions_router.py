@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -245,6 +246,52 @@ def test_analysis_skips_targets_already_excluded(
     _false_positive_traffic(db, policy_id)
 
     assert _analyze(client, admin_token, policy_id)["created"] == 0
+
+
+@pytest.mark.parametrize(
+    ("exclusion_scope", "traffic_path", "created"),
+    [
+        # Shares a string prefix but is a different path: not covered.
+        ("/api", "/apiv2/foo", 1),
+        ("/api", "/api", 0),
+        ("/api", "/api/foo", 0),
+        # A trailing-slash scope, as common_scope_path produces, covers
+        # everything under it.
+        ("/api/", "/api/foo", 0),
+        ("/api/", "/api", 1),
+    ],
+)
+def test_existing_scoped_exclusion_covers_only_its_own_path_segments(
+    client: TestClient,
+    db: Session,
+    admin_token: dict[str, str],
+    exclusion_scope: str,
+    traffic_path: str,
+    created: int,
+) -> None:
+    policy_id = _create_policy(client, admin_token)
+    resp = client.post(
+        f"/policies/{policy_id}/exclusions",
+        headers=admin_token,
+        json={
+            "rule_id": 942100,
+            "target_type": "args",
+            "target_value": "q",
+            "scope_path": exclusion_scope,
+        },
+    )
+    assert resp.status_code == 201
+    for i in range(6):
+        _log(
+            db,
+            policy_id,
+            _match(942100, "Matched Data: s&1c found within ARGS:q: o'brien"),
+            uri=f"{traffic_path}?q={i}",
+            ip=f"203.0.113.{i}",
+            hours_ago=i + 1,
+        )
+
+    assert _analyze(client, admin_token, policy_id)["created"] == created
 
 
 def test_writes_are_admin_only(
