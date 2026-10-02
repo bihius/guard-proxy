@@ -120,7 +120,7 @@ assert_status() {
 
 # Like assert_status, but retries until the expected status is observed or
 # the timeout elapses. Needed right after a config apply: HAProxy reloads its
-# routing ACLs synchronously, but Coraza's supervisor only restarts
+# routing ACLs synchronously, but Coraza's supervisor only reloads
 # coraza-spoa with the new crs-setup.conf on its next 1s poll tick (see
 # docker/coraza-supervisor.sh), so a request fired immediately after
 # /config/apply can still hit the previous (pre-policy, DetectionOnly) engine.
