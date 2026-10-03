@@ -25,7 +25,7 @@ git submodule update --init --recursive
 | File | Purpose |
 | --- | --- |
 | `coraza-spoa.yaml` | Fallback single-application daemon config, used only while the active release has no generated `coraza-spoa.yaml` (one application per policy) |
-| `coraza.conf` | Baseline directives (audit log, body access) included first by every application |
+| `coraza.conf` | Baseline directives (audit log, body access, JSON/XML body processors) included first by every application |
 | `crs-setup.conf` | Reference CRS setup; the generated per-policy `crs-setup.conf` is compared against it in tests |
 | `crs/` | Pinned OWASP CRS 4.x submodule |
 | `guard-proxy-exceptions.conf` | Guard Proxy-owned CRS false-positive exceptions, loaded after CRS rules. Not part of the `crs/` submodule, so it survives CRS version bumps. |

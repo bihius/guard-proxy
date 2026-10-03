@@ -109,13 +109,11 @@ zap-cli quick-scan -s all http://localhost:8080        # OWASP ZAP
 ## Evaluation Lab
 
 ```bash
-make eval-up       # Start demo stack + lab targets
-make eval-ftw      # CRS go-ftw conformance against ftw.local
-make eval-corpus   # Tagged labeled corpus for TP/FN/TN/FP
-make eval-zap      # Supplemental ZAP scanner report
-make eval-nuclei   # Supplemental Nuclei reached-app findings
-make eval-load     # wrk RPS/latency overhead
-make eval-all      # ftw → corpus → zap → nuclei → load → metrics
+make eval-up       # Start demo stack + lab targets (wp.local, ftw.local)
+make eval-corpus   # Test 1: tagged labeled corpus on wp.local (TP/FN/TN/FP)
+make eval-ftw      # Test 2: CRS regression suite (go-ftw, log mode) on ftw.local
+make eval-load     # Test 3: wrk RPS/latency overhead on ftw.local (WAF vs direct)
+make eval-all      # corpus → ftw → load → metrics
 make eval-results  # Show latest CSV summary
 ```
 

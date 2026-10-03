@@ -5,7 +5,7 @@ COMPOSE_DEBUG_FILE := docker/docker-compose.debug.yml
 ENV_FILE := docker/.env
 
 .PHONY: run dev down clean logs ps seed coraza-build \
-        eval-up eval-down eval-clean eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics eval-all eval-results
+        eval-up eval-down eval-clean eval-ftw eval-corpus eval-load eval-metrics eval-all eval-results
 
 run:
 	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build -d
@@ -50,16 +50,6 @@ eval-ftw:
 
 eval-corpus:
 	$(MAKE) -C benchmarks eval-corpus \
-	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
-	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
-
-eval-zap:
-	$(MAKE) -C benchmarks eval-zap \
-	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
-	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
-
-eval-nuclei:
-	$(MAKE) -C benchmarks eval-nuclei \
 	  $(if $(RUN_ID),RUN_ID=$(RUN_ID)) \
 	  $(if $(TARGET_VHOST),TARGET_VHOST=$(TARGET_VHOST))
 

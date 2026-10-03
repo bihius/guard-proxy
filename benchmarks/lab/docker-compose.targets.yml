@@ -30,6 +30,24 @@ services:
 
   coraza:
     cpuset: "${LAB_WAF_CPUSET:-}"
+    # Lab only: wrap the Guard Proxy exceptions file so every policy also
+    # loads the go-ftw log-marker rule (see benchmarks/lab/coraza/). The
+    # production file is mounted under a new name and included from the
+    # wrapper. Relative paths resolve from docker/ (the first compose file).
+    volumes:
+      - ../configs/coraza/guard-proxy-exceptions.conf:/etc/coraza/guard-proxy-exceptions.base.conf:ro
+      - ../benchmarks/lab/coraza/guard-proxy-exceptions.lab.conf:/etc/coraza/guard-proxy-exceptions.conf:ro
+    # Lab only: also copy Coraza's log (matched rules, written to stderr) into
+    # /var/log/coraza/error.log on the coraza_audit volume. go-ftw mounts that
+    # volume and reads the rule IDs of each CRS test from this file. tini -g
+    # forwards stop signals to the whole pipeline.
+    entrypoint:
+      - /sbin/tini
+      - -g
+      - --
+      - sh
+      - -c
+      - /usr/local/bin/coraza-supervisor 2>&1 | tee -a /var/log/coraza/error.log
 
   haproxy:
     cpuset: "${LAB_WAF_CPUSET:-}"
@@ -37,32 +55,10 @@ services:
   log-shipper:
     cpuset: "${LAB_WAF_CPUSET:-}"
 
-  # ── OWASP Juice Shop ──────────────────────────────────────────────────────
-  # Intentionally vulnerable Node.js app designed for security testing.
-  # Vhost: juice.local
-  juiceshop:
-    image: bkimminich/juice-shop:v17.1.1
-    cpuset: "${LAB_WAF_CPUSET:-}"
-    restart: unless-stopped
-    # The image is distroless (entrypoint is /nodejs/bin/node, there is no
-    # /bin/sh and no wget/curl), so a CMD-SHELL probe can never run and the
-    # container would sit permanently unhealthy. Probe with node itself via
-    # the exec form, which does not go through a shell.
-    healthcheck:
-      test:
-        - CMD
-        - /nodejs/bin/node
-        - -e
-        - "require('http').get('http://127.0.0.1:3000/rest/admin/application-version',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    networks:
-      - gp_internal
-
   # ── CRS FTW backend ───────────────────────────────────────────────────────
   # Albedo is the backend used by the CRS project for go-ftw regression tests.
+  # It answers every request with 200, so it is also the load-test target:
+  # the WAF-vs-direct delta then measures HAProxy+Coraza, not the application.
   # Vhost: ftw.local
   ftw-backend:
     image: ghcr.io/coreruleset/albedo:0.2.0
@@ -71,55 +67,9 @@ services:
     networks:
       - gp_internal
 
-  # ── DVWA (Damn Vulnerable Web Application) ────────────────────────────────
-  # Classic PHP vulnerable app. Requires MariaDB sidecar.
-  # Vhost: dvwa.local
-  dvwa-db:
-    image: mariadb:11.4
-    cpuset: "${LAB_WAF_CPUSET:-}"
-    restart: unless-stopped
-    environment:
-      MARIADB_ROOT_PASSWORD: ${DVWA_DB_ROOT_PASSWORD:-dvwa_root_pw}
-      MARIADB_DATABASE: dvwa
-      MARIADB_USER: dvwa
-      MARIADB_PASSWORD: ${DVWA_DB_PASSWORD:-dvwa_pw}
-    volumes:
-      - dvwa_db_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 90s
-    networks:
-      - gp_internal
-
-  dvwa:
-    image: ghcr.io/digininja/dvwa:latest
-    cpuset: "${LAB_WAF_CPUSET:-}"
-    restart: unless-stopped
-    environment:
-      DB_SERVER: dvwa-db
-      DB_DATABASE: dvwa
-      DB_USER: dvwa
-      DB_PASSWORD: ${DVWA_DB_PASSWORD:-dvwa_pw}
-      RECAPTCHA_PRIV_KEY: ""
-      RECAPTCHA_PUB_KEY: ""
-    depends_on:
-      dvwa-db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost/setup.php >/dev/null"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
-    networks:
-      - gp_internal
-
   # ── WordPress ─────────────────────────────────────────────────────────────
-  # Real-world CMS. Used for scanner-assisted coverage and tagged benign corpus
-  # traffic (no exclusion plugins applied — intentional).
+  # Real-world CMS. Target of the tagged benign/attack corpus (no CRS
+  # exclusion plugins applied — intentional).
   # Vhost: wp.local
   wp-db:
     image: mariadb:11.4
@@ -165,34 +115,32 @@ services:
     networks:
       - gp_internal
 
-  # One-shot WP CLI container to install WordPress deterministically.
-  # Runs once (no restart), exits 0 after wp core install succeeds.
+  # One-shot WP CLI container that installs WordPress deterministically.
+  # Not started by `up` (profile "setup"); setup-lab.sh runs it with
+  # `compose run`, so the corpus always hits an installed site, not the
+  # installer redirect.
   wp-cli:
     image: wordpress:cli-php8.3
     cpuset: "${LAB_WAF_CPUSET:-}"
+    profiles: ["setup"]
     restart: "no"
+    user: "33:33"
     environment:
       WORDPRESS_DB_HOST: wp-db
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: ${WP_DB_PASSWORD:-wp_pw}
+      WP_ADMIN_PASSWORD: ${WP_ADMIN_PASSWORD:-LabAdmin12345!}
     volumes:
       - wp_data:/var/www/html
     depends_on:
       wordpress:
         condition: service_healthy
-    command: >
-      sh -c "
-        sleep 5 &&
-        wp core is-installed 2>/dev/null && echo 'WordPress already installed.' ||
-        wp core install
-          --url=http://wp.local
-          --title='Guard Proxy Lab'
-          --admin_user=admin
-          --admin_password=${WP_ADMIN_PASSWORD:-LabAdmin12345!}
-          --admin_email=admin@lab.local
-          --skip-email
-      "
+    # One line on purpose: a folded YAML scalar keeps the newlines of
+    # more-indented lines, which split `wp core install` from its flags.
+    entrypoint: ["sh", "-c"]
+    command:
+      - wp core is-installed || wp core install --url=http://wp.local --title='Guard Proxy Lab' --admin_user=admin --admin_password="$$WP_ADMIN_PASSWORD" --admin_email=admin@lab.local --skip-email
     networks:
       - gp_internal
 
@@ -200,6 +148,5 @@ networks:
   gp_internal:
 
 volumes:
-  dvwa_db_data:
   wp_db_data:
   wp_data:

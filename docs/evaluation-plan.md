@@ -70,24 +70,22 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and runne
 ## 3. Test-Bed Architecture
 
 ```
-┌─ Proxmox LXC (guard-proxy-lab) ──────────────────────────────────────────┐
+┌─ Lab host ───────────────────────────────────────────────────────────────┐
 │                                                                          │
-│  ┌─ Attacker containers ──┐   ┌─ guard-proxy stack (gp_internal) ─────┐  │
-│  │  go-ftw                │   │                                       │  │
-│  │  OWASP ZAP             ├──►│  HAProxy :80  ──►  Coraza SPOA :9000  │  │
-│  │  Nuclei                │   │                        │              │  │
-│  │  wrk (load)            │   │               ┌────────┘              │  │
-│  └────────────────────────┘   │               ▼                       │  │
-│                               │  Target apps (gp_internal):           │  │
-│  Host header routes request   │    juice.local → Juice Shop :3000     │  │
-│  to the correct vhost:        │    dvwa.local  → DVWA :80             │  │
-│    Host: juice.local          │    wp.local    → WordPress :80        │  │
-│    Host: dvwa.local           │    ftw.local   → Albedo :8080         │  │
-│    Host: wp.local             └───────────────────────────────────────┘  │
+│  ┌─ Test containers ──────┐   ┌─ guard-proxy stack (gp_internal) ─────┐  │
+│  │  curl (corpus)         │   │                                       │  │
+│  │  go-ftw                ├──►│  HAProxy :80  ──►  Coraza SPOA :9000  │  │
+│  │  wrk (load)            │   │                        │              │  │
+│  └────────────────────────┘   │               ┌────────┘              │  │
+│                               │               ▼                       │  │
+│  Host header routes request   │  Target apps (gp_internal):           │  │
+│  to the correct vhost:        │    wp.local    → WordPress :80        │  │
+│    Host: wp.local             │    ftw.local   → Albedo :8080         │  │
+│    Host: ftw.local            └───────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-All attacker containers and target apps run inside `gp_internal` (Docker bridge). Attackers reach HAProxy at `http://haproxy:80` with the appropriate `Host:` header. HAProxy forwards to the target after SPOE inspection; Coraza fires the CRS ruleset.
+All test containers and target apps run inside `gp_internal` (Docker bridge). Test containers reach HAProxy at `http://haproxy:80` with the appropriate `Host:` header. HAProxy forwards to the target after SPOE inspection; Coraza fires the CRS ruleset.
 
 Lab source: `benchmarks/lab/`  
 Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
@@ -96,85 +94,74 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 ## 4. Test Targets
 
-| App                                | Purpose                                                             | Vhost         |
-| ---------------------------------- | ------------------------------------------------------------------- | ------------- |
-| **OWASP Juice Shop** v17           | Intentionally vulnerable Node.js app — scanner target               | `juice.local` |
-| **DVWA** (Damn Vulnerable Web App) | Classic PHP vulnerable app — SQLi/XSS/LFI scenarios                 | `dvwa.local`  |
-| **WordPress** 6.x (php8.3)         | Real-world CMS — scanner-assisted coverage and benign corpus target | `wp.local`    |
-| **Albedo**                         | CRS go-ftw regression backend compatible with CRS test assumptions  | `ftw.local`   |
+| App                        | Purpose                                                                              | Vhost       |
+| -------------------------- | ------------------------------------------------------------------------------------ | ----------- |
+| **WordPress** 6.x (php8.3) | Real-world CMS — target of the tagged benign/attack corpus (Test 1)                  | `wp.local`  |
+| **Albedo** 0.2.0           | CRS go-ftw regression backend (Test 2); answers 200 to everything, so also the load target (Test 3) | `ftw.local` |
 
-WordPress is run **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
+WordPress is installed by `make lab-up` (one-shot `wp-cli` container) and runs **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
 
-Every lab vhost has its **own WAF policy**, named after its domain (`Lab juice.local`, `Lab ftw.local`, `Lab dvwa.local`, `Lab wp.local`), so tuning one target never changes another. `make lab-up` creates them with the PL1 profile. A profile (`pl1` or `pl2`, defined in `benchmarks/lab/.env`) is only a set of settings — paranoia level and anomaly thresholds — that `make set-policy POLICY=pl1|pl2` writes into those policies, for all lab vhosts or, with `TARGET_VHOST=<domain>`, for one of them.
+Albedo does no work of its own, so the WAF-vs-direct difference in Test 3 is the cost of HAProxy+Coraza and not of an application.
+
+Each lab vhost has its **own WAF policy**, named after its domain (`Lab wp.local`, `Lab ftw.local`), so tuning one target never changes the other. `make lab-up` creates them with the PL1 profile. A profile (`pl1` or `pl2`, defined in `benchmarks/lab/.env`) is only a set of settings — paranoia level and anomaly thresholds — that `make set-policy POLICY=pl1|pl2` writes into those policies, for both lab vhosts or, with `TARGET_VHOST=<domain>`, for one of them.
+
+The lab was reduced from four targets (Juice Shop, DVWA, WordPress, Albedo) and five scenarios (with OWASP ZAP and Nuclei) to these two targets and three tests: the scanners produced no TP/FN/TN/FP denominator, and Juice Shop crashed under load, which invalidated the overhead measurement. A lab created before this change still has `juice.local`/`dvwa.local` vhosts; delete them (or run `make lab-clean`) before `make lab-up`.
 
 ---
 
 ## 5. Test Scenarios
 
-### 5.1 CRS Regression Suite (go-ftw) — CRS conformance
+Each test answers one question.
 
-**Tool:** `ghcr.io/coreruleset/go-ftw`  
-**Config:** `benchmarks/lab/scenarios/crs-ftw/config.yaml`  
-**Corpus:** `configs/coraza/crs/tests/regression/tests/` (OWASP CRS git submodule)
+| Test | Question                                                         | Tool   | Target      |
+| ---- | ---------------------------------------------------------------- | ------ | ----------- |
+| 1    | Does the WAF block attacks and let ordinary traffic through?     | curl   | `wp.local`  |
+| 2    | Does CRS behave in this integration as the CRS project specifies? | go-ftw | `ftw.local` |
+| 3    | What does the WAF cost in latency, throughput, CPU and memory?   | wrk    | `ftw.local` |
 
-The CRS submodule ships labeled regression tests. go-ftw replays those tests and reports pass/fail test IDs. The runner parses CRS YAML `output.status` values to split tests into expected-block (`403`) and expected-allow (non-`403`) groups, then reports CRS conformance as `passed / run`. It does **not** estimate TPR/FPR.
+### 5.1 Test 1 — Tagged labeled corpus (FP/FN measurement)
 
-Target: Albedo (`ftw.local`) as the CRS-compatible backend.
-
-### 5.2 Tagged Labeled Corpus — FP/FN measurement
-
-**Tool:** curl container + `benchmarks/payloads/`
+**Tool:** curl container + `benchmarks/payloads/`  
 **Runner:** `benchmarks/lab/runners/run-corpus.sh`
 
-The corpus runner sends known-benign paths and known-attack payloads with stable correlation headers: `X-GP-Eval-Run`, `X-GP-Eval-Scenario`, and `X-GP-Eval-Case`. The collector matches those headers in the Coraza audit log. Because Coraza uses `SecAuditEngine RelevantOnly`, a correctly allowed benign request may produce no audit event; absence of a tagged blocking event is therefore treated as **allow**.
+The corpus has two parts:
+
+- **Benign** (`legitimate.txt`): requests an ordinary visitor or editor of a fresh WordPress sends — pages, search, REST API reads, static assets, a failed login, comments, an admin-ajax heartbeat. Some are deliberately tricky but legitimate: apostrophes in names, SQL words in plain sentences (`select a product from the menu`), a `<code>` snippet in a comment, Polish diacritics.
+- **Attacks** (`sqli.txt`, `xss.txt`, `lfi.txt`): every payload is sent twice — in the `s` query parameter and in the body of a POST comment form — so query-string and request-body inspection are both covered.
+
+Every request carries stable correlation headers: `X-GP-Eval-Run`, `X-GP-Eval-Scenario`, and `X-GP-Eval-Case`. The collector matches those headers in the Coraza audit log. Because Coraza uses `SecAuditEngine RelevantOnly`, a correctly allowed benign request may produce no audit event; absence of a tagged blocking event is therefore treated as **allow**. The HTTP status of every request is recorded in `cases.jsonl` as a cross-check.
 
 This is the only source used for TP/FN/TN/FP formulas.
 
-### 5.3 OWASP ZAP Baseline Scan — scanner-assisted coverage
+### 5.2 Test 2 — CRS regression suite (go-ftw, log mode)
 
-**Tool:** `ghcr.io/zaproxy/zaproxy` (`zap-baseline.py`)  
-**Config:** `benchmarks/lab/scenarios/zap/`
+**Tool:** `ghcr.io/coreruleset/go-ftw:2.6.0`  
+**Config:** `benchmarks/lab/scenarios/crs-ftw/config.yaml`  
+**Corpus:** `configs/coraza/crs/tests/regression/tests/` (OWASP CRS git submodule)
 
-ZAP performs a passive baseline scan of the target application through HAProxy. Its traffic mixes crawler requests, passive checks, and attack-like probes, so it is **not** a clean false-positive-rate source. The evaluation preserves `zap.json` and `zap.html`, counts alerts by risk, and records WAF blocks from tagged audit events as supplemental scanner evidence.
+Each CRS regression test sends a request and lists the rule IDs that must fire (`expect_ids`) or must stay silent (`no_expect_ids`); a few only assert an HTTP status. go-ftw replays the tests through HAProxy to `ftw.local` and checks the rule IDs in the Coraza log. To find the log lines of one test, go-ftw sends a marker request before and after it; lab-only rule 999999 (`benchmarks/lab/coraza/guard-proxy-exceptions.lab.conf`) writes the marker into the log, and the lab overlay tees Coraza's log into `error.log` on the `coraza_audit` volume, which the go-ftw container mounts.
 
-Primary target: **WordPress** (`wp.local`).
+The suite runs in **log mode**, not cloud mode. In cloud mode go-ftw only compares HTTP status codes, and a test that asserts no status passes without any check; an earlier version of this lab reported 99.8 % conformance that way, identical at PL1 and PL2.
 
-### 5.4 Nuclei CVE Templates — reached-app scanner evidence
+Tests that cannot pass in this setup by design are excluded before the run and reported separately:
 
-**Tool:** `projectdiscovery/nuclei`  
-**Config:** `benchmarks/lab/scenarios/nuclei/nuclei.yaml`  
-**Templates:** `sqli,xss,lfi,rfi,ssrf,injection,traversal,exposure` (severity: medium+)
+- rules above the vhost policy's paranoia level (the rule is not loaded);
+- response rules (Guard Proxy inspects requests only: `response_check: false`).
 
-Nuclei fires known CVE and exposure templates from its curated library. Medium/high/critical findings are treated as reached-app evidence: the template matched an application response. Nuclei is not used to compute TPR because the runner does not have a complete per-template sent-request denominator correlated to WAF decisions.
+Reported: `passed / run` (CRS conformance), split into tests that expect a rule to fire, to stay silent, or another HTTP status, plus the list of failed test IDs. It does **not** estimate TPR/FPR.
 
-Target: Juice Shop and DVWA (both known to match many templates).
-
-### 5.5 Benign Load Test — Latency and RPS overhead
+### 5.3 Test 3 — Benign load test (latency and RPS overhead)
 
 **Tool:** `elswork/wrk` (arm64+amd64 build of wrk 4.2.0, pinned by digest) with
 `benchmarks/lab/scenarios/load/benign-mix.lua`
 
-Two runs per target:
+Two runs against Albedo (`ftw.local`):
 
 1. **Through HAProxy+Coraza** — production WAF path
-2. **Direct to target container** — bypasses HAProxy (port mapped inside `gp_internal`)
-
-The target container is restarted and waited on before each run. Juice Shop
-retains memory on its dynamic routes under this load: one 30-second run from a
-fresh start takes the container from about 150 MB to about 2.4 GB of memory.
-Near Node's default heap limit of about 2 GB, it pauses for seconds in
-garbage collection and then aborts. Without the restart, whichever run came
-second measured a degraded or crashing target instead of the WAF. The runner
-records how often the target restarted during each run
-(`waf_target_restarts`, `baseline_target_restarts` in `performance.json`); a
-non-zero value invalidates that measurement.
+2. **Direct to the Albedo container** — bypasses HAProxy (`ftw-backend:8080` inside `gp_internal`)
 
 Overhead = WAF_value − direct_value.  
-Config: 2 threads, 20 connections, 30-second duration. The benign mix is
-GET-only and every request in it returns 2xx directly from Juice Shop, so any
-non-2xx response through the WAF is a false positive. A real login
-(`POST /rest/user/login`) was left out because it takes over 2 seconds under
-this load and would dominate the tail latencies with wrk timeouts.
+Config: 2 threads, 20 connections, 30-second duration. The mix has 10 requests: 8 GETs (pages, assets, search, API) and 2 POSTs (a form login and a JSON body), because Coraza also inspects request bodies. Albedo answers 200 to all of them, so any non-2xx response through the WAF is a false positive; a run with errors on either path is marked `valid: false` in `performance.json`, because fast 403s would inflate RPS.
 
 ---
 
@@ -191,7 +178,7 @@ this load and would dominate the tail latencies with wrk timeouts.
 | True Negative               | TN     | Benign request correctly allowed   |
 | False Positive              | FP     | Benign request incorrectly blocked |
 
-TP/FN/TN/FP are computed only for labeled, tagged corpus requests. go-ftw reports CRS conformance (`passed / run`) and expected-block/expected-allow pass/fail counts. ZAP and Nuclei are supplemental scanner evidence and do not publish TPR/FPR.
+TP/FN/TN/FP are computed only for labeled, tagged corpus requests (Test 1). go-ftw (Test 2) reports CRS conformance (`passed / run`), split by test expectation.
 
 ### Performance metrics
 
@@ -214,17 +201,16 @@ Each scenario writes `benchmarks/results/run-<RUN_ID>/<scenario>/summary.json`. 
 
 Security results are descriptive and configuration-specific. The thesis reports the exact policy, vhost, corpus, and tool for each result. Guard Proxy keeps one soft engineering guardrail for performance because HAProxy/Coraza wiring and generated configuration are project responsibilities.
 
-| Metric                              | Guardrail / reporting mode                    | Source                     |
-| ----------------------------------- | --------------------------------------------- | -------------------------- |
-| CRS conformance (go-ftw)            | Reported, no hard pass/fail threshold         | CRS regression corpus      |
-| Corpus TP/FN/TN/FP                  | Reported for the labeled corpus only          | `benchmarks/payloads/`     |
-| ZAP alerts                          | Reported as scanner evidence                  | ZAP baseline report        |
-| Nuclei findings                     | Reported as reached-app scanner evidence      | Nuclei JSONL               |
-| RPS degradation                     | Soft guardrail: < 20% under this lab workload | Project engineering target |
-| Latency overhead p95                | Reported, no hard cap                         | Informational              |
-| Memory footprint (coraza container) | Reported (no hard cap)                        | Informational for thesis   |
+| Metric                              | Guardrail / reporting mode                                   | Source                          |
+| ----------------------------------- | ------------------------------------------------------------ | ------------------------------- |
+| Corpus TP/FN/TN/FP                  | Reported for the labeled corpus only                         | `benchmarks/payloads/`          |
+| CRS conformance (go-ftw)            | Reported, no hard pass/fail threshold                        | CRS regression corpus           |
+| Latency overhead p50                | Soft guardrail: ≤ 10 ms (non-functional requirement, thesis) | Project engineering target      |
+| Latency overhead p95/p99            | Reported, no hard cap                                        | Informational                   |
+| RPS degradation                     | Reported; upper bound, because Albedo does no work           | Informational                   |
+| Memory footprint (coraza container) | Reported (no hard cap)                                       | Informational for thesis        |
 
-The run is not declared “successful” or “failed” based on security thresholds. RPS degradation above the guardrail is treated as an engineering finding to investigate, not as a universal product failure.
+The run is not declared “successful” or “failed” based on security thresholds. Latency overhead above the guardrail is treated as an engineering finding to investigate, not as a universal product failure. RPS degradation against a backend that answers instantly is close to 100 % by construction: against a real application the same absolute cost per request is a much smaller share of the response time.
 
 ---
 
@@ -269,9 +255,9 @@ make eval-sweep
 
 **What happens when you run this?**
 1. The script first writes the **PL1** profile into every lab vhost's policy.
-2. It attacks the lab using multiple tools (go-ftw, Nuclei, ZAP, and a custom corpus) and runs a performance load test.
+2. It runs the three tests: the tagged corpus on `wp.local`, go-ftw on `ftw.local`, and the wrk load test on `ftw.local`.
 3. It saves all metrics for PL1.
-4. Then, it automatically writes the **PL2** profile into the same per-vhost policies and repeats all the attacks and load tests.
+4. Then, it automatically writes the **PL2** profile into the same per-vhost policies and repeats all three tests.
 5. It saves all metrics for PL2.
 
 **What do you do next?**
@@ -321,9 +307,13 @@ The wrk container and the WAF stack run on the same host. The load generator's C
 
 WordPress is tested without CRS application exclusion plugins (not yet implemented in the backend). Any false positives are for an **untuned** WAF+CMS combination under a documented policy. They are not generalized to all Guard Proxy deployments.
 
-### 9.4 Scanner denominators
+### 9.4 Small corpus
 
-ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/FP in the current harness. Their results are reported as scanner evidence, while labeled corpus requests provide the metric denominator.
+The tagged corpus has a few dozen benign requests and about a hundred attack requests. TPR and FPR describe this corpus, not attack traffic in general; one case changes the rate by several percentage points.
+
+### 9.5 Lab-specific go-ftw deviations
+
+The lab overrides every CRS test's `Host` header to route it to `ftw.local`, and HAProxy parses and normalizes requests before Coraza sees them. Tests that depend on their own `Host` header or on malformed HTTP that HAProxy rejects or rewrites fail for that reason, not because of a CRS rule. The thesis groups failed test IDs by cause.
 
 ---
 
@@ -334,10 +324,10 @@ ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/
 ```json
 {
   "run_id": "20260602-141500",
-  "scenario": "ftw | zap-<vhost> | nuclei-<vhost> | load-<vhost>",
-  "target_vhost": "juice.local",
+  "scenario": "corpus-<vhost> | ftw | load-<vhost>",
+  "target_vhost": "wp.local",
   "policy": {
-    "name": "Lab juice.local",
+    "name": "Lab wp.local",
     "paranoia": 1,
     "inbound_threshold": 5,
     "outbound_threshold": 4,
@@ -350,16 +340,22 @@ ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/
     "false_positive": 1,
     "tpr": 0.9412,
     "fpr": 0.04,
-    "crs_conformance_rate": 0.982,
-    "crs_passed": 5412,
-    "crs_failed": 99
+    "crs_conformance_rate": 0.969,
+    "crs_run": 2717,
+    "crs_passed": 2633,
+    "crs_failed": 84,
+    "crs_excluded": 1994
   },
   "performance": {
     "rps": 4120.5,
     "baseline_rps": 5980.0,
     "rps_degradation_pct": 31.1,
     "latency_ms": { "p50": 2.1, "p95": 7.8, "p99": 18.4 },
-    "latency_overhead_ms": { "p50": 0.9, "p95": 3.1, "p99": 7.0 }
+    "baseline_latency_ms": { "p50": 1.2, "p95": 4.7, "p99": 11.4 },
+    "latency_overhead_ms": { "p50": 0.9, "p95": 3.1, "p99": 7.0 },
+    "waf_errors": 0,
+    "baseline_errors": 0,
+    "valid": true
   },
   "resources": {
     "coraza": { "mem_mb_peak": 410, "cpu_pct_avg": 62 },
@@ -372,7 +368,7 @@ ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/
 
 Flat CSV with one row per scenario run. Consumed directly by `thesis/chapters/06-testy.md` tables.
 
-Columns include: `run_id`, `scenario`, `target_vhost`, `policy`, `paranoia_level`, `tpr`, `fpr`, `crs_conformance_rate`, `crs_passed`, `crs_failed`, `tp`, `fn`, `tn`, `fp`, `corpus_cases`, `zap_total_alerts`, `nuclei_findings`, `waf_blocks_from_log`, `rps_waf`, `rps_direct`, `rps_degradation_pct`, latency percentiles, and resource fields.
+Columns include: `run_id`, `scenario`, `target_vhost`, `policy`, `paranoia_level`, `tpr`, `fpr`, `crs_conformance_rate`, `crs_run`, `crs_passed`, `crs_failed`, `crs_excluded`, `tp`, `fn`, `tn`, `fp`, `corpus_cases`, `waf_blocks_from_log`, `rps_waf`, `rps_direct`, `rps_degradation_pct`, WAF/direct/overhead latency percentiles, `load_valid`, and resource fields.
 
 `policy` is the name of the target vhost's own policy (`Lab <domain>`) and `paranoia_level` its
 paranoia level at run time: `1` under the `pl1` profile and `2` under `pl2` — see §8.2 for running both passes.

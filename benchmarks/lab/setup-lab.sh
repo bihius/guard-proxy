@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # setup-lab.sh — Bring up the evaluation lab and register all target vhosts.
 #
-# Extends the real Guard Proxy stack with WordPress/Juice Shop/DVWA targets, gives
-# every target vhost its own WAF policy ("Lab <domain>", PL1 profile), and wires
-# each target domain through HAProxy via the guard-proxy backend API.
+# Extends the real Guard Proxy stack with two targets — WordPress (wp.local)
+# and Albedo (ftw.local) — gives each target vhost its own WAF policy
+# ("Lab <domain>", PL1 profile), wires each domain through HAProxy via the
+# guard-proxy backend API, and installs WordPress.
 #
 # Prerequisites:
 #   - docker/.env (copy from docker/.env.example)
@@ -163,13 +164,11 @@ ensure_crs_bundle
 
 if [[ "${SKIP_COMPOSE}" == false ]]; then
   echo "Starting Guard Proxy + lab target stack..."
-  "${COMPOSE[@]}" up -d --build
+  "${COMPOSE[@]}" up -d --build --remove-orphans
 
   wait_for_healthy backend
   wait_for_healthy coraza
   wait_for_healthy haproxy
-  wait_for_healthy juiceshop
-  wait_for_healthy dvwa
   wait_for_healthy wordpress
 fi
 
@@ -188,12 +187,8 @@ token="$(api_json POST /auth/login "" "${login_body}" | python3 -c 'import json,
 
 load_policy_profile pl1
 
-LAB_JUICESHOP_DOMAIN="$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
-LAB_JUICESHOP_BACKEND_URL="$(env_value LAB_JUICESHOP_BACKEND_URL http://juiceshop:3000)"
 LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
 LAB_FTW_BACKEND_URL="$(env_value LAB_FTW_BACKEND_URL http://ftw-backend:8080)"
-LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
-LAB_DVWA_BACKEND_URL="$(env_value LAB_DVWA_BACKEND_URL http://dvwa:80)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_WP_BACKEND_URL="$(env_value LAB_WP_BACKEND_URL http://wordpress:80)"
 
@@ -208,25 +203,20 @@ ensure_lab_vhost() {
   ensure_vhost "${domain}" "${backend_url}" "${description}" "${policy_id}"
 }
 
-echo "Registering lab vhosts (${LAB_JUICESHOP_DOMAIN}, ${LAB_FTW_DOMAIN}, ${LAB_DVWA_DOMAIN}, ${LAB_WP_DOMAIN}), one policy each..."
-ensure_lab_vhost "${LAB_JUICESHOP_DOMAIN}" "${LAB_JUICESHOP_BACKEND_URL}" "OWASP Juice Shop — intentionally vulnerable app"
-ensure_lab_vhost "${LAB_FTW_DOMAIN}" "${LAB_FTW_BACKEND_URL}" "Albedo — CRS go-ftw regression backend"
-ensure_lab_vhost "${LAB_DVWA_DOMAIN}" "${LAB_DVWA_BACKEND_URL}" "DVWA — Damn Vulnerable Web Application"
-ensure_lab_vhost "${LAB_WP_DOMAIN}" "${LAB_WP_BACKEND_URL}" "WordPress — real CMS for FP measurement (no CRS exclusions)"
+echo "Registering lab vhosts (${LAB_FTW_DOMAIN}, ${LAB_WP_DOMAIN}), one policy each..."
+ensure_lab_vhost "${LAB_FTW_DOMAIN}" "${LAB_FTW_BACKEND_URL}" "Albedo — CRS go-ftw regression and load-test backend"
+ensure_lab_vhost "${LAB_WP_DOMAIN}" "${LAB_WP_BACKEND_URL}" "WordPress — tagged corpus target (no CRS exclusions)"
 
 # Resets policies that already existed (e.g. left on PL2 by a sweep) to PL1
 # and applies the generated HAProxy/Coraza config.
 POLICY=pl1 TARGET_VHOST= bash "${SCRIPT_DIR}/set-policy.sh"
 
-# ── DVWA DB initialisation (idempotent) ────────────────────────────────────
-echo "Initialising DVWA database..."
-curl -sf --max-time 30 \
-  -c /tmp/dvwa-cookies.txt \
-  -b /tmp/dvwa-cookies.txt \
-  -d "create_db=Create+%2F+Reset+Database" \
-  "http://127.0.0.1:${HAPROXY_HTTP_PORT}/setup.php" \
-  -H "Host: ${LAB_DVWA_DOMAIN}" >/dev/null || echo "DVWA setup.php returned non-200 (may already be initialised)"
+# ── WordPress installation (idempotent) ────────────────────────────────────
+# Without it every WordPress URL redirects to the installer, and the corpus
+# would measure the installer instead of a real site.
+echo "Installing WordPress (skipped when already installed)..."
+"${COMPOSE[@]}" run --rm wp-cli
 
 echo
-echo "Eval lab ready: ${LAB_JUICESHOP_DOMAIN}, ${LAB_FTW_DOMAIN}, ${LAB_DVWA_DOMAIN}, ${LAB_WP_DOMAIN} via ${WAF_BASE_URL} (curl -H 'Host: <domain>')."
-echo "Smoke (expect 403): curl -si -H 'Host: ${LAB_JUICESHOP_DOMAIN}' '${WAF_BASE_URL}/?q=1+UNION+SELECT+1--' | grep 'HTTP/'"
+echo "Eval lab ready: ${LAB_FTW_DOMAIN}, ${LAB_WP_DOMAIN} via ${WAF_BASE_URL} (curl -H 'Host: <domain>')."
+echo "Smoke (expect 403): curl -si -H 'Host: ${LAB_WP_DOMAIN}' '${WAF_BASE_URL}/?q=1+UNION+SELECT+1--' | grep 'HTTP/'"

@@ -77,9 +77,7 @@ if [[ -n "${TARGET_VHOST}" ]]; then
   DOMAINS=("${TARGET_VHOST}")
 else
   DOMAINS=(
-    "$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
     "$(env_value LAB_FTW_DOMAIN ftw.local)"
-    "$(env_value LAB_DVWA_DOMAIN dvwa.local)"
     "$(env_value LAB_WP_DOMAIN wp.local)"
   )
 fi
