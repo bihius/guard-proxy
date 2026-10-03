@@ -168,6 +168,8 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
   return (
     <Modal
       title={title}
+      contentClassName="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl lg:max-w-4xl"
+      bodyClassName="min-h-0 overflow-y-auto pr-2"
       onClose={onClose}
       footer={
         <>
@@ -184,230 +186,248 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
         </>
       }
     >
-      <form id="policy-form" onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+      <form
+        id="policy-form"
+        onSubmit={(e) => void handleSubmit(e)}
+        className="space-y-5"
+      >
         {serverError && (
-          <Alert
-            variant="destructive"
-            aria-live="assertive"
-          >
+          <Alert variant="destructive" aria-live="assertive">
             {serverError}
           </Alert>
         )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor="policy-name">Name</Label>
-          <Input
-            id="policy-name"
-            type="text"
-            required
-            maxLength={255}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="My WAF policy"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="policy-description">Description</Label>
-          <Input
-            id="policy-description"
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="policy-enforcement-mode">Enforcement mode</Label>
-            <InfoTooltip label="Block denies requests that exceed the policy threshold. Detect only logs matches without blocking traffic." />
-          </div>
-          <Select
-            id="policy-enforcement-mode"
-            value={enforcementMode}
-            onChange={(e) => setEnforcementMode(e.target.value as "block" | "detect_only")}
-          >
-            <option value="block">Block</option>
-            <option value="detect_only">Detect only</option>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="policy-paranoia-level">Paranoia level</Label>
-            <InfoTooltip label="Higher paranoia levels enable stricter CRS checks. Start low and raise only when the application tolerates the extra sensitivity." />
-          </div>
-          <Select
-            id="policy-paranoia-level"
-            value={paranoiaLevel}
-            onChange={(e) => setParanoiaLevel(e.target.value)}
-          >
-            <option value="1">1 — Minimal</option>
-            <option value="2">2 — Low</option>
-            <option value="3">3 — High</option>
-            <option value="4">4 — Maximum</option>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="policy-inbound-threshold">Inbound threshold</Label>
-            <InfoTooltip label="Requests are treated as suspicious when their inbound anomaly score reaches this threshold." />
-          </div>
-          <Input
-            id="policy-inbound-threshold"
-            type="number"
-            required
-            min={1}
-            value={inboundThreshold}
-            onChange={(e) => setInboundThreshold(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-3 rounded-md border border-border p-3">
-          <Label
-            className={cn(
-              "flex cursor-pointer items-center gap-2",
-              ddosProtectionEnabled && "text-foreground",
-            )}
-          >
-            <Checkbox
-              checked={ddosProtectionEnabled}
-              onChange={(e) => {
-                setDdosProtectionEnabled(e.target.checked);
-                if (!e.target.checked) setAutoBanEnabled(false);
-              }}
-            />
-            DDoS protection
-            <InfoTooltip label="Enable per-vhost request-rate limiting and connection throttling in the generated HAProxy config." />
-          </Label>
-
-          {ddosProtectionEnabled && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="policy-rate-limit-requests">Rate limit (requests)</Label>
-                <Input
-                  id="policy-rate-limit-requests"
-                  type="number"
-                  required
-                  min={1}
-                  value={rateLimitRequests}
-                  onChange={(e) => setRateLimitRequests(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="policy-rate-limit-window">Rate limit window (seconds)</Label>
-                <Input
-                  id="policy-rate-limit-window"
-                  type="number"
-                  required
-                  min={1}
-                  max={3600}
-                  value={rateLimitWindowSeconds}
-                  onChange={(e) => setRateLimitWindowSeconds(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="policy-max-connections">Max connections per IP</Label>
-                <Input
-                  id="policy-max-connections"
-                  type="number"
-                  required
-                  min={1}
-                  value={maxConnectionsPerIp}
-                  onChange={(e) => setMaxConnectionsPerIp(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-3 border-t border-border pt-3">
-                <Label
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2",
-                    autoBanEnabled && "text-foreground",
-                  )}
-                >
-                  <Checkbox
-                    checked={autoBanEnabled}
-                    onChange={(e) => setAutoBanEnabled(e.target.checked)}
-                  />
-                  Automatic IP banning
-                  <InfoTooltip label="Ban a source IP after repeated rate-limit or connection-limit violations. The ban lifts automatically once the IP stays quiet for the ban duration." />
-                </Label>
-
-                {autoBanEnabled && (
-                  <>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="policy-ban-threshold">Ban threshold (violations)</Label>
-                      <Input
-                        id="policy-ban-threshold"
-                        type="number"
-                        required
-                        min={1}
-                        value={banThreshold}
-                        onChange={(e) => setBanThreshold(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label htmlFor="policy-ban-duration">Ban duration (seconds)</Label>
-                      <Input
-                        id="policy-ban-duration"
-                        type="number"
-                        required
-                        min={1}
-                        max={86400}
-                        value={banDurationSeconds}
-                        onChange={(e) => setBanDurationSeconds(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="space-y-3 rounded-md border border-border p-3">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="policy-geoip-mode">GeoIP country filtering</Label>
-            <InfoTooltip label="Allowlist: only the listed countries may reach this vhost; everything else gets 403. Blocklist: the listed countries get 403. Requests whose country cannot be resolved are allowed by default." />
-          </div>
-          <Select
-            id="policy-geoip-mode"
-            value={geoipMode}
-            onChange={(e) => setGeoipMode(e.target.value as GeoipMode)}
-          >
-            <option value="off">Off</option>
-            <option value="allowlist">Allowlist</option>
-            <option value="blocklist">Blocklist</option>
-          </Select>
-
-          {geoipMode !== "off" && (
+        <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Identity</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="policy-geoip-countries">Country codes</Label>
+              <Label htmlFor="policy-name">Name</Label>
               <Input
-                id="policy-geoip-countries"
+                id="policy-name"
                 type="text"
-                value={geoipCountries}
-                onChange={(e) => setGeoipCountries(e.target.value)}
-                placeholder="e.g. US, CA, GB"
+                required
+                maxLength={255}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="My WAF policy"
               />
             </div>
-          )}
-        </div>
 
-        {props.mode === "edit" && (
-          <Label className={cn("flex cursor-pointer items-center gap-2", isActive && "text-foreground")}>
-            <Checkbox
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-            />
-            Active
-          </Label>
-        )}
+            <div className="space-y-1.5">
+              <Label htmlFor="policy-description">Description</Label>
+              <Input
+                id="policy-description"
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          {props.mode === "edit" && (
+            <Label
+              className={cn(
+                "flex cursor-pointer items-center gap-2",
+                isActive && "text-foreground",
+              )}
+            >
+              <Checkbox checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+              Active
+            </Label>
+          )}
+        </section>
+
+        <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Inspection and enforcement</h3>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="policy-enforcement-mode">Enforcement mode</Label>
+                <InfoTooltip label="Block denies requests that exceed the policy threshold. Detect only logs matches without blocking traffic." />
+              </div>
+              <Select
+                id="policy-enforcement-mode"
+                value={enforcementMode}
+                onChange={(e) => setEnforcementMode(e.target.value as "block" | "detect_only")}
+              >
+                <option value="block">Block</option>
+                <option value="detect_only">Detect only</option>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="policy-paranoia-level">Paranoia level</Label>
+                <InfoTooltip label="Higher paranoia levels enable stricter CRS checks. Start low and raise only when the application tolerates the extra sensitivity." />
+              </div>
+              <Select
+                id="policy-paranoia-level"
+                value={paranoiaLevel}
+                onChange={(e) => setParanoiaLevel(e.target.value)}
+              >
+                <option value="1">1 — Minimal</option>
+                <option value="2">2 — Low</option>
+                <option value="3">3 — High</option>
+                <option value="4">4 — Maximum</option>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="policy-inbound-threshold">Inbound threshold</Label>
+                <InfoTooltip label="Requests are treated as suspicious when their inbound anomaly score reaches this threshold." />
+              </div>
+              <Input
+                id="policy-inbound-threshold"
+                type="number"
+                required
+                min={1}
+                value={inboundThreshold}
+                onChange={(e) => setInboundThreshold(e.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
+            <h3 className="text-sm font-semibold text-foreground">Traffic limits</h3>
+            <Label
+              className={cn(
+                "flex cursor-pointer items-center gap-2",
+                ddosProtectionEnabled && "text-foreground",
+              )}
+            >
+              <Checkbox
+                checked={ddosProtectionEnabled}
+                onChange={(e) => {
+                  setDdosProtectionEnabled(e.target.checked);
+                  if (!e.target.checked) setAutoBanEnabled(false);
+                }}
+              />
+              DDoS protection
+              <InfoTooltip label="Enable per-vhost request-rate limiting and connection throttling in the generated HAProxy config." />
+            </Label>
+
+            {ddosProtectionEnabled && (
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="policy-rate-limit-requests">Rate limit (requests)</Label>
+                    <Input
+                      id="policy-rate-limit-requests"
+                      type="number"
+                      required
+                      min={1}
+                      value={rateLimitRequests}
+                      onChange={(e) => setRateLimitRequests(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="policy-rate-limit-window">Rate limit window (seconds)</Label>
+                    <Input
+                      id="policy-rate-limit-window"
+                      type="number"
+                      required
+                      min={1}
+                      max={3600}
+                      value={rateLimitWindowSeconds}
+                      onChange={(e) => setRateLimitWindowSeconds(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="policy-max-connections">Max connections per IP</Label>
+                    <Input
+                      id="policy-max-connections"
+                      type="number"
+                      required
+                      min={1}
+                      value={maxConnectionsPerIp}
+                      onChange={(e) => setMaxConnectionsPerIp(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-3">
+                  <Label
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2",
+                      autoBanEnabled && "text-foreground",
+                    )}
+                  >
+                    <Checkbox
+                      checked={autoBanEnabled}
+                      onChange={(e) => setAutoBanEnabled(e.target.checked)}
+                    />
+                    Automatic IP banning
+                    <InfoTooltip label="Ban a source IP after repeated rate-limit or connection-limit violations. The ban lifts automatically once the IP stays quiet for the ban duration." />
+                  </Label>
+
+                  {autoBanEnabled && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="policy-ban-threshold">Ban threshold (violations)</Label>
+                        <Input
+                          id="policy-ban-threshold"
+                          type="number"
+                          required
+                          min={1}
+                          value={banThreshold}
+                          onChange={(e) => setBanThreshold(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="policy-ban-duration">Ban duration (seconds)</Label>
+                        <Input
+                          id="policy-ban-duration"
+                          type="number"
+                          required
+                          min={1}
+                          max={86400}
+                          value={banDurationSeconds}
+                          onChange={(e) => setBanDurationSeconds(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
+            <h3 className="text-sm font-semibold text-foreground">Country filtering</h3>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="policy-geoip-mode">GeoIP country filtering</Label>
+              <InfoTooltip label="Allowlist: only the listed countries may reach this vhost; everything else gets 403. Blocklist: the listed countries get 403. Requests whose country cannot be resolved are allowed by default." />
+            </div>
+            <Select
+              id="policy-geoip-mode"
+              value={geoipMode}
+              onChange={(e) => setGeoipMode(e.target.value as GeoipMode)}
+            >
+              <option value="off">Off</option>
+              <option value="allowlist">Allowlist</option>
+              <option value="blocklist">Blocklist</option>
+            </Select>
+
+            {geoipMode !== "off" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="policy-geoip-countries">Country codes</Label>
+                <Input
+                  id="policy-geoip-countries"
+                  type="text"
+                  value={geoipCountries}
+                  onChange={(e) => setGeoipCountries(e.target.value)}
+                  placeholder="e.g. US, CA, GB"
+                />
+              </div>
+            )}
+          </section>
+        </div>
       </form>
     </Modal>
   );

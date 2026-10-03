@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [Unreleased]
+
+### Changed
+
+- The policy editor uses a wider responsive layout with grouped settings and a
+  scrollable body; policy actions use the shared green primary button style.
+
 ## [0.1.0-beta.5] - 2026-10-03
 
 ### Fixed
@@ -166,6 +173,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[Unreleased]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...HEAD
 [0.1.0-beta.5]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.2...v0.1.0-beta.3
