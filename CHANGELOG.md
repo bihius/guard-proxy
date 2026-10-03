@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
-## [Unreleased]
+## [0.1.0-beta.5] - 2026-10-03
 
 ### Fixed
 
@@ -18,6 +18,9 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   Before, all vhosts shared one WAF configuration, and assigning different
   policies to two vhosts made config apply fail. Vhosts without a policy are
   inspected with CRS defaults in detect-only mode.
+- Config apply no longer interrupts traffic: Coraza reloads its rules with
+  `SIGHUP` instead of restarting, so requests during an apply are no longer
+  answered with 503 (#303).
 
 ### Changed
 
@@ -163,6 +166,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[0.1.0-beta.5]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.1...v0.1.0-beta.2
