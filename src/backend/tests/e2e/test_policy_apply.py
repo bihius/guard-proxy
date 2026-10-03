@@ -7,9 +7,12 @@ import os
 import shutil
 import socket
 import subprocess
+import threading
 import time
 import uuid
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -27,9 +30,13 @@ EXCLUSION_RULE_ID = 942100
 CUSTOM_RULE_ID = 9000001
 HTTP_TIMEOUT_SECONDS = 5
 SERVICE_TIMEOUT_SECONDS = 180
-# Coraza's supervisor polls /runtime/current every second before restarting SPOA.
-# Keep this timeout comfortably above that lower bound plus container scheduling.
+# Coraza's supervisor polls /runtime/current every second before reloading the
+# SPOA's rules. Keep this timeout comfortably above that lower bound plus
+# container scheduling.
 RELOAD_TIMEOUT_SECONDS = 45
+# Delay between traffic-probe requests: ~20 req/s, well above the 5 req/s that
+# issue #303 asks a probe to sustain during an apply.
+PROBE_INTERVAL_SECONDS = 0.05
 
 
 def _find_repo_root() -> Path:
@@ -92,37 +99,7 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     compose_stack: ComposeStack,
 ) -> None:
     token = _login(compose_stack)
-
-    policy = _api_json(
-        compose_stack,
-        "POST",
-        "/policies",
-        token=token,
-        expected_status=201,
-        payload={
-            "name": "Policy apply e2e",
-            "paranoia_level": 1,
-            "inbound_anomaly_threshold": 5,
-            "outbound_anomaly_threshold": 4,
-            "enforcement_mode": "block",
-        },
-    )
-    policy_id = policy["id"]
-
-    _api_json(
-        compose_stack,
-        "POST",
-        "/vhosts",
-        token=token,
-        expected_status=201,
-        payload={
-            "domain": HOST_HEADER,
-            "backend_url": "http://backend:8000",
-            "ssl_enabled": False,
-            "is_active": True,
-            "policy_id": policy_id,
-        },
-    )
+    policy_id = _create_policy_with_vhost(compose_stack, token, "Policy apply e2e")
     _api_json(
         compose_stack,
         "POST",
@@ -170,7 +147,12 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     )
     _assert_coraza_runtime_override(compose_stack, should_exist=False)
     _assert_coraza_runtime_tuning(compose_stack, should_exist=True)
-    _wait_for_scanner_status(compose_stack, 403, "scanner request before override")
+    _wait_for_status(
+        compose_stack,
+        403,
+        "scanner request before override",
+        headers={"User-Agent": SCANNER_USER_AGENT},
+    )
 
     override = _api_json(
         compose_stack,
@@ -193,10 +175,11 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     _assert_coraza_runtime_override(compose_stack, should_exist=True)
     # The runtime-file assertion proves the override reached Coraza's mount;
     # the HTTP verdict is still the user-visible contract for issue #114.
-    _wait_for_scanner_status(
+    _wait_for_status(
         compose_stack,
         200,
         "scanner request after disable override",
+        headers={"User-Agent": SCANNER_USER_AGENT},
     )
 
     _api_json(
@@ -212,7 +195,122 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
         "rule_overrides_conf"
     ]
     _assert_coraza_runtime_override(compose_stack, should_exist=False)
-    _wait_for_scanner_status(compose_stack, 403, "scanner request after re-enable")
+    _wait_for_status(
+        compose_stack,
+        403,
+        "scanner request after re-enable",
+        headers={"User-Agent": SCANNER_USER_AGENT},
+    )
+
+
+@pytest.mark.e2e
+def test_config_apply_keeps_serving_traffic_without_503(
+    compose_stack: ComposeStack,
+) -> None:
+    """Regression for #303: an apply must not interrupt traffic.
+
+    Each apply used to restart coraza-spoa, and HAProxy's fail-closed rules
+    answered every request that arrived while it was down with 503.
+    """
+    token = _login(compose_stack)
+    policy_id = _create_policy_with_vhost(compose_stack, token, "Apply traffic e2e")
+    _apply_config(compose_stack, token)
+    _wait_for_status(
+        compose_stack,
+        403,
+        "scanner request before override",
+        headers={"User-Agent": SCANNER_USER_AGENT},
+    )
+
+    with _probe_traffic(compose_stack) as probe:
+        _api_json(
+            compose_stack,
+            "POST",
+            f"/policies/{policy_id}/rules",
+            token=token,
+            expected_status=201,
+            payload={"rule_id": SCANNER_RULE_ID, "action": "disable"},
+        )
+        _apply_config(compose_stack, token)
+        # The flipped verdict proves Coraza is enforcing the new rules, so the
+        # probe covered the whole rule switch, not just the HAProxy reload.
+        _wait_for_status(
+            compose_stack,
+            200,
+            "scanner request after disable override",
+            headers={"User-Agent": SCANNER_USER_AGENT},
+        )
+        _apply_config(compose_stack, token)
+        time.sleep(3)
+
+    assert len(probe.results) > 20, f"probe sent too few requests: {probe.results}"
+    failures = [result for result in probe.results if result != 200]
+    assert not failures, f"traffic was interrupted during apply: {failures}"
+
+    # Fail-closed must still hold when Coraza is really unavailable.
+    _run(compose_stack.command + ["stop", "coraza"], env=compose_stack.env)
+    _wait_for_status(compose_stack, 503, "request with Coraza stopped")
+
+
+@dataclass
+class TrafficProbe:
+    results: list[int | str] = field(default_factory=list)
+
+
+@contextmanager
+def _probe_traffic(stack: ComposeStack) -> Iterator[TrafficProbe]:
+    """Send benign requests through the WAF in the background until exit."""
+    probe = TrafficProbe()
+    stop = threading.Event()
+
+    def run() -> None:
+        while not stop.is_set():
+            try:
+                status, _ = _http_request(f"{stack.base_url}/docs", method="GET")
+                probe.results.append(status)
+            except URLError as error:
+                probe.results.append(str(error))
+            stop.wait(PROBE_INTERVAL_SECONDS)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    try:
+        yield probe
+    finally:
+        stop.set()
+        thread.join(timeout=HTTP_TIMEOUT_SECONDS + 1)
+
+
+def _create_policy_with_vhost(stack: ComposeStack, token: str, name: str) -> int:
+    policy = _api_json(
+        stack,
+        "POST",
+        "/policies",
+        token=token,
+        expected_status=201,
+        payload={
+            "name": name,
+            "paranoia_level": 1,
+            "inbound_anomaly_threshold": 5,
+            "outbound_anomaly_threshold": 4,
+            "enforcement_mode": "block",
+        },
+    )
+    _api_json(
+        stack,
+        "POST",
+        "/vhosts",
+        token=token,
+        expected_status=201,
+        payload={
+            "domain": HOST_HEADER,
+            "backend_url": "http://backend:8000",
+            "ssl_enabled": False,
+            "is_active": True,
+            "policy_id": policy["id"],
+        },
+    )
+    return int(policy["id"])
 
 
 def _require_e2e_prerequisites() -> None:
@@ -504,10 +602,12 @@ print(json.dumps(result))
     return int(response["status"]), str(response["body"])
 
 
-def _wait_for_scanner_status(
+def _wait_for_status(
     stack: ComposeStack,
     expected_status: int,
     description: str,
+    *,
+    headers: dict[str, str] | None = None,
 ) -> None:
     deadline = time.monotonic() + RELOAD_TIMEOUT_SECONDS
     last_status: int | str = "unknown"
@@ -517,7 +617,7 @@ def _wait_for_scanner_status(
             status, _ = _http_request(
                 f"{stack.base_url}/docs",
                 method="GET",
-                headers={"User-Agent": SCANNER_USER_AGENT},
+                headers=headers,
             )
             last_status = status
             if status == expected_status:

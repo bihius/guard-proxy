@@ -82,8 +82,8 @@ machine-readable degraded reason header.
 5. Coraza reads the active generated `rule-overrides.conf` from the same volume
    after CRS rules are loaded. The Coraza container runs a supervisor that polls
    the `/runtime/current` symlink; when the backend atomically swaps it, the
-   supervisor restarts `coraza-spoa` automatically — no Docker socket access
-   required.
+   supervisor sends `coraza-spoa` a `SIGHUP` to reload its rules in place — no
+   Docker socket access required.
 
 ### Runtime Event Ingestion
 1. Coraza writes one JSON audit event per newline to
@@ -343,13 +343,14 @@ observe the backend's atomic `current` symlink replacement through the
 read-only runtime volume mount while Coraza kept using the previous loaded
 rules. Polling the symlink target is intentionally less clever but directly
 tests the state Coraza includes. When the target changes, the supervisor
-restarts `coraza-spoa` — picking up the new `rule-overrides.conf` without any
-external signal or Docker socket access. If the child process exits, the
-supervisor exits non-zero so Compose can restart the container. Note that this
-is a full process restart, not a hot-reload: port 9000 is briefly unavailable
-(~sub-second) during the restart, causing HAProxy SPOE to return an error for
-any request that lands in that window. This is acceptable for a manual
-rule-apply operation.
+sends `SIGHUP` to `coraza-spoa`, which rebuilds its WAF from the new
+`/runtime/current` files and swaps it in while the listener on port 9000 stays
+open. If the new rules fail to load, `coraza-spoa` logs the error and keeps
+serving the previous ones. If the child process exits, the supervisor exits
+non-zero so Compose can restart the container.
+An earlier version restarted `coraza-spoa` instead. Port 9000 was then closed
+for a moment on every apply, and HAProxy's fail-closed rules answered every
+request in that window with 503 (#303).
 
 ## Key Decisions
 
