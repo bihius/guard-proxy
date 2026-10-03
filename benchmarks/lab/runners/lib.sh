@@ -40,25 +40,83 @@ ATTACKER_CPUSET="$(env_value LAB_ATTACKER_CPUSET '')"
 
 # ── Policy selection ───────────────────────────────────────────────────────
 
-# Resolve the active policy for this run based on POLICY (pl1|pl2, default pl1).
-# Exports POLICY_NAME and POLICY_PARANOIA from the matching LAB_POLICY_* /
-# LAB_PL2_POLICY_* env vars.
+# shellcheck source=benchmarks/lab/policy-profiles.sh
+source "${LAB_DIR}/policy-profiles.sh"
+
+# Record the policy that actually protects TARGET_VHOST, read from the backend
+# API: every lab vhost has its own policy, so the profile name in POLICY
+# (pl1|pl2, which only labels the results directory) does not say which
+# settings a given vhost runs with. Sets POLICY_JSON for write_summary and
+# warns when the vhost's settings do not match the POLICY profile.
 resolve_policy() {
-  local policy="${POLICY:-pl1}"
-  case "${policy}" in
-    pl1)
-      POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
-      POLICY_PARANOIA="$(env_value LAB_POLICY_PARANOIA 1)"
-      ;;
-    pl2)
-      POLICY_NAME="$(env_value LAB_PL2_POLICY_NAME 'Lab PL2')"
-      POLICY_PARANOIA="$(env_value LAB_PL2_POLICY_PARANOIA 2)"
-      ;;
-    *)
-      echo "Unknown POLICY '${policy}' (expected pl1 or pl2)." >&2
-      exit 1
-      ;;
-  esac
+  : "${TARGET_VHOST:?TARGET_VHOST must be set before resolve_policy}"
+  load_policy_profile "${POLICY:-pl1}"
+  POLICY_JSON="$(
+    API_BASE_URL="http://127.0.0.1:${BACKEND_HTTP_PORT}" \
+    ADMIN_EMAIL="$(env_value ADMIN_EMAIL admin@example.com)" \
+    ADMIN_PASSWORD="$(env_value ADMIN_PASSWORD GuardProxyDemo12345)" \
+    DOMAIN="${TARGET_VHOST}" \
+    PROFILE="${POLICY:-pl1}" \
+    PROFILE_PARANOIA="${PROFILE_PARANOIA}" \
+    PROFILE_INBOUND_THRESHOLD="${PROFILE_INBOUND_THRESHOLD}" \
+    python3 - <<'PY'
+import json, os, sys, time, urllib.error, urllib.request
+
+base = os.environ["API_BASE_URL"]
+
+def call(path, token=None, body=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(base + path, data=data, headers=headers)
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return json.load(response)
+
+credentials = {"email": os.environ["ADMIN_EMAIL"], "password": os.environ["ADMIN_PASSWORD"]}
+# /auth/login allows 5 requests per minute per IP and a sweep logs in once per
+# runner; wait out the limit instead of failing a long evaluation run.
+for attempt in range(3):
+    try:
+        token = call("/auth/login", body=credentials)["access_token"]
+        break
+    except urllib.error.HTTPError as error:
+        if error.code != 429 or attempt == 2:
+            raise
+        wait = int(error.headers.get("Retry-After", "60"))
+        print(f"Login rate-limited; retrying in {wait}s.", file=sys.stderr)
+        time.sleep(wait)
+domain = os.environ["DOMAIN"]
+vhost = next(
+    (v for v in call("/vhosts?per_page=500", token)["items"] if v["domain"] == domain),
+    None,
+)
+if vhost is None:
+    sys.exit(f"vhost {domain!r} not found. Run `make lab-up` first.")
+policy = call(f"/vhosts/{vhost['id']}", token).get("policy")
+if policy is None:
+    sys.exit(f"vhost {domain!r} has no policy. Run `make lab-up` first.")
+if (policy["paranoia_level"], policy["inbound_anomaly_threshold"]) != (
+    int(os.environ["PROFILE_PARANOIA"]),
+    int(os.environ["PROFILE_INBOUND_THRESHOLD"]),
+):
+    print(
+        f"WARNING: {domain} runs policy {policy['name']!r} at PL{policy['paranoia_level']}"
+        f" / threshold {policy['inbound_anomaly_threshold']}, not the"
+        f" {os.environ['PROFILE']} profile. Run `make set-policy POLICY=...` first"
+        " if that is not intended.",
+        file=sys.stderr,
+    )
+print(json.dumps({
+    "name": policy["name"],
+    "paranoia": policy["paranoia_level"],
+    "inbound_threshold": policy["inbound_anomaly_threshold"],
+    "outbound_threshold": policy["outbound_anomaly_threshold"],
+    "mode": policy["enforcement_mode"],
+}))
+PY
+  )"
+  echo "Target ${TARGET_VHOST} is protected by: ${POLICY_JSON}"
 }
 
 # ── Directory setup ────────────────────────────────────────────────────────
@@ -182,34 +240,25 @@ copy_audit_log_snapshot() {
 
 # ── Output helpers ─────────────────────────────────────────────────────────
 
+# Requires resolve_policy to have run (POLICY_JSON).
 write_summary() {
   local scenario="$1"
   local target_vhost="$2"
-  local policy_name="$3"
-  local detection_json="$4"      # {"true_positive":...,"false_negative":...,"tpr":...,"fpr":...}
-  local performance_json="$5"    # {"rps":...,"latency_ms":...} or {}
-  local resources_json="${6:-}"
+  local detection_json="$3"      # {"true_positive":...,"false_negative":...,"tpr":...,"fpr":...}
+  local performance_json="$4"    # {"rps":...,"latency_ms":...} or {}
+  local resources_json="${5:-}"
   if [[ -z "${resources_json}" ]]; then resources_json='{}'; fi
-  local policy_paranoia="${7:-}"
 
   RUN_ID="${RUN_ID}" RUN_DIR="${RUN_DIR}" SCENARIO="${scenario}" \
-  TARGET_VHOST="${target_vhost}" POLICY_NAME="${policy_name}" \
+  TARGET_VHOST="${target_vhost}" POLICY_JSON="${POLICY_JSON:?resolve_policy must run first}" \
   DETECTION_JSON="${detection_json}" PERFORMANCE_JSON="${performance_json}" \
-  RESOURCES_JSON="${resources_json}" POLICY_PARANOIA="${policy_paranoia}" python3 - <<'PY'
+  RESOURCES_JSON="${resources_json}" python3 - <<'PY'
 import json, os
 
 detection = json.loads(os.environ["DETECTION_JSON"])
 performance = json.loads(os.environ["PERFORMANCE_JSON"])
 resources = json.loads(os.environ["RESOURCES_JSON"])
-
-policy = {"name": os.environ["POLICY_NAME"]}
-paranoia_raw = os.environ.get("POLICY_PARANOIA", "")
-if paranoia_raw != "":
-    try:
-        policy["paranoia"] = int(paranoia_raw)
-    except ValueError:
-        policy["paranoia"] = paranoia_raw
-
+policy = json.loads(os.environ["POLICY_JSON"])
 summary = {
     "run_id": os.environ["RUN_ID"],
     "scenario": os.environ["SCENARIO"],

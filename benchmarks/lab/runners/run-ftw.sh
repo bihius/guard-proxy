@@ -18,6 +18,7 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TARGET_VHOST="${TARGET_VHOST:-${LAB_FTW_DOMAIN}}"
+resolve_policy
 FTW_IMAGE="ghcr.io/coreruleset/go-ftw:latest"
 CRS_TESTS="${REPO_ROOT}/configs/coraza/crs/tests/regression/tests"
 FTW_CONFIG="${REPO_ROOT}/benchmarks/lab/scenarios/crs-ftw/config.yaml"
@@ -74,9 +75,7 @@ PY
 
 # Write final summary.json.
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
-resolve_policy
-
-write_summary "ftw" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}" "${POLICY_PARANOIA}"
+write_summary "ftw" "${TARGET_VHOST}" "${DETECTION}" "{}" "{}"
 
 echo ""
 echo "FTW conformance: $(python3 -c "import json; d=json.load(open('${OUT_DIR}/detection.json')); print(f\"{(d.get('crs_conformance_rate') or 0)*100:.1f}%\")")"

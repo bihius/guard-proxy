@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # setup-lab.sh — Bring up the evaluation lab and register all target vhosts.
 #
-# Extends the real Guard Proxy stack with WordPress/Juice Shop/DVWA targets, seeds two
-# WAF policies (baseline PL1 and high-paranoia PL2), and wires each target
-# domain through HAProxy via the guard-proxy backend API.
+# Extends the real Guard Proxy stack with WordPress/Juice Shop/DVWA targets, gives
+# every target vhost its own WAF policy ("Lab <domain>", PL1 profile), and wires
+# each target domain through HAProxy via the guard-proxy backend API.
 #
 # Prerequisites:
 #   - docker/.env (copy from docker/.env.example)
@@ -106,6 +106,9 @@ ensure_crs_bundle() {
   echo "Run: git submodule update --init --recursive" >&2; exit 1
 }
 
+# shellcheck source=benchmarks/lab/policy-profiles.sh
+source "${SCRIPT_DIR}/policy-profiles.sh"
+
 ensure_policy() {
   local name="$1"; local body="$2"
   echo "Ensuring WAF policy '${name}' exists..." >&2
@@ -181,27 +184,9 @@ echo "Logging in..."
 login_body="$(printf '{"email":%s,"password":%s}' "$(json_string "${ADMIN_EMAIL}")" "$(json_string "${ADMIN_PASSWORD}")")"
 token="$(api_json POST /auth/login "" "${login_body}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
 
-# ── Policies ───────────────────────────────────────────────────────────────
+# ── Per-vhost policies and vhosts ──────────────────────────────────────────
 
-LAB_POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
-LAB_POLICY_PARANOIA="$(env_value LAB_POLICY_PARANOIA 1)"
-LAB_POLICY_INBOUND_THRESHOLD="$(env_value LAB_POLICY_INBOUND_THRESHOLD 5)"
-
-baseline_body="$(printf '{"name":%s,"description":"Lab evaluation baseline — PL%s anomaly threshold %s block","paranoia_level":%s,"inbound_anomaly_threshold":%s,"enforcement_mode":"block"}' \
-  "$(json_string "${LAB_POLICY_NAME}")" "${LAB_POLICY_PARANOIA}" "${LAB_POLICY_INBOUND_THRESHOLD}" \
-  "${LAB_POLICY_PARANOIA}" "${LAB_POLICY_INBOUND_THRESHOLD}")"
-baseline_policy_id="$(ensure_policy "${LAB_POLICY_NAME}" "${baseline_body}")"
-
-LAB_PL2_POLICY_NAME="$(env_value LAB_PL2_POLICY_NAME 'Lab PL2')"
-LAB_PL2_POLICY_PARANOIA="$(env_value LAB_PL2_POLICY_PARANOIA 2)"
-LAB_PL2_POLICY_INBOUND_THRESHOLD="$(env_value LAB_PL2_POLICY_INBOUND_THRESHOLD 3)"
-
-pl2_body="$(printf '{"name":%s,"description":"Lab evaluation high-paranoia — PL%s anomaly threshold %s block","paranoia_level":%s,"inbound_anomaly_threshold":%s,"enforcement_mode":"block"}' \
-  "$(json_string "${LAB_PL2_POLICY_NAME}")" "${LAB_PL2_POLICY_PARANOIA}" "${LAB_PL2_POLICY_INBOUND_THRESHOLD}" \
-  "${LAB_PL2_POLICY_PARANOIA}" "${LAB_PL2_POLICY_INBOUND_THRESHOLD}")"
-pl2_policy_id="$(ensure_policy "${LAB_PL2_POLICY_NAME}" "${pl2_body}")"
-
-# ── Vhosts ─────────────────────────────────────────────────────────────────
+load_policy_profile pl1
 
 LAB_JUICESHOP_DOMAIN="$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
 LAB_JUICESHOP_BACKEND_URL="$(env_value LAB_JUICESHOP_BACKEND_URL http://juiceshop:3000)"
@@ -212,14 +197,26 @@ LAB_DVWA_BACKEND_URL="$(env_value LAB_DVWA_BACKEND_URL http://dvwa:80)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_WP_BACKEND_URL="$(env_value LAB_WP_BACKEND_URL http://wordpress:80)"
 
-echo "Registering lab vhosts (${LAB_JUICESHOP_DOMAIN}, ${LAB_FTW_DOMAIN}, ${LAB_DVWA_DOMAIN}, ${LAB_WP_DOMAIN})..."
-ensure_vhost "${LAB_JUICESHOP_DOMAIN}" "${LAB_JUICESHOP_BACKEND_URL}" "OWASP Juice Shop — intentionally vulnerable app" "${baseline_policy_id}"
-ensure_vhost "${LAB_FTW_DOMAIN}" "${LAB_FTW_BACKEND_URL}" "Albedo — CRS go-ftw regression backend" "${baseline_policy_id}"
-ensure_vhost "${LAB_DVWA_DOMAIN}" "${LAB_DVWA_BACKEND_URL}" "DVWA — Damn Vulnerable Web Application" "${baseline_policy_id}"
-ensure_vhost "${LAB_WP_DOMAIN}" "${LAB_WP_BACKEND_URL}" "WordPress — real CMS for FP measurement (no CRS exclusions)" "${baseline_policy_id}"
+ensure_lab_vhost() {
+  local domain="$1"; local backend_url="$2"; local description="$3"
+  local name policy_body policy_id
+  name="$(lab_policy_name "${domain}")"
+  policy_body="$(printf '{"name":%s,"description":%s,"paranoia_level":%s,"inbound_anomaly_threshold":%s,"outbound_anomaly_threshold":%s,"enforcement_mode":"block"}' \
+    "$(json_string "${name}")" "$(json_string "Lab evaluation policy for ${domain}")" \
+    "${PROFILE_PARANOIA}" "${PROFILE_INBOUND_THRESHOLD}" "${PROFILE_OUTBOUND_THRESHOLD}")"
+  policy_id="$(ensure_policy "${name}" "${policy_body}")"
+  ensure_vhost "${domain}" "${backend_url}" "${description}" "${policy_id}"
+}
 
-echo "Applying generated HAProxy/Coraza config..."
-api_json POST /config/apply "${token}" >/dev/null
+echo "Registering lab vhosts (${LAB_JUICESHOP_DOMAIN}, ${LAB_FTW_DOMAIN}, ${LAB_DVWA_DOMAIN}, ${LAB_WP_DOMAIN}), one policy each..."
+ensure_lab_vhost "${LAB_JUICESHOP_DOMAIN}" "${LAB_JUICESHOP_BACKEND_URL}" "OWASP Juice Shop — intentionally vulnerable app"
+ensure_lab_vhost "${LAB_FTW_DOMAIN}" "${LAB_FTW_BACKEND_URL}" "Albedo — CRS go-ftw regression backend"
+ensure_lab_vhost "${LAB_DVWA_DOMAIN}" "${LAB_DVWA_BACKEND_URL}" "DVWA — Damn Vulnerable Web Application"
+ensure_lab_vhost "${LAB_WP_DOMAIN}" "${LAB_WP_BACKEND_URL}" "WordPress — real CMS for FP measurement (no CRS exclusions)"
+
+# Resets policies that already existed (e.g. left on PL2 by a sweep) to PL1
+# and applies the generated HAProxy/Coraza config.
+POLICY=pl1 TARGET_VHOST= bash "${SCRIPT_DIR}/set-policy.sh"
 
 # ── DVWA DB initialisation (idempotent) ────────────────────────────────────
 echo "Initialising DVWA database..."

@@ -26,6 +26,7 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TARGET_VHOST="${TARGET_VHOST:-${LAB_JUICESHOP_DOMAIN}}"
+resolve_policy
 DIRECT_HOST="${DIRECT_HOST:-juiceshop}"    # Docker service name for direct access
 TARGET_SERVICE="${TARGET_SERVICE:-${DIRECT_HOST}}"  # Compose service restarted before each run
 DIRECT_PORT="${DIRECT_PORT:-3000}"         # Target app port (no HAProxy)
@@ -278,9 +279,7 @@ c = json.loads('''${RESOURCES_CORAZA}''')
 h = json.loads('''${RESOURCES_HAPROXY}''')
 print(json.dumps({'coraza': c, 'haproxy': h}))
 ")"
-resolve_policy
-
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "{}" "${PERFORMANCE}" "${RESOURCES_JSON}" "${POLICY_PARANOIA}"
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "{}" "${PERFORMANCE}" "${RESOURCES_JSON}"
 
 echo ""
 python3 - <<PY

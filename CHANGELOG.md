@@ -35,6 +35,12 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   global policy.
 - New `CORAZA_LOG_LEVEL` backend setting for the generated Coraza
   configuration; `make dev` sets it to `debug`.
+- Evaluation lab: every lab vhost has its own policy (`Lab <domain>`)
+  instead of all four sharing `Lab Baseline`. `make set-policy POLICY=pl1|pl2`
+  writes the profile's paranoia level and thresholds into those policies,
+  optionally for one vhost (`TARGET_VHOST=wp.local`), and each runner records
+  the policy that actually protects its target in `summary.json`.
+  `LAB_POLICY_NAME` and `LAB_PL2_POLICY_NAME` are no longer used.
 
 ## [0.1.0-beta.4] - 2026-09-25
 

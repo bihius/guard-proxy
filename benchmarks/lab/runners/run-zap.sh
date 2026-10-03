@@ -19,6 +19,7 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TARGET_VHOST="${TARGET_VHOST:-${LAB_WP_DOMAIN}}"   # default: WordPress scanner target
+resolve_policy
 ZAP_IMAGE="ghcr.io/zaproxy/zaproxy:stable"
 ZAP_CONF="${REPO_ROOT}/benchmarks/lab/scenarios/zap/zap-baseline.conf"
 
@@ -148,9 +149,7 @@ with open(os.path.join(out_dir, "detection.json"), "w") as f:
 PY
 
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
-resolve_policy
-
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}" "${POLICY_PARANOIA}"
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "${DETECTION}" "{}" "{}"
 
 echo ""
 echo "ZAP alerts: $(python3 -c "import json; d=json.load(open('${OUT_DIR}/detection.json')); print(d.get('total_alerts', 'n/a'))")"
