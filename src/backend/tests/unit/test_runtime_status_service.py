@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.models.policy import Policy, PolicyEnforcementMode
@@ -11,7 +12,7 @@ from app.models.runtime_operation import (
 )
 from app.models.vhost import VHost
 from app.services.config_apply import calculate_checksum
-from app.services.config_generator import GeneratedConfig, generate
+from app.services.config_generator import CorazaAppConfig, GeneratedConfig, generate
 from app.services.runtime_status_service import RuntimeStatusService
 
 
@@ -215,7 +216,7 @@ def test_generated_config_does_not_dirty_policy_relationships(
     assert not db.dirty
 
 
-def test_generated_config_rejects_mixed_active_policies(db: Session) -> None:
+def test_generated_config_accepts_a_different_policy_per_vhost(db: Session) -> None:
     first_policy = _add_policy(db, name="Strict")
     second_policy = _add_policy(db, name="Monitor")
     _add_vhost(
@@ -235,9 +236,8 @@ def test_generated_config_rejects_mixed_active_policies(db: Session) -> None:
 
     status = service.get_runtime_status()
 
-    assert status.generated_config.can_generate is False
-    assert status.generated_config.error is not None
-    assert "one active CRS policy" in status.generated_config.error
+    assert status.generated_config.can_generate is True
+    assert status.generated_config.error is None
 
 
 def test_generated_config_rejects_inactive_assigned_policy(db: Session) -> None:
@@ -276,11 +276,18 @@ def test_active_policy_selection_rejects_missing_policy() -> None:
         raise AssertionError("Expected missing policy to fail generation")
 
 
-def _generated(haproxy_cfg: str = "haproxy") -> GeneratedConfig:
+def _generated(haproxy_cfg: str = "haproxy", tuning: str = "rules") -> GeneratedConfig:
     return GeneratedConfig(
         haproxy_cfg=haproxy_cfg,
-        crs_setup_conf="crs",
-        rule_overrides_conf="rules",
+        coraza_spoa_yaml="yaml",
+        coraza_apps=(
+            CorazaAppConfig(
+                name="default", crs_setup_conf="crs", rule_overrides_conf=""
+            ),
+            CorazaAppConfig(
+                name="policy_1", crs_setup_conf="crs", rule_overrides_conf=tuning
+            ),
+        ),
         certs={},
     )
 
@@ -293,11 +300,15 @@ def test_checksum_is_stable_for_same_generated_content() -> None:
     assert len(checksum_a) == 64
 
 
-def test_checksum_changes_when_generated_content_changes() -> None:
-    checksum_a = calculate_checksum(_generated())
-    checksum_b = calculate_checksum(_generated("haproxy-changed"))
-
-    assert checksum_a != checksum_b
+@pytest.mark.parametrize(
+    "changed",
+    [_generated("haproxy-changed"), _generated(tuning="rules-changed")],
+    ids=["haproxy", "one-policy-tuning"],
+)
+def test_checksum_changes_when_generated_content_changes(
+    changed: GeneratedConfig,
+) -> None:
+    assert calculate_checksum(_generated()) != calculate_checksum(changed)
 
 
 # ---------------------------------------------------------------------------

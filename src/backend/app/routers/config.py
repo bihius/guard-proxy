@@ -20,7 +20,7 @@ from app.models.runtime_operation import (
 )
 from app.models.user import User
 from app.models.vhost import VHost
-from app.schemas.config import ConfigApplyResponse, GeneratedConfigOut
+from app.schemas.config import ConfigApplyResponse, CorazaAppOut, GeneratedConfigOut
 from app.services.config_apply import ApplyResult, ApplyStatus
 from app.services.config_apply import apply as _apply
 from app.services.config_generator import generate
@@ -108,9 +108,9 @@ def apply_config(
                 policy_bindings,
             )
         except ValueError as error:
-            # The stored configuration cannot be rendered, e.g. vhosts bound to
-            # two different active policies. Nothing was written or reloaded;
-            # the admin has to change the configuration, so say what is wrong.
+            # The stored configuration cannot be rendered, e.g. a vhost bound to
+            # an inactive policy. Nothing was written or reloaded; the admin
+            # has to change the configuration, so say what is wrong.
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"Cannot generate the configuration: {error}",
@@ -121,8 +121,15 @@ def apply_config(
         response = ConfigApplyResponse(
             generated_config=GeneratedConfigOut(
                 haproxy_cfg=generated.haproxy_cfg,
-                crs_setup_conf=generated.crs_setup_conf,
-                rule_overrides_conf=generated.rule_overrides_conf,
+                coraza_spoa_yaml=generated.coraza_spoa_yaml,
+                coraza_apps=[
+                    CorazaAppOut(
+                        name=app.name,
+                        crs_setup_conf=app.crs_setup_conf,
+                        rule_overrides_conf=app.rule_overrides_conf,
+                    )
+                    for app in generated.coraza_apps
+                ],
             ),
             status=result.status,
             correlation_id=result.correlation_id,

@@ -131,7 +131,15 @@ frontend fe_http
     http-request capture var(txn.waf_degraded_reason) len 32 if { var(txn.waf_degraded_reason) -m found }
     http-request return status 503 content-type text/plain string "WAF inspection unavailable" hdr X-WAF-Status degraded hdr X-WAF-Degraded-Reason coraza-unavailable if { var(txn.waf_degraded_reason) -m str coraza-unavailable }
 
-    # WAF inspection via the Coraza SPOA ("coraza" matches coraza.cfg).
+    # WAF inspection via the Coraza SPOA ("coraza" matches coraza.cfg). Each
+    # policy is its own Coraza application; coraza.cfg sends txn.waf_app as
+    # the SPOE `app` argument, so every vhost is inspected with its policy.
+    http-request set-var(txn.waf_app) str({{ default_waf_app }})
+{% for route in routes %}
+{% if route.waf_app != default_waf_app %}
+    http-request set-var(txn.waf_app) str({{ route.waf_app }}) if {{ route.vhost_acl_name }}
+{% endif %}
+{% endfor %}
     filter spoe engine coraza config /usr/local/etc/haproxy/coraza.cfg
     http-request send-spoe-group coraza coraza-req unless is_health
 
@@ -219,6 +227,12 @@ frontend fe_https
     http-request capture var(txn.waf_degraded_reason) len 32 if { var(txn.waf_degraded_reason) -m found }
     http-request return status 503 content-type text/plain string "WAF inspection unavailable" hdr X-WAF-Status degraded hdr X-WAF-Degraded-Reason coraza-unavailable if { var(txn.waf_degraded_reason) -m str coraza-unavailable }
 
+    http-request set-var(txn.waf_app) str({{ default_waf_app }})
+{% for route in routes %}
+{% if route.waf_app != default_waf_app %}
+    http-request set-var(txn.waf_app) str({{ route.waf_app }}) if {{ route.vhost_acl_name }}
+{% endif %}
+{% endfor %}
     filter spoe engine coraza config /usr/local/etc/haproxy/coraza.cfg
     http-request send-spoe-group coraza coraza-req unless is_health
 

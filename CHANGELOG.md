@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [Unreleased]
+
+### Fixed
+
+- Each vhost is now inspected with its own policy. Every policy assigned to
+  an active vhost runs as a separate Coraza application with its own
+  enforcement mode, paranoia level, anomaly thresholds, rule overrides,
+  exclusions, and custom rules; HAProxy picks the application per vhost.
+  Before, all vhosts shared one WAF configuration, and assigning different
+  policies to two vhosts made config apply fail. Vhosts without a policy are
+  inspected with CRS defaults in detect-only mode.
+
+### Changed
+
+- Runtime releases contain a generated `coraza-spoa.yaml` and per-policy
+  `coraza/<application>/` directories instead of a single `crs-setup.conf`
+  and `rule-overrides.conf`. The `POST /config/apply` response returns
+  `generated_config.coraza_spoa_yaml` and `generated_config.coraza_apps`
+  instead of `crs_setup_conf` and `rule_overrides_conf`. After upgrading,
+  apply the configuration once; until then the previous single-policy
+  release stays active.
+- Coraza memory use grows with the number of distinct policies assigned to
+  vhosts, since each application loads the full CRS rule set.
+- Path-scoped policy bindings that point at a policy other than the vhost's
+  own are rejected by config generation instead of being merged into one
+  global policy.
+- New `CORAZA_LOG_LEVEL` backend setting for the generated Coraza
+  configuration; `make dev` sets it to `debug`.
+
 ## [0.1.0-beta.4] - 2026-09-25
 
 ### Added

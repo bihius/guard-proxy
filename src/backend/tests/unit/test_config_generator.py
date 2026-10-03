@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from app.config import settings
 from app.models.custom_rule import CustomRule, RuleOperator, RulePhase
@@ -15,6 +16,8 @@ from app.models.vhost import VHost
 from app.models.vhost_backend import VHostBackend
 from app.services.config_generator import (
     HAPROXY_GEOIP_MAP_PATH,
+    CorazaAppConfig,
+    GeneratedConfig,
     _to_haproxy_context,
     generate,
 )
@@ -34,6 +37,35 @@ def _repo_root() -> Path:
     raise RuntimeError("Could not locate repository root")
 
 
+def _app(generated: GeneratedConfig, name: str) -> CorazaAppConfig:
+    return next(app for app in generated.coraza_apps if app.name == name)
+
+
+def _policy(policy_id: int, **overrides: object) -> Policy:
+    fields: dict[str, object] = {
+        "id": policy_id,
+        "name": f"Policy {policy_id}",
+        "paranoia_level": 1,
+        "inbound_anomaly_threshold": 5,
+        "outbound_anomaly_threshold": 4,
+        "enforcement_mode": PolicyEnforcementMode.block,
+        "is_active": True,
+    }
+    fields.update(overrides)
+    return Policy(**fields)
+
+
+def _vhost(vhost_id: int, domain: str, policy_id: int | None) -> VHost:
+    return VHost(
+        id=vhost_id,
+        domain=domain,
+        backend_url=f"http://backend-{vhost_id}:8000",
+        is_active=True,
+        ssl_enabled=False,
+        policy_id=policy_id,
+    )
+
+
 def test_generate_empty_db() -> None:
     generated = generate(vhosts=[], policies=[], rule_overrides=[])
 
@@ -41,8 +73,10 @@ def test_generate_empty_db() -> None:
     assert "defaults" in generated.haproxy_cfg
     assert "backend coraza-spoa" in generated.haproxy_cfg
     assert "backend be_" not in generated.haproxy_cfg
-    assert "SecRuleEngine DetectionOnly" in generated.crs_setup_conf
-    assert "Guard Proxy generated CRS policy tuning" in generated.rule_overrides_conf
+    assert "SecRuleEngine DetectionOnly" in _app(generated, "default").crs_setup_conf
+    assert "Guard Proxy generated CRS policy tuning" in (
+        _app(generated, "default").rule_overrides_conf
+    )
 
 
 def test_generate_one_vhost_no_policy() -> None:
@@ -62,7 +96,7 @@ def test_generate_one_vhost_no_policy() -> None:
     assert "acl host_vhost_1 hdr(host),field(1,:) -i app.local" in generated.haproxy_cfg
     assert "use_backend be_vhost_1 if host_vhost_1" in generated.haproxy_cfg
     assert "server srv_vhost_1 backend:8000 check" in generated.haproxy_cfg
-    assert "SecRuleEngine DetectionOnly" in generated.crs_setup_conf
+    assert "SecRuleEngine DetectionOnly" in _app(generated, "default").crs_setup_conf
 
 
 def test_generate_one_vhost_with_two_active_backends() -> None:
@@ -246,8 +280,10 @@ def test_generate_one_vhost_with_policy() -> None:
         in generated.haproxy_cfg
     )
     assert "use_backend be_vhost_5 if host_vhost_5" in generated.haproxy_cfg
-    assert "SecRuleEngine On" in generated.crs_setup_conf
-    assert "setvar:tx.blocking_paranoia_level=2" in generated.crs_setup_conf
+    assert "SecRuleEngine On" in _app(generated, "policy_10").crs_setup_conf
+    assert "setvar:tx.blocking_paranoia_level=2" in (
+        _app(generated, "policy_10").crs_setup_conf
+    )
 
 
 def test_generate_one_vhost_with_ddos_protection_enabled() -> None:
@@ -630,7 +666,9 @@ def test_generate_one_vhost_with_policy_and_overrides() -> None:
 
     generated = generate(vhosts=[vhost], policies=[policy], rule_overrides=[override])
 
-    assert "SecRuleRemoveById 942100" in generated.rule_overrides_conf
+    assert "SecRuleRemoveById 942100" in (
+        _app(generated, "policy_10").rule_overrides_conf
+    )
 
 
 def test_generate_one_vhost_with_policy_exclusion_and_custom_rule() -> None:
@@ -683,11 +721,11 @@ def test_generate_one_vhost_with_policy_exclusion_and_custom_rule() -> None:
         'SecRule REQUEST_URI "@streq /api/login" '
         '"id:9100126,phase:1,pass,nolog,'
         'ctl:ruleRemoveTargetById=942100;ARGS:token"'
-    ) in generated.rule_overrides_conf
+    ) in _app(generated, "policy_10").rule_overrides_conf
     assert (
         'SecRule REQUEST_HEADERS:User-Agent "@rx (?i)curl" '
         '"id:9000001,phase:1,deny,status:403,log"'
-    ) in generated.rule_overrides_conf
+    ) in _app(generated, "policy_10").rule_overrides_conf
 
 
 _CONTROL_RULE_RE = re.compile(
@@ -766,7 +804,8 @@ def test_generated_scoped_exclusion_covers_only_its_path_segments(
         rule_exclusions=[exclusion],
     )
 
-    assert _exclusion_applies(generated.rule_overrides_conf, request_uri) is applies
+    rule_overrides_conf = _app(generated, "policy_10").rule_overrides_conf
+    assert _exclusion_applies(rule_overrides_conf, request_uri) is applies
 
 
 def test_generated_control_rule_ids_do_not_collide_across_exclusions() -> None:
@@ -805,7 +844,7 @@ def test_generated_control_rule_ids_do_not_collide_across_exclusions() -> None:
 
     ids = [
         int(match.group(3))
-        for line in generated.rule_overrides_conf.splitlines()
+        for line in _app(generated, "policy_10").rule_overrides_conf.splitlines()
         if (match := _CONTROL_RULE_RE.match(line))
     ]
     assert len(ids) == 9
@@ -856,10 +895,10 @@ def test_generate_skips_an_unrenderable_legacy_exclusion(
         rule_exclusions=[legacy, valid],
     )
 
-    assert "user agent" not in generated.rule_overrides_conf
+    assert "user agent" not in _app(generated, "policy_10").rule_overrides_conf
     assert (
         "SecRuleRemoveTargetById 930100 REQUEST_URI_RAW"
-        in generated.rule_overrides_conf
+        in _app(generated, "policy_10").rule_overrides_conf
     )
     assert "Skipping rule exclusion 7 of policy 10" in caplog.text
 
@@ -901,92 +940,170 @@ def test_generate_skips_a_legacy_exclusion_with_an_unquotable_scope(
         rule_exclusions=[legacy],
     )
 
-    assert "ARGS:q" not in generated.rule_overrides_conf
+    assert "ARGS:q" not in _app(generated, "policy_10").rule_overrides_conf
     assert "Skipping rule exclusion 7 of policy 10" in caplog.text
 
 
-def test_generate_uses_policy_from_path_binding() -> None:
-    vhost = VHost(
-        id=1,
-        domain="api.example.com",
-        backend_url="http://api-backend:9000",
-        is_active=True,
-        ssl_enabled=False,
-        policy_id=None,
-    )
-    policy = Policy(
-        id=10,
-        name="Strict",
-        paranoia_level=2,
-        inbound_anomaly_threshold=5,
-        outbound_anomaly_threshold=4,
+def test_each_vhost_gets_its_own_policy_settings_and_tuning() -> None:
+    """Two vhosts with different policies must not share WAF configuration."""
+    shop_policy = _policy(
+        10,
+        paranoia_level=3,
+        inbound_anomaly_threshold=10,
         enforcement_mode=PolicyEnforcementMode.block,
-        is_active=True,
     )
-    binding = PolicyBinding(
-        id=20,
-        vhost_id=1,
-        policy_id=10,
-        path_prefix="/api",
-        priority=10,
-    )
-    override = RuleOverride(
-        id=100,
-        policy_id=10,
-        rule_id=942100,
-        action=RuleAction.disable,
-    )
-
-    generated = generate(
-        vhosts=[vhost],
-        policies=[policy],
-        rule_overrides=[override],
-        policy_bindings=[binding],
-    )
-
-    assert "SecRuleEngine On" in generated.crs_setup_conf
-    assert "SecRuleRemoveById 942100" in generated.rule_overrides_conf
-
-
-def test_generate_rejects_multiple_effective_path_policies() -> None:
-    vhost = VHost(
-        id=1,
-        domain="api.example.com",
-        backend_url="http://api-backend:9000",
-        is_active=True,
-        ssl_enabled=False,
-        policy_id=10,
-    )
-    first_policy = Policy(
-        id=10,
-        name="Strict",
-        paranoia_level=2,
-        inbound_anomaly_threshold=5,
-        outbound_anomaly_threshold=4,
-        enforcement_mode=PolicyEnforcementMode.block,
-        is_active=True,
-    )
-    second_policy = Policy(
-        id=11,
-        name="Monitor",
+    blog_policy = _policy(
+        11,
         paranoia_level=1,
-        inbound_anomaly_threshold=5,
-        outbound_anomaly_threshold=4,
+        inbound_anomaly_threshold=20,
         enforcement_mode=PolicyEnforcementMode.detect_only,
-        is_active=True,
     )
-    binding = PolicyBinding(
-        id=20,
-        vhost_id=1,
-        policy_id=11,
-        path_prefix="/monitor",
-        priority=10,
+    generated = generate(
+        vhosts=[_vhost(1, "shop.example.com", 10), _vhost(2, "blog.example.com", 11)],
+        policies=[shop_policy, blog_policy],
+        rule_overrides=[
+            RuleOverride(id=1, policy_id=10, rule_id=942100, action=RuleAction.disable)
+        ],
+        rule_exclusions=[
+            RuleExclusion(
+                id=2,
+                policy_id=11,
+                rule_id=941100,
+                target_type=TargetType.ARGS,
+                target_value="comment",
+            )
+        ],
+        custom_rules=[
+            CustomRule(
+                id=3,
+                policy_id=10,
+                rule_id=9000001,
+                phase=RulePhase.REQUEST_HEADERS,
+                variables="REQUEST_HEADERS:X-Shop-Only",
+                operator=RuleOperator.STREQ,
+                operator_argument="deny-me",
+                actions="deny,status:403,log",
+                is_active=True,
+            )
+        ],
     )
 
-    with pytest.raises(ValueError, match="one active CRS policy"):
+    assert [app.name for app in generated.coraza_apps] == [
+        "default",
+        "policy_10",
+        "policy_11",
+    ]
+    shop = _app(generated, "policy_10")
+    blog = _app(generated, "policy_11")
+    assert "SecRuleEngine On" in shop.crs_setup_conf
+    assert "tx.blocking_paranoia_level=3" in shop.crs_setup_conf
+    assert "tx.inbound_anomaly_score_threshold=10" in shop.crs_setup_conf
+    assert "SecRuleEngine DetectionOnly" in blog.crs_setup_conf
+    assert "tx.blocking_paranoia_level=1" in blog.crs_setup_conf
+    assert "tx.inbound_anomaly_score_threshold=20" in blog.crs_setup_conf
+    assert "SecRuleRemoveById 942100" in shop.rule_overrides_conf
+    assert "X-Shop-Only" in shop.rule_overrides_conf
+    assert "941100" not in shop.rule_overrides_conf
+    assert "SecRuleRemoveTargetById 941100 ARGS:comment" in blog.rule_overrides_conf
+    assert "942100" not in blog.rule_overrides_conf
+    assert "X-Shop-Only" not in blog.rule_overrides_conf
+    assert (
+        "http-request set-var(txn.waf_app) str(policy_10) if host_vhost_1"
+        in generated.haproxy_cfg
+    )
+    assert (
+        "http-request set-var(txn.waf_app) str(policy_11) if host_vhost_2"
+        in generated.haproxy_cfg
+    )
+
+
+def test_vhosts_sharing_a_policy_share_one_coraza_app() -> None:
+    generated = generate(
+        vhosts=[_vhost(1, "a.example.com", 10), _vhost(2, "b.example.com", 10)],
+        policies=[_policy(10), _policy(11)],
+        rule_overrides=[],
+    )
+
+    # Policy 11 is assigned to no active vhost, so it costs no WAF instance.
+    assert [app.name for app in generated.coraza_apps] == ["default", "policy_10"]
+    assert "str(policy_10) if host_vhost_1" in generated.haproxy_cfg
+    assert "str(policy_10) if host_vhost_2" in generated.haproxy_cfg
+
+
+def test_vhost_without_policy_uses_the_log_only_default_app() -> None:
+    generated = generate(
+        vhosts=[
+            _vhost(1, "plain.example.com", None),
+            _vhost(2, "shop.example.com", 10),
+        ],
+        policies=[_policy(10)],
+        rule_overrides=[
+            RuleOverride(id=1, policy_id=10, rule_id=942100, action=RuleAction.disable)
+        ],
+    )
+
+    default = _app(generated, "default")
+    assert "SecRuleEngine DetectionOnly" in default.crs_setup_conf
+    assert "SecRuleRemoveById" not in default.rule_overrides_conf
+    # Every request starts on the default app; only vhost 2 switches away.
+    assert "http-request set-var(txn.waf_app) str(default)\n" in generated.haproxy_cfg
+    assert "if host_vhost_1" not in "\n".join(
+        line for line in generated.haproxy_cfg.splitlines() if "txn.waf_app" in line
+    )
+
+
+def test_generated_coraza_spoa_yaml_loads_each_app_from_its_own_directory() -> None:
+    generated = generate(
+        vhosts=[_vhost(1, "shop.example.com", 10)],
+        policies=[_policy(10)],
+        rule_overrides=[],
+    )
+
+    config = yaml.safe_load(generated.coraza_spoa_yaml)
+
+    # No default_application: an unknown app name must fail the SPOE call
+    # (HAProxy answers 503) rather than be inspected with another policy.
+    assert "default_application" not in config
+    apps = {
+        app["name"]: app["directives"].splitlines() for app in config["applications"]
+    }
+    assert apps["policy_10"] == [
+        "Include /etc/coraza/coraza.conf",
+        "Include /runtime/current/coraza/policy_10/crs-setup.conf",
+        "Include /etc/coraza/crs/rules/*.conf",
+        "Include /etc/coraza/guard-proxy-exceptions.conf",
+        "Include /runtime/current/coraza/policy_10/rule-overrides.conf",
+    ]
+    assert set(apps) == {"default", "policy_10"}
+
+
+def test_generate_accepts_path_binding_to_the_vhost_policy() -> None:
+    """The root binding mirrors vhost.policy_id and must keep working."""
+    generated = generate(
+        vhosts=[_vhost(1, "api.example.com", 10)],
+        policies=[_policy(10)],
+        rule_overrides=[],
+        policy_bindings=[
+            PolicyBinding(id=20, vhost_id=1, policy_id=10, path_prefix="/", priority=0)
+        ],
+    )
+
+    assert "str(policy_10) if host_vhost_1" in generated.haproxy_cfg
+
+
+@pytest.mark.parametrize("vhost_policy_id", [None, 10])
+def test_generate_rejects_path_binding_to_another_policy(
+    vhost_policy_id: int | None,
+) -> None:
+    """Only whole-vhost policies are enforced; refuse instead of ignoring."""
+    binding = PolicyBinding(
+        id=20, vhost_id=1, policy_id=11, path_prefix="/monitor", priority=10
+    )
+
+    with pytest.raises(ValueError, match="'/monitor'.*selects policy 11"):
         generate(
-            vhosts=[vhost],
-            policies=[first_policy, second_policy],
+            vhosts=[_vhost(1, "api.example.com", vhost_policy_id)],
+            policies=[_policy(10), _policy(11)],
             rule_overrides=[],
             policy_bindings=[binding],
         )

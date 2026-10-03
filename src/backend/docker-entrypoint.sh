@@ -6,7 +6,10 @@ set -eu
 runtime_dir="${GUARD_PROXY_RUNTIME_DIR:-${RUNTIME_GENERATED_CONFIG_ROOT:-/runtime}}"
 
 seed_runtime_config() {
-    if [ ! -f "${runtime_dir}/current/rule-overrides.conf" ]; then
+    # Only a missing release needs the stub. Real releases always contain
+    # haproxy.cfg (CRS files live under coraza/<application>/ there), and an
+    # earlier stub still has its rule-overrides.conf.
+    if [ ! -f "${runtime_dir}/current/haproxy.cfg" ] && [ ! -f "${runtime_dir}/current/rule-overrides.conf" ]; then
         mkdir -p "${runtime_dir}/releases/seed"
         if [ ! -f "${runtime_dir}/releases/seed/crs-setup.conf" ]; then
             # Rule 900990 marks crs-setup.conf as loaded; without it CRS rule

@@ -68,7 +68,7 @@ Coraza needs to run request-phase rules:
 
 | Argument   | HAProxy fetch    | Notes                                  |
 |------------|------------------|----------------------------------------|
-| `app`      | `str(default)`   | Which Coraza application bundle to use |
+| `app`      | `var(txn.waf_app)` | Coraza application (one per WAF policy) chosen per vhost in `haproxy.cfg` |
 | `id`       | `unique-id`      | Same value as the `X-Request-ID` header|
 | `src-ip`   | `src`            | Client IP                              |
 | `src-port` | `src_port`       | Client TCP port                        |

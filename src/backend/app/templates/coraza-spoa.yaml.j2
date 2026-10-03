@@ -1,0 +1,30 @@
+# Guard Proxy coraza-spoa configuration.
+# Generated from the policy database; manual edits are overwritten on the
+# next config apply.
+#
+# Every WAF policy is a separate Coraza application (its own WAF instance with
+# its own CRS setup and tuning). HAProxy picks the application per vhost and
+# sends its name as the SPOE `app` argument. There is deliberately no
+# default_application: a name coraza-spoa does not know fails the SPOE call,
+# and HAProxy answers 503 instead of inspecting with the wrong policy.
+
+bind: 0.0.0.0:9000
+log_level: {{ log_level }}
+log_file: /dev/stderr
+log_format: console
+
+applications:
+{% for name in app_names %}
+  - name: {{ name }}
+    directives: |
+      Include /etc/coraza/coraza.conf
+      Include /runtime/current/coraza/{{ name }}/crs-setup.conf
+      Include /etc/coraza/crs/rules/*.conf
+      Include /etc/coraza/guard-proxy-exceptions.conf
+      Include /runtime/current/coraza/{{ name }}/rule-overrides.conf
+    response_check: false
+    transaction_ttl_ms: 60000
+    log_level: {{ log_level }}
+    log_file: /dev/stderr
+    log_format: console
+{% endfor %}

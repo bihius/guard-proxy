@@ -69,8 +69,8 @@ class RuntimeStatusService:
             self.db.query(PolicyBinding).order_by(PolicyBinding.id.asc()).all()
         )
         active_vhosts = [vhost for vhost in vhosts if vhost.is_active]
-        # Compute before calling _pick_active_policy so they appear in the
-        # response regardless of whether generation succeeds or fails.
+        # Compute before calling generate() so they appear in the response
+        # regardless of whether generation succeeds or fails.
         unbound_vhost_domains = [
             v.domain for v in active_vhosts if v.policy_id is None
         ] or None

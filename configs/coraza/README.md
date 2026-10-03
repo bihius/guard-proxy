@@ -1,8 +1,9 @@
 # Coraza configuration
 
-This directory contains the hand-written M1 Coraza SPOA and OWASP CRS bundle.
-M2 will replace these seed files with generated configuration derived from the
-policy database.
+This directory contains the static Coraza SPOA and OWASP CRS bundle. The
+per-policy parts (CRS setup and tuning of each Coraza application) are
+generated from the policy database on every config apply; see
+`docs/architecture.md` (Policy Management).
 
 ## First-time setup
 
@@ -23,9 +24,9 @@ git submodule update --init --recursive
 
 | File | Purpose |
 | --- | --- |
-| `coraza-spoa.yaml` | `coraza-spoa` daemon configuration and default application mapping |
-| `coraza.conf` | Baseline Coraza directives and CRS includes |
-| `crs-setup.conf` | CRS paranoia and anomaly-scoring defaults |
+| `coraza-spoa.yaml` | Fallback single-application daemon config, used only while the active release has no generated `coraza-spoa.yaml` (one application per policy) |
+| `coraza.conf` | Baseline directives (audit log, body access) included first by every application |
+| `crs-setup.conf` | Reference CRS setup; the generated per-policy `crs-setup.conf` is compared against it in tests |
 | `crs/` | Pinned OWASP CRS 4.x submodule |
 | `guard-proxy-exceptions.conf` | Guard Proxy-owned CRS false-positive exceptions, loaded after CRS rules. Not part of the `crs/` submodule, so it survives CRS version bumps. |
 

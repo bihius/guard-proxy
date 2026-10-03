@@ -14,6 +14,7 @@ from app.models.rule_exclusion import RuleExclusion
 from app.models.rule_override import RuleOverride
 from app.models.vhost import VHost
 from app.services.config_renderer import (
+    CORAZA_DEFAULT_APP,
     SCOPE_MATCHERS_PER_EXCLUSION,
     CrsPolicyRenderContext,
     CustomRuleRenderContext,
@@ -25,6 +26,7 @@ from app.services.config_renderer import (
     HaproxyServer,
     RuleExclusionRenderContext,
     RuleOverrideRenderContext,
+    render_coraza_spoa_yaml,
     render_crs_setup,
     render_haproxy_cfg_multi,
     render_rule_overrides,
@@ -39,14 +41,38 @@ HAPROXY_GEOIP_MAP_PATH = "/etc/haproxy/generated/geoip/country.map"
 logger = logging.getLogger(__name__)
 
 
+# CRS settings for vhosts without a policy: CRS defaults, log only.
+_UNASSIGNED_CRS_POLICY = CrsPolicyRenderContext(
+    paranoia_level=1,
+    inbound_anomaly_threshold=5,
+    outbound_anomaly_threshold=4,
+    enforcement_mode=PolicyEnforcementMode.detect_only,
+)
+
+
+@dataclass(frozen=True)
+class CorazaAppConfig:
+    """Generated files of one Coraza application (one WAF instance)."""
+
+    name: str
+    crs_setup_conf: str
+    rule_overrides_conf: str
+
+
 @dataclass(frozen=True)
 class GeneratedConfig:
     """All generated text files needed by the runtime stack."""
 
     haproxy_cfg: str
-    crs_setup_conf: str
-    rule_overrides_conf: str
+    coraza_spoa_yaml: str
+    # The default application first, then one per policy in policy id order.
+    coraza_apps: tuple[CorazaAppConfig, ...]
     certs: dict[str, str]
+
+
+def coraza_app_name(policy: Policy | None) -> str:
+    """Coraza application that enforces `policy` (None: unassigned vhosts)."""
+    return CORAZA_DEFAULT_APP if policy is None else f"policy_{policy.id}"
 
 
 def generate(
@@ -57,41 +83,52 @@ def generate(
     custom_rules: list[CustomRule] | None = None,
     policy_bindings: list[PolicyBinding] | None = None,
 ) -> GeneratedConfig:
-    """Generate all runtime config files from already loaded objects."""
-    rule_exclusions = rule_exclusions or []
-    custom_rules = custom_rules or []
-    policy_bindings = policy_bindings or []
+    """Generate all runtime config files from already loaded objects.
+
+    Every policy assigned to an active vhost becomes its own Coraza
+    application, so each vhost is inspected only with its own policy's CRS
+    settings, rule overrides, exclusions, and custom rules.
+    """
     active_vhosts = sorted(
         (vhost for vhost in vhosts if vhost.is_active),
         key=lambda vhost: vhost.domain,
     )
     policies_by_id = {policy.id: policy for policy in policies}
-
-    def _policy_for_vhost(vhost: VHost) -> Policy | None:
-        if vhost.policy_id is None:
-            return None
-        return policies_by_id.get(vhost.policy_id)
+    policy_by_vhost_id = {
+        vhost.id: _vhost_policy(vhost, policies_by_id) for vhost in active_vhosts
+    }
+    _reject_path_scoped_policies(active_vhosts, policy_bindings or [])
 
     vhost_contexts = [
-        _to_haproxy_context(vhost, _policy_for_vhost(vhost)) for vhost in active_vhosts
+        _to_haproxy_context(vhost, policy_by_vhost_id[vhost.id])
+        for vhost in active_vhosts
     ]
-
-    active_policy, active_overrides, active_exclusions, active_custom_rules = (
-        _pick_active_policy(
-            active_vhosts,
-            policies,
-            rule_overrides,
-            rule_exclusions,
-            custom_rules,
-            policy_bindings,
-        )
+    effective_policies = sorted(
+        {
+            policy.id: policy
+            for policy in policy_by_vhost_id.values()
+            if policy is not None
+        }.values(),
+        key=lambda policy: policy.id,
     )
-    haproxy_cfg = render_haproxy_cfg_multi(vhost_contexts)
-    crs_setup_conf = render_crs_setup(active_policy)
-    rule_overrides_conf = render_rule_overrides(
-        active_overrides,
-        active_exclusions,
-        active_custom_rules,
+    overrides_by_policy_id = _group_by_policy_id(rule_overrides)
+    exclusions_by_policy_id = _group_by_policy_id(rule_exclusions or [])
+    custom_rules_by_policy_id = _group_by_policy_id(custom_rules or [])
+    coraza_apps = (
+        CorazaAppConfig(
+            name=CORAZA_DEFAULT_APP,
+            crs_setup_conf=render_crs_setup(_UNASSIGNED_CRS_POLICY),
+            rule_overrides_conf=render_rule_overrides(()),
+        ),
+        *(
+            _to_coraza_app(
+                policy,
+                overrides_by_policy_id.get(policy.id, []),
+                exclusions_by_policy_id.get(policy.id, []),
+                custom_rules_by_policy_id.get(policy.id, []),
+            )
+            for policy in effective_policies
+        ),
     )
 
     certs = {}
@@ -100,119 +137,78 @@ def generate(
             certs[vhost.domain] = f"{vhost.ssl_cert}\n{vhost.ssl_key}"
 
     return GeneratedConfig(
-        haproxy_cfg=haproxy_cfg,
-        crs_setup_conf=crs_setup_conf,
-        rule_overrides_conf=rule_overrides_conf,
+        haproxy_cfg=render_haproxy_cfg_multi(vhost_contexts),
+        coraza_spoa_yaml=render_coraza_spoa_yaml(
+            tuple(app.name for app in coraza_apps),
+            settings.coraza_log_level,
+        ),
+        coraza_apps=coraza_apps,
         certs=certs,
     )
 
 
-def _pick_active_policy(
-    active_vhosts: list[VHost],
-    policies: list[Policy],
-    rule_overrides: list[RuleOverride],
-    rule_exclusions: list[RuleExclusion] | None = None,
-    custom_rules: list[CustomRule] | None = None,
-    policy_bindings: list[PolicyBinding] | None = None,
-) -> tuple[
-    CrsPolicyRenderContext,
-    tuple[RuleOverrideRenderContext, ...],
-    tuple[RuleExclusionRenderContext, ...],
-    tuple[CustomRuleRenderContext, ...],
-]:
-    rule_exclusions = rule_exclusions or []
-    custom_rules = custom_rules or []
-    policy_bindings = policy_bindings or []
-    policies_by_id = {policy.id: policy for policy in policies}
-    overrides_by_policy_id: dict[int, list[RuleOverride]] = {}
-    for override in rule_overrides:
-        overrides_by_policy_id.setdefault(override.policy_id, []).append(override)
-    exclusions_by_policy_id: dict[int, list[RuleExclusion]] = {}
-    for exclusion in rule_exclusions:
-        exclusions_by_policy_id.setdefault(exclusion.policy_id, []).append(exclusion)
-    custom_rules_by_policy_id: dict[int, list[CustomRule]] = {}
-    for custom_rule in custom_rules:
-        custom_rules_by_policy_id.setdefault(custom_rule.policy_id, []).append(
-            custom_rule
-        )
-    bindings_by_vhost_id: dict[int, list[PolicyBinding]] = {}
-    for binding in policy_bindings:
-        bindings_by_vhost_id.setdefault(binding.vhost_id, []).append(binding)
-
-    effective_policy_ids: set[int] = set()
-    for vhost in active_vhosts:
-        if vhost.policy_id is not None:
-            _add_effective_policy_id(
-                effective_policy_ids,
-                policies_by_id,
-                vhost.policy_id,
-                f"Active vhost {vhost.domain!r}",
-            )
-        if vhost.id is None:
-            continue
-        for binding in bindings_by_vhost_id.get(vhost.id, []):
-            _add_effective_policy_id(
-                effective_policy_ids,
-                policies_by_id,
-                binding.policy_id,
-                (
-                    f"Path binding {binding.path_prefix!r} on active vhost "
-                    f"{vhost.domain!r}"
-                ),
-            )
-
-    if len(effective_policy_ids) > 1:
-        policy_list = ", ".join(
-            str(policy_id) for policy_id in sorted(effective_policy_ids)
-        )
-        raise ValueError(
-            "Generated config supports one active CRS policy for MVP; "
-            f"found effective policies: {policy_list}"
-        )
-
-    effective_policy_id = next(iter(effective_policy_ids), None)
-    if effective_policy_id is not None:
-        policy = policies_by_id[effective_policy_id]
-        return (
-            _to_crs_policy_context(policy),
-            _to_rule_override_contexts(
-                overrides_by_policy_id.get(effective_policy_id, [])
-            ),
-            _to_rule_exclusion_contexts(
-                exclusions_by_policy_id.get(effective_policy_id, [])
-            ),
-            _to_custom_rule_contexts(
-                custom_rules_by_policy_id.get(effective_policy_id, [])
-            ),
-        )
-
-    return (
-        CrsPolicyRenderContext(
-            paranoia_level=1,
-            inbound_anomaly_threshold=5,
-            outbound_anomaly_threshold=4,
-            enforcement_mode=PolicyEnforcementMode.detect_only,
-        ),
-        (),
-        (),
-        (),
-    )
+def _group_by_policy_id[Row: (RuleOverride, RuleExclusion, CustomRule)](
+    rows: list[Row],
+) -> dict[int, list[Row]]:
+    grouped: dict[int, list[Row]] = {}
+    for row in rows:
+        grouped.setdefault(row.policy_id, []).append(row)
+    return grouped
 
 
-def _add_effective_policy_id(
-    effective_policy_ids: set[int],
-    policies_by_id: dict[int, Policy],
-    policy_id: int,
-    owner: str,
-) -> None:
-    policy = policies_by_id.get(policy_id)
+def _vhost_policy(vhost: VHost, policies_by_id: dict[int, Policy]) -> Policy | None:
+    if vhost.policy_id is None:
+        return None
+    owner = f"Active vhost {vhost.domain!r}"
+    policy = policies_by_id.get(vhost.policy_id)
     if policy is None:
-        raise ValueError(f"{owner} references missing policy {policy_id}")
+        raise ValueError(f"{owner} references missing policy {vhost.policy_id}")
     if not policy.is_active:
         raise ValueError(f"{owner} references inactive policy {policy.id}")
     if policy.id is None:
         raise ValueError(f"{owner} references unpersisted policy")
-    effective_policy_ids.add(policy.id)
+    return policy
+
+
+def _reject_path_scoped_policies(
+    active_vhosts: list[VHost], policy_bindings: list[PolicyBinding]
+) -> None:
+    """Refuse bindings that would need a different policy on part of a vhost.
+
+    HAProxy selects the Coraza application per vhost only. Rendering such a
+    binding with the vhost's policy would silently drop what it asks for,
+    and WAF events are attributed to the vhost's policy, so learning mode and
+    exclusions-from-log would target the wrong policy.
+    """
+    policy_id_by_vhost_id = {vhost.id: vhost.policy_id for vhost in active_vhosts}
+    domain_by_vhost_id = {vhost.id: vhost.domain for vhost in active_vhosts}
+    for binding in policy_bindings:
+        if binding.vhost_id not in policy_id_by_vhost_id:
+            continue
+        if binding.policy_id != policy_id_by_vhost_id[binding.vhost_id]:
+            raise ValueError(
+                f"Path binding {binding.path_prefix!r} on active vhost "
+                f"{domain_by_vhost_id[binding.vhost_id]!r} selects policy "
+                f"{binding.policy_id}, but WAF policies apply to a whole vhost; "
+                "assign the policy to the vhost or delete the binding"
+            )
+
+
+def _to_coraza_app(
+    policy: Policy,
+    rule_overrides: list[RuleOverride],
+    rule_exclusions: list[RuleExclusion],
+    custom_rules: list[CustomRule],
+) -> CorazaAppConfig:
+    return CorazaAppConfig(
+        name=coraza_app_name(policy),
+        crs_setup_conf=render_crs_setup(_to_crs_policy_context(policy)),
+        rule_overrides_conf=render_rule_overrides(
+            _to_rule_override_contexts(rule_overrides),
+            _to_rule_exclusion_contexts(rule_exclusions),
+            _to_custom_rule_contexts(custom_rules),
+        ),
+    )
 
 
 def _to_haproxy_context(vhost: VHost, policy: Policy | None) -> HaproxyRenderContext:
@@ -278,6 +274,7 @@ def _to_haproxy_context(vhost: VHost, policy: Policy | None) -> HaproxyRenderCon
                 ssl_provider=vhost.ssl_provider if vhost.ssl_enabled else "none",
                 ddos=ddos,
                 geoip=geoip,
+                waf_app=coraza_app_name(policy),
                 backend=HaproxyBackend(
                     name=f"be_{suffix}",
                     health_check_path=health_check_path,

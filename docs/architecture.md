@@ -79,11 +79,31 @@ machine-readable degraded reason header.
    `guard_proxy_runtime` volume.
 4. HAProxy reads the active generated `haproxy.cfg` from the volume and reloads
    through its Runtime API socket when `POST /config/apply` succeeds.
-5. Coraza reads the active generated `rule-overrides.conf` from the same volume
-   after CRS rules are loaded. The Coraza container runs a supervisor that polls
-   the `/runtime/current` symlink; when the backend atomically swaps it, the
-   supervisor sends `coraza-spoa` a `SIGHUP` to reload its rules in place — no
-   Docker socket access required.
+5. Every policy assigned to an active vhost becomes its own Coraza
+   application — a separate WAF instance with that policy's CRS setup
+   (enforcement mode, paranoia level, anomaly thresholds), rule overrides,
+   rule exclusions, and custom rules. The backend writes the application list
+   to `coraza-spoa.yaml` and each application's files to
+   `coraza/<application>/` in the release. Vhosts without a policy use the
+   `default` application (CRS defaults, detect-only). The Coraza container
+   runs a supervisor that polls the `/runtime/current` symlink; when the
+   backend atomically swaps it, the supervisor sends `coraza-spoa` a `SIGHUP`
+   to reload every application in place — no Docker socket access required.
+6. HAProxy picks the application per vhost: it sets `txn.waf_app` to
+   `default`, overrides it with `policy_<id>` when the vhost ACL matches, and
+   `configs/haproxy/coraza.cfg` sends it as the SPOE `app` argument. The
+   generated `coraza-spoa.yaml` has no `default_application`, so a name
+   Coraza does not know fails the SPOE call and HAProxy answers `503`
+   instead of inspecting the request with another vhost's policy.
+
+**Limitations.** Each application compiles the whole CRS rule set, so Coraza's
+memory grows with the number of distinct policies in use (vhosts sharing a
+policy share its application). A vhost that switches to a policy no vhost
+used before gets `503` from the HAProxy reload until Coraza has reloaded
+(about a second plus rule compilation). Path-scoped policy bindings
+(`/vhosts/{id}/policy-bindings`) to a policy other than the vhost's own are
+rejected at generation time: HAProxy selects policies per vhost only, and WAF
+events are attributed to the vhost's policy.
 
 ### Runtime Event Ingestion
 1. Coraza writes one JSON audit event per newline to
@@ -321,16 +341,25 @@ The active release is selected through the `current` symlink:
 
 ```text
 /runtime/current/
-  haproxy.cfg           # generated HAProxy config
-  crs-setup.conf        # generated CRS setup snapshot
-  rule-overrides.conf   # generated CRS rule removals
+  haproxy.cfg                        # generated HAProxy config
+  coraza-spoa.yaml                   # one Coraza application per policy
+  coraza/default/crs-setup.conf      # vhosts without a policy
+  coraza/default/rule-overrides.conf
+  coraza/policy_<id>/crs-setup.conf  # per-policy CRS setup
+  coraza/policy_<id>/rule-overrides.conf  # per-policy overrides,
+                                          # exclusions, custom rules
 ```
 
-The backend container starts as root only long enough to create and seed
-Coraza's generated rule override include, assign the runtime volume to the
-non-root `app` user, and then drops privileges before running migrations and
-Uvicorn. HAProxy copies the checked-in reference config into the same seed
-release when no generated `haproxy.cfg` exists yet.
+The backend container starts as root only long enough to seed a minimal
+single-application CRS stub (used until the backend writes the first real
+release at startup), assign the runtime volume to the non-root `app` user,
+and then drops privileges before running migrations and Uvicorn. HAProxy
+copies the checked-in reference config into the same seed release when no
+generated `haproxy.cfg` exists yet. While the active release has no
+generated `coraza-spoa.yaml` (the stub, or a release from before per-policy
+applications), Coraza uses the single-application config baked into its
+image; the supervisor restarts `coraza-spoa` once when it switches between
+the two files.
 
 The Coraza container image is built on `alpine:3.19` with `tini` as PID 1. A
 shell supervisor (`coraza-supervisor.sh`) drops to the non-root `coraza` user,

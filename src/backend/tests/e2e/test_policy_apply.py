@@ -24,6 +24,9 @@ import pytest
 ADMIN_EMAIL = "policy-apply-admin@example.com"
 ADMIN_PASSWORD = "policy-apply-password-123"
 HOST_HEADER = "app.local"
+SHOP_HOST = "shop.local"
+BLOG_HOST = "blog.local"
+PLAIN_HOST = "plain.local"
 SCANNER_USER_AGENT = "nuclei"
 SCANNER_RULE_ID = 913100
 EXCLUSION_RULE_ID = 942100
@@ -133,20 +136,19 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     )
 
     applied = _apply_config(compose_stack, token)
-    assert "SecRuleEngine On" in applied["generated_config"]["crs_setup_conf"]
-    assert f"SecRuleRemoveById {SCANNER_RULE_ID}" not in applied["generated_config"][
-        "rule_overrides_conf"
-    ]
+    app = _coraza_app(applied, policy_id)
+    assert "SecRuleEngine On" in app["crs_setup_conf"]
+    assert f"SecRuleRemoveById {SCANNER_RULE_ID}" not in app["rule_overrides_conf"]
     assert (
         f"ctl:ruleRemoveTargetById={EXCLUSION_RULE_ID};ARGS:token"
-        in applied["generated_config"]["rule_overrides_conf"]
+        in app["rule_overrides_conf"]
     )
     assert (
         f"id:{CUSTOM_RULE_ID},phase:1,deny,status:403,log"
-        in applied["generated_config"]["rule_overrides_conf"]
+        in app["rule_overrides_conf"]
     )
-    _assert_coraza_runtime_override(compose_stack, should_exist=False)
-    _assert_coraza_runtime_tuning(compose_stack, should_exist=True)
+    _assert_coraza_runtime_override(compose_stack, policy_id, should_exist=False)
+    _assert_coraza_runtime_tuning(compose_stack, policy_id, should_exist=True)
     _wait_for_status(
         compose_stack,
         403,
@@ -170,9 +172,9 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     applied = _apply_config(compose_stack, token)
     assert (
         f"SecRuleRemoveById {SCANNER_RULE_ID}"
-        in applied["generated_config"]["rule_overrides_conf"]
+        in _coraza_app(applied, policy_id)["rule_overrides_conf"]
     )
-    _assert_coraza_runtime_override(compose_stack, should_exist=True)
+    _assert_coraza_runtime_override(compose_stack, policy_id, should_exist=True)
     # The runtime-file assertion proves the override reached Coraza's mount;
     # the HTTP verdict is still the user-visible contract for issue #114.
     _wait_for_status(
@@ -191,16 +193,85 @@ def test_policy_apply_rule_override_flips_runtime_waf_behavior(
     )
 
     applied = _apply_config(compose_stack, token)
-    assert f"SecRuleRemoveById {SCANNER_RULE_ID}" not in applied["generated_config"][
-        "rule_overrides_conf"
-    ]
-    _assert_coraza_runtime_override(compose_stack, should_exist=False)
+    assert (
+        f"SecRuleRemoveById {SCANNER_RULE_ID}"
+        not in _coraza_app(applied, policy_id)["rule_overrides_conf"]
+    )
+    _assert_coraza_runtime_override(compose_stack, policy_id, should_exist=False)
     _wait_for_status(
         compose_stack,
         403,
         "scanner request after re-enable",
         headers={"User-Agent": SCANNER_USER_AGENT},
     )
+
+
+@pytest.mark.e2e
+def test_each_vhost_is_inspected_with_its_own_policy(
+    compose_stack: ComposeStack,
+) -> None:
+    """Policies, rule overrides, and custom rules apply only to their vhost."""
+    token = _login(compose_stack)
+    shop_policy_id = _create_policy_with_vhost(
+        compose_stack, token, "Shop policy", domain=SHOP_HOST
+    )
+    blog_policy_id = _create_policy_with_vhost(
+        compose_stack, token, "Blog policy", domain=BLOG_HOST
+    )
+    _api_json(
+        compose_stack,
+        "POST",
+        "/vhosts",
+        token=token,
+        expected_status=201,
+        payload={"domain": PLAIN_HOST, "backend_url": "http://backend:8000"},
+    )
+    # Blog lets scanners through and blocks a header that the shop allows.
+    _api_json(
+        compose_stack,
+        "POST",
+        f"/policies/{blog_policy_id}/rules",
+        token=token,
+        expected_status=201,
+        payload={"rule_id": SCANNER_RULE_ID, "action": "disable"},
+    )
+    _api_json(
+        compose_stack,
+        "POST",
+        f"/policies/{blog_policy_id}/custom-rules",
+        token=token,
+        expected_status=201,
+        payload={
+            "rule_id": CUSTOM_RULE_ID,
+            "phase": "request_headers",
+            "variables": "REQUEST_HEADERS:X-Guard-Proxy-E2E",
+            "operator": "streq",
+            "operator_argument": "deny-me",
+            "actions": "deny,status:403,log",
+            "is_active": True,
+        },
+    )
+
+    applied = _apply_config(compose_stack, token)
+
+    assert [app["name"] for app in applied["generated_config"]["coraza_apps"]] == [
+        "default",
+        f"policy_{shop_policy_id}",
+        f"policy_{blog_policy_id}",
+    ]
+    scanner = {"User-Agent": SCANNER_USER_AGENT}
+    custom = {"X-Guard-Proxy-E2E": "deny-me"}
+    # Wait for Coraza to load the new applications before single-shot checks.
+    _wait_for_status(
+        compose_stack, 403, "blog custom rule", headers={"Host": BLOG_HOST, **custom}
+    )
+    _wait_for_status(
+        compose_stack, 403, "shop scanner", headers={"Host": SHOP_HOST, **scanner}
+    )
+    assert _status(compose_stack, {"Host": BLOG_HOST, **scanner}) == 200
+    assert _status(compose_stack, {"Host": SHOP_HOST, **custom}) == 200
+    # Without a policy the vhost is inspected in log-only mode.
+    assert _status(compose_stack, {"Host": PLAIN_HOST, **scanner}) == 200
 
 
 @pytest.mark.e2e
@@ -281,7 +352,9 @@ def _probe_traffic(stack: ComposeStack) -> Iterator[TrafficProbe]:
         thread.join(timeout=HTTP_TIMEOUT_SECONDS + 1)
 
 
-def _create_policy_with_vhost(stack: ComposeStack, token: str, name: str) -> int:
+def _create_policy_with_vhost(
+    stack: ComposeStack, token: str, name: str, *, domain: str = HOST_HEADER
+) -> int:
     policy = _api_json(
         stack,
         "POST",
@@ -303,7 +376,7 @@ def _create_policy_with_vhost(stack: ComposeStack, token: str, name: str) -> int
         token=token,
         expected_status=201,
         payload={
-            "domain": HOST_HEADER,
+            "domain": domain,
             "backend_url": "http://backend:8000",
             "ssl_enabled": False,
             "is_active": True,
@@ -311,6 +384,19 @@ def _create_policy_with_vhost(stack: ComposeStack, token: str, name: str) -> int
         },
     )
     return int(policy["id"])
+
+
+def _coraza_app(applied: dict[str, Any], policy_id: int) -> dict[str, str]:
+    return next(
+        app
+        for app in applied["generated_config"]["coraza_apps"]
+        if app["name"] == f"policy_{policy_id}"
+    )
+
+
+def _status(stack: ComposeStack, headers: dict[str, str]) -> int:
+    status, _ = _http_request(f"{stack.base_url}/docs", method="GET", headers=headers)
+    return status
 
 
 def _require_e2e_prerequisites() -> None:
@@ -476,7 +562,7 @@ def _apply_config(stack: ComposeStack, token: str) -> dict[str, Any]:
     return response
 
 
-def _assert_coraza_runtime_override(stack: ComposeStack, *, should_exist: bool) -> None:
+def _runtime_rule_overrides(stack: ComposeStack, policy_id: int) -> str:
     result = _run(
         stack.command
         + [
@@ -484,38 +570,36 @@ def _assert_coraza_runtime_override(stack: ComposeStack, *, should_exist: bool) 
             "-T",
             "coraza",
             "cat",
-            "/runtime/current/rule-overrides.conf",
+            f"/runtime/current/coraza/policy_{policy_id}/rule-overrides.conf",
         ],
         env=stack.env,
     )
+    return result.stdout
+
+
+def _assert_coraza_runtime_override(
+    stack: ComposeStack, policy_id: int, *, should_exist: bool
+) -> None:
     expected = f"SecRuleRemoveById {SCANNER_RULE_ID}"
     if should_exist:
-        assert expected in result.stdout
+        assert expected in _runtime_rule_overrides(stack, policy_id)
     else:
-        assert expected not in result.stdout
+        assert expected not in _runtime_rule_overrides(stack, policy_id)
 
 
-def _assert_coraza_runtime_tuning(stack: ComposeStack, *, should_exist: bool) -> None:
-    result = _run(
-        stack.command
-        + [
-            "exec",
-            "-T",
-            "coraza",
-            "cat",
-            "/runtime/current/rule-overrides.conf",
-        ],
-        env=stack.env,
-    )
+def _assert_coraza_runtime_tuning(
+    stack: ComposeStack, policy_id: int, *, should_exist: bool
+) -> None:
+    rule_overrides = _runtime_rule_overrides(stack, policy_id)
     expected = [
         f"ctl:ruleRemoveTargetById={EXCLUSION_RULE_ID};ARGS:token",
         f"id:{CUSTOM_RULE_ID},phase:1,deny,status:403,log",
     ]
     for line in expected:
         if should_exist:
-            assert line in result.stdout
+            assert line in rule_overrides
         else:
-            assert line not in result.stdout
+            assert line not in rule_overrides
 
 
 def _api_json(

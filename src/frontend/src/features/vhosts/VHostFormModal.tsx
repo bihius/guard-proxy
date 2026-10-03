@@ -322,13 +322,10 @@ export function VHostFormModal(props: VHostFormModalProps) {
               </option>
             ))}
           </Select>
-          {/* CRS settings are global (one active policy), so "no policy"
-              means "whatever the other vhosts use", or the detect-only
-              fallback when none of them has a policy. */}
           {policyId === "" && (
             <p id="vhost-policy-hint" className="text-xs text-muted-foreground">
-              Without a policy this vhost follows the policy of the other vhosts. If none
-              of them has one, requests are only logged, never blocked.
+              Without a policy, requests to this vhost are inspected with default CRS
+              settings and only logged, never blocked.
             </p>
           )}
         </div>

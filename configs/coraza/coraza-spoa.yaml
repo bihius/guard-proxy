@@ -1,4 +1,9 @@
-# Coraza SPOA service configuration for the Docker Compose stack.
+# Fallback coraza-spoa configuration baked into the Coraza image.
+#
+# The supervisor uses it only while the active runtime release has no
+# generated coraza-spoa.yaml: the entrypoint stub on a fresh volume, or a
+# release written before per-policy Coraza applications existed. Requests
+# then reach the single application below whatever `app` HAProxy sends.
 
 bind: 0.0.0.0:9000
 log_level: info
@@ -11,6 +16,10 @@ applications:
   - name: default
     directives: |
       Include /etc/coraza/coraza.conf
+      Include /runtime/current/crs-setup.conf
+      Include /etc/coraza/crs/rules/*.conf
+      Include /etc/coraza/guard-proxy-exceptions.conf
+      Include /runtime/current/rule-overrides.conf
     response_check: false
     transaction_ttl_ms: 60000
     log_level: info

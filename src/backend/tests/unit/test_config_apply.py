@@ -17,27 +17,42 @@ from app.services.config_apply import (
     calculate_checksum,
     seed_runtime_config,
 )
-from app.services.config_generator import GeneratedConfig
+from app.services.config_generator import CorazaAppConfig, GeneratedConfig
 
 
-def _sample_generated() -> GeneratedConfig:
+def _sample_generated(policy_tuning: str = "# no overrides\n") -> GeneratedConfig:
     return GeneratedConfig(
         haproxy_cfg="global\n",
-        crs_setup_conf="SecRuleEngine On\n",
-        rule_overrides_conf="# no overrides\n",
+        coraza_spoa_yaml="applications: []\n",
+        coraza_apps=(
+            CorazaAppConfig(
+                name="default",
+                crs_setup_conf="SecRuleEngine DetectionOnly\n",
+                rule_overrides_conf="# no overrides\n",
+            ),
+            CorazaAppConfig(
+                name="policy_7",
+                crs_setup_conf="SecRuleEngine On\n",
+                rule_overrides_conf=policy_tuning,
+            ),
+        ),
         certs={},
     )
 
 
-def _seed_current_release(runtime_root: Path, *, name: str = "previous") -> Path:
-    releases = runtime_root / "releases"
-    release_dir = releases / name
-    release_dir.mkdir(parents=True, exist_ok=True)
-    (release_dir / "haproxy.cfg").write_text("global\n", encoding="utf-8")
-    (release_dir / "crs-setup.conf").write_text("SecRuleEngine On\n", encoding="utf-8")
-    (release_dir / "rule-overrides.conf").write_text("# seed\n", encoding="utf-8")
+def _seed_current_release(
+    runtime_root: Path,
+    *,
+    name: str = "previous",
+    generated: GeneratedConfig | None = None,
+) -> Path:
+    release_dir = runtime_root / "releases" / name
+    _write_candidate(
+        release_dir,
+        generated or _sample_generated("# seed\n"),
+        runtime_root / "certs",
+    )
     current = runtime_root / "current"
-    current.parent.mkdir(parents=True, exist_ok=True)
     current.symlink_to("releases/" + name)
     return release_dir
 
@@ -67,10 +82,18 @@ def test_apply_success_writes_files_and_switches_current(
     active_dir = current.resolve()
     assert active_dir == Path(result.active_path)
     assert (active_dir / "haproxy.cfg").read_text(encoding="utf-8") == "global\n"
-    assert (
-        (active_dir / "crs-setup.conf").read_text(encoding="utf-8")
-        == "SecRuleEngine On\n"
-    )
+    assert (active_dir / "coraza-spoa.yaml").read_text(
+        encoding="utf-8"
+    ) == "applications: []\n"
+    assert (active_dir / "coraza/default/crs-setup.conf").read_text(
+        encoding="utf-8"
+    ) == "SecRuleEngine DetectionOnly\n"
+    assert (active_dir / "coraza/policy_7/crs-setup.conf").read_text(
+        encoding="utf-8"
+    ) == "SecRuleEngine On\n"
+    assert (active_dir / "coraza/policy_7/rule-overrides.conf").read_text(
+        encoding="utf-8"
+    ) == "# no overrides\n"
 
 
 def test_apply_validation_failure_keeps_current_unchanged(
@@ -316,7 +339,7 @@ def test_apply_returns_state_invalid_when_current_is_directory(
 
 # ---------------------------------------------------------------------------
 # seed_runtime_config — backend startup must populate /runtime/current so
-# Coraza's `Include /runtime/current/crs-setup.conf` resolves on first boot.
+# Coraza's includes under /runtime/current resolve on first boot.
 # ---------------------------------------------------------------------------
 
 
@@ -335,7 +358,7 @@ def test_seed_runtime_config_writes_current_when_missing(
 
     current = runtime_root / "current"
     assert current.is_symlink()
-    assert (current / "crs-setup.conf").read_text(
+    assert (current / "coraza/policy_7/crs-setup.conf").read_text(
         encoding="utf-8"
     ) == "SecRuleEngine On\n"
     assert returned_checksum == calculate_checksum(_sample_generated())
@@ -365,7 +388,7 @@ def test_seed_runtime_config_replaces_entrypoint_stub_release(
     current = runtime_root / "current"
     assert current.resolve() != stub_dir.resolve()
     assert (current / "haproxy.cfg").exists()
-    assert (current / "crs-setup.conf").read_text(
+    assert (current / "coraza/policy_7/crs-setup.conf").read_text(
         encoding="utf-8"
     ) == "SecRuleEngine On\n"
     assert returned_checksum == calculate_checksum(_sample_generated())
@@ -387,13 +410,36 @@ def test_seed_runtime_config_is_noop_when_current_already_exists(
 
     assert (runtime_root / "current").resolve() == previous.resolve()
     # The pre-existing release's own content, not the (unused) candidate.
-    previous_generated = GeneratedConfig(
-        haproxy_cfg="global\n",
-        crs_setup_conf="SecRuleEngine On\n",
-        rule_overrides_conf="# seed\n",
-        certs={},
+    assert returned_checksum == calculate_checksum(_sample_generated("# seed\n"))
+    assert returned_checksum != calculate_checksum(_sample_generated())
+
+
+def test_seed_runtime_config_keeps_a_release_from_before_per_policy_apps(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """An upgrade must not deploy unapplied DB changes on its own.
+
+    The old single-policy release stays active until an admin applies; its
+    checksum is unknown so the panel shows the configuration as pending.
+    """
+    runtime_root = tmp_path / "generated"
+    old_release = runtime_root / "releases" / "old"
+    old_release.mkdir(parents=True)
+    (old_release / "haproxy.cfg").write_text("global\n", encoding="utf-8")
+    (old_release / "crs-setup.conf").write_text("SecRuleEngine On\n", encoding="utf-8")
+    (old_release / "rule-overrides.conf").write_text("# old\n", encoding="utf-8")
+    (runtime_root / "current").symlink_to("releases/old")
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: (_ for _ in ()).throw(AssertionError("should not validate")),
     )
-    assert returned_checksum == calculate_checksum(previous_generated)
+
+    returned_checksum = seed_runtime_config(_sample_generated())
+
+    assert (runtime_root / "current").resolve() == old_release.resolve()
+    assert returned_checksum is None
 
 
 def test_seed_runtime_config_does_not_swap_current_when_validation_fails(
@@ -463,8 +509,8 @@ def test_write_candidate_writes_certs_to_shared_dir_not_per_release(
     shared_certs = runtime_root / "certs"
     generated = GeneratedConfig(
         haproxy_cfg="global\n",
-        crs_setup_conf="SecRuleEngine On\n",
-        rule_overrides_conf="# no overrides\n",
+        coraza_spoa_yaml="applications: []\n",
+        coraza_apps=(),
         certs={"example.com": "PEMDATA\n"},
     )
 
