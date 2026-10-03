@@ -109,9 +109,10 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 - No automated upgrade testing between beta versions yet — back up before
   upgrading.
 - Single-node only; no HA/clustering.
-- One active WAF policy at a time: every vhost must use the same active
-  policy. Binding vhosts to different active policies makes
-  **Apply configuration** fail with an explanation until they agree.
+- Every vhost has its own WAF policy, and each distinct policy in use runs
+  as a separate Coraza instance (about 6–10 MiB extra memory per policy).
+  Path-scoped policy bindings to a different policy than the vhost's own
+  are not supported; **Apply configuration** explains and refuses them.
 
 ## Reporting feedback
 

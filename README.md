@@ -12,7 +12,7 @@ Developed as a master's thesis project at Wrocław University DSW.
 
 - **Reverse proxy + WAF** — HAProxy 3.0 inspects every request through the Coraza SPOA (OWASP CRS 4.x), blocks attacks with 403, and fails closed (503) when the WAF is unavailable.
 - **Virtual host management** — register domains and backend targets from the admin panel; unknown hosts are rejected before WAF inspection.
-- **Policy management** — paranoia level, anomaly thresholds, enforcement mode (block / detect-only), and per-policy CRS rule overrides.
+- **Policy management** — each vhost gets its own policy: paranoia level, anomaly thresholds, enforcement mode (block / detect-only), rule overrides, exclusions, and custom rules, enforced by a separate Coraza instance per policy.
 - **One-click config deployment** — `POST /config/apply` renders HAProxy/Coraza config from the database, validates it, atomically swaps it in, reloads HAProxy, and rolls back on failure. Deployment status is shown live on the dashboard.
 - **WAF event logs** — a sidecar log shipper ingests Coraza audit events into PostgreSQL; the panel provides filtering, pagination, and event detail views.
 - **Authentication and roles** — JWT-based login with admin/viewer roles and CLI user management.
