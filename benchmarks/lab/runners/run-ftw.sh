@@ -32,6 +32,20 @@ fi
 write_manifest
 OUT_DIR="$(setup_run_dir ftw)"
 
+# go-ftw does not expand templates in its config file: the literal
+# `{{ env "TARGET_VHOST" }}` reached HAProxy as the Host header, which it
+# rejects as an invalid request, so no test reached the FTW vhost. Render the
+# values here and mount the result instead.
+RENDERED_FTW_CONFIG="${OUT_DIR}/config.yaml"
+TARGET_VHOST="${TARGET_VHOST}" RUN_ID="${RUN_ID}" \
+  python3 - "${FTW_CONFIG}" "${RENDERED_FTW_CONFIG}" <<'PY'
+import os, re, sys
+source, target = sys.argv[1], sys.argv[2]
+text = open(source).read()
+rendered = re.sub(r'\{\{ env "(\w+)" \}\}', lambda m: os.environ[m.group(1)], text)
+open(target, "w").write(rendered)
+PY
+
 echo "=== CRS regression (go-ftw) ==="
 echo "Target vhost : ${TARGET_VHOST}"
 echo "Output dir   : ${OUT_DIR}"
@@ -41,7 +55,7 @@ echo ""
 docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
   --network "${DOCKER_NETWORK}" \
   -v "${CRS_TESTS}:/tests:ro" \
-  -v "${FTW_CONFIG}:/config.yaml:ro" \
+  -v "${RENDERED_FTW_CONFIG}:/config.yaml:ro" \
   -e "TARGET_VHOST=${TARGET_VHOST}" \
   -e "RUN_ID=${RUN_ID}" \
   "${FTW_IMAGE}" \
