@@ -79,6 +79,9 @@ class Settings(EnvFileSettings):
     haproxy_stats_socket_path: str = "/var/run/haproxy/admin.sock"
     haproxy_stats_timeout_seconds: int = 10
     log_retention_days: int = 30
+    # Log level written into the generated coraza-spoa.yaml (debug, info,
+    # warn, error). The debug compose overlay sets CORAZA_LOG_LEVEL=debug.
+    coraza_log_level: Literal["debug", "info", "warn", "error"] = "info"
 
     # GeoIP country filtering (issue #175). The database is downloaded from
     # ip66.dev (free, no license key, rebuilt daily upstream) and refreshed

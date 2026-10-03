@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# set-policy.sh — Switch all lab vhosts to the PL1 or PL2 policy and reload config.
+# set-policy.sh — Put lab vhosts on the PL1 or PL2 profile and reload config.
 #
-# setup-lab.sh creates both the "Lab Baseline" (PL1) and "Lab PL2" policies and binds
-# all lab vhosts to PL1 by default. This script re-points the vhosts to the requested
-# policy and applies the generated HAProxy/Coraza config, so a PL2 sweep can run
-# against the same lab targets without re-running setup-lab.sh.
+# Every lab vhost has its own policy ("Lab <domain>", created by setup-lab.sh).
+# This script writes the requested profile's paranoia level and anomaly
+# thresholds into the policy of each selected vhost and applies the generated
+# HAProxy/Coraza config. Other vhosts and each policy's own tuning (rule
+# overrides, exclusions, custom rules) are left untouched.
 #
 # Prerequisites:
 #   - benchmarks/lab/.env (copy from benchmarks/lab/.env.example)
-#   - Lab already brought up via `make lab-up` (setup-lab.sh has already created
-#     the "Lab Baseline" and "Lab PL2" policies and the four lab vhosts)
+#   - Lab already brought up via `make lab-up`
 #
 # Usage:
-#   POLICY=pl1 bash benchmarks/lab/set-policy.sh
-#   POLICY=pl2 bash benchmarks/lab/set-policy.sh
+#   POLICY=pl1 bash benchmarks/lab/set-policy.sh                        # all lab vhosts
+#   POLICY=pl2 TARGET_VHOST=wp.local bash benchmarks/lab/set-policy.sh  # one vhost
 
 set -Eeuo pipefail
 
@@ -22,6 +22,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 CORE_ENV="${REPO_ROOT}/docker/.env"
 LAB_ENV="${SCRIPT_DIR}/.env"
 POLICY="${POLICY:-pl1}"
+TARGET_VHOST="${TARGET_VHOST:-}"
 
 for f in "${CORE_ENV}" "${LAB_ENV}"; do
   if [[ ! -f "${f}" ]]; then
@@ -63,64 +64,58 @@ api_json() {
   cat "${response_file}"; rm -f "${response_file}"
 }
 
-# ── Resolve target policy ────────────────────────────────────────────────────
-
-case "${POLICY}" in
-  pl1)
-    TARGET_POLICY_NAME="$(env_value LAB_POLICY_NAME 'Lab Baseline')"
-    ;;
-  pl2)
-    TARGET_POLICY_NAME="$(env_value LAB_PL2_POLICY_NAME 'Lab PL2')"
-    ;;
-  *)
-    echo "Unknown POLICY '${POLICY}' (expected pl1 or pl2)." >&2
-    exit 1
-    ;;
-esac
+# shellcheck source=benchmarks/lab/policy-profiles.sh
+source "${SCRIPT_DIR}/policy-profiles.sh"
+load_policy_profile "${POLICY}"
 
 ADMIN_EMAIL="$(env_value ADMIN_EMAIL admin@example.com)"
 ADMIN_PASSWORD="$(env_value ADMIN_PASSWORD GuardProxyDemo12345)"
 BACKEND_HTTP_PORT="$(env_value BACKEND_HTTP_PORT 8000)"
 API_BASE_URL="http://127.0.0.1:${BACKEND_HTTP_PORT}"
 
-LAB_JUICESHOP_DOMAIN="$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
-LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
-LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
-LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
+if [[ -n "${TARGET_VHOST}" ]]; then
+  DOMAINS=("${TARGET_VHOST}")
+else
+  DOMAINS=(
+    "$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
+    "$(env_value LAB_FTW_DOMAIN ftw.local)"
+    "$(env_value LAB_DVWA_DOMAIN dvwa.local)"
+    "$(env_value LAB_WP_DOMAIN wp.local)"
+  )
+fi
 
 # ── Main ───────────────────────────────────────────────────────────────────
 
+# /auth/login allows 5 requests per minute per IP; eval-sweep logs in from
+# every runner, so wait out the limit instead of aborting the sweep.
+login() {
+  local body response_file http_code attempt
+  body="$(printf '{"email":%s,"password":%s}' "$(json_string "${ADMIN_EMAIL}")" "$(json_string "${ADMIN_PASSWORD}")")"
+  response_file="$(mktemp)"
+  for attempt in 1 2 3; do
+    http_code="$(curl --silent --show-error --output "${response_file}" --write-out '%{http_code}' \
+      --request POST --header "Content-Type: application/json" --data "${body}" "${API_BASE_URL}/auth/login")"
+    if [[ "${http_code}" == 200 ]]; then
+      python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' <"${response_file}"
+      rm -f "${response_file}"; return 0
+    fi
+    if [[ "${http_code}" != 429 || "${attempt}" == 3 ]]; then break; fi
+    echo "Login rate-limited; retrying in 60s." >&2
+    sleep 60
+  done
+  echo "API POST /auth/login failed with HTTP ${http_code}:" >&2
+  cat "${response_file}" >&2; rm -f "${response_file}"; return 1
+}
+
 echo "Logging in..."
-login_body="$(printf '{"email":%s,"password":%s}' "$(json_string "${ADMIN_EMAIL}")" "$(json_string "${ADMIN_PASSWORD}")")"
-token="$(api_json POST /auth/login "" "${login_body}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+token="$(login)"
+vhosts_response="$(api_json GET "/vhosts?per_page=500" "${token}")"
+profile_body="$(printf '{"paranoia_level":%s,"inbound_anomaly_threshold":%s,"outbound_anomaly_threshold":%s,"enforcement_mode":"block","is_active":true}' \
+  "${PROFILE_PARANOIA}" "${PROFILE_INBOUND_THRESHOLD}" "${PROFILE_OUTBOUND_THRESHOLD}")"
 
-echo "Looking up policy '${TARGET_POLICY_NAME}'..."
-policies_response="$(api_json GET /policies "${token}")"
-policy_lookup="$(POLICIES="${policies_response}" POLICY_NAME="${TARGET_POLICY_NAME}" python3 - <<'PY'
-import json, os, sys
-data = json.loads(os.environ["POLICIES"])
-name = os.environ["POLICY_NAME"]
-if isinstance(data, dict) and "items" in data:
-    items = data["items"]
-elif isinstance(data, list):
-    items = data
-else:
-    items = [data]
-for item in items:
-    if item["name"] == name:
-        print(item["id"], item.get("paranoia_level", "?"))
-        sys.exit(0)
-sys.exit(f"Policy '{name}' not found. Run `make lab-up` (setup-lab.sh) first.")
-PY
-)"
-read -r policy_id policy_paranoia <<<"${policy_lookup}"
-
-echo "Fetching vhosts..."
-vhosts_response="$(api_json GET /vhosts "${token}")"
-
-set_vhost_policy() {
+set_vhost_profile() {
   local domain="$1"
-  local vhost_id
+  local vhost_id detail policy_id
   vhost_id="$(VHOSTS="${vhosts_response}" DOMAIN="${domain}" python3 - <<'PY'
 import json, os, sys
 data = json.loads(os.environ["VHOSTS"]); domain = os.environ["DOMAIN"]
@@ -131,18 +126,30 @@ for item in items:
 sys.exit(f"vhost {domain!r} not found. Run `make lab-up` (setup-lab.sh) first.")
 PY
   )"
-  echo "  ${domain} -> policy_id=${policy_id}"
-  api_json PATCH "/vhosts/${vhost_id}" "${token}" "{\"policy_id\":${policy_id}}" >/dev/null
+  detail="$(api_json GET "/vhosts/${vhost_id}" "${token}")"
+  # Refuse to edit a policy that is not this vhost's own: changing a shared
+  # policy would silently move other vhosts to the profile as well.
+  policy_id="$(DETAIL="${detail}" EXPECTED="$(lab_policy_name "${domain}")" python3 - <<'PY'
+import json, os, sys
+policy = json.loads(os.environ["DETAIL"]).get("policy")
+expected = os.environ["EXPECTED"]
+if policy is None or policy["name"] != expected:
+    found = "no policy" if policy is None else f"policy {policy['name']!r}"
+    sys.exit(f"vhost uses {found}, expected its own {expected!r}. Run `make lab-up` (setup-lab.sh) first.")
+print(policy["id"])
+PY
+  )"
+  api_json PATCH "/policies/${policy_id}" "${token}" "${profile_body}" >/dev/null
+  echo "  ${domain}: '$(lab_policy_name "${domain}")' -> PL${PROFILE_PARANOIA}, inbound threshold ${PROFILE_INBOUND_THRESHOLD}"
 }
 
-echo "Switching lab vhosts to '${TARGET_POLICY_NAME}' (paranoia ${policy_paranoia})..."
-set_vhost_policy "${LAB_JUICESHOP_DOMAIN}"
-set_vhost_policy "${LAB_FTW_DOMAIN}"
-set_vhost_policy "${LAB_DVWA_DOMAIN}"
-set_vhost_policy "${LAB_WP_DOMAIN}"
+echo "Setting profile ${POLICY} on ${#DOMAINS[@]} lab vhost(s)..."
+for domain in "${DOMAINS[@]}"; do
+  set_vhost_profile "${domain}"
+done
 
 echo "Applying generated HAProxy/Coraza config..."
 api_json POST /config/apply "${token}" >/dev/null
 
 echo
-echo "Active policy: ${TARGET_POLICY_NAME} (paranoia ${policy_paranoia})"
+echo "Profile ${POLICY} active on: ${DOMAINS[*]}"

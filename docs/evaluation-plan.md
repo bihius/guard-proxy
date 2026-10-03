@@ -105,6 +105,8 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 WordPress is run **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
 
+Every lab vhost has its **own WAF policy**, named after its domain (`Lab juice.local`, `Lab ftw.local`, `Lab dvwa.local`, `Lab wp.local`), so tuning one target never changes another. `make lab-up` creates them with the PL1 profile. A profile (`pl1` or `pl2`, defined in `benchmarks/lab/.env`) is only a set of settings — paranoia level and anomaly thresholds — that `make set-policy POLICY=pl1|pl2` writes into those policies, for all lab vhosts or, with `TARGET_VHOST=<domain>`, for one of them.
+
 ---
 
 ## 5. Test Scenarios
@@ -266,10 +268,10 @@ make eval-sweep
 ```
 
 **What happens when you run this?**
-1. The script first sets Guard Proxy to **PL1**.
+1. The script first writes the **PL1** profile into every lab vhost's policy.
 2. It attacks the lab using multiple tools (go-ftw, Nuclei, ZAP, and a custom corpus) and runs a performance load test.
 3. It saves all metrics for PL1.
-4. Then, it automatically switches Guard Proxy to **PL2** and repeats all the attacks and load tests.
+4. Then, it automatically writes the **PL2** profile into the same per-vhost policies and repeats all the attacks and load tests.
 5. It saves all metrics for PL2.
 
 **What do you do next?**
@@ -288,6 +290,15 @@ If you only want to run a quick smoke test on the default configuration without 
 ```bash
 make eval-all
 ```
+
+To move a single target to PL2 while the others stay on PL1 (each vhost has its own policy):
+
+```bash
+make set-policy POLICY=pl2 TARGET_VHOST=wp.local
+make eval-corpus POLICY=pl2 TARGET_VHOST=wp.local
+```
+
+Each runner reads the policy that actually protects its target vhost from the backend API and records it in `summary.json`; it warns when those settings do not match the `POLICY` profile used to label the results directory.
 
 If you need to view results for a specific historical run ID (e.g., if you lost the terminal output), you can use:
 ```bash
@@ -326,9 +337,10 @@ ZAP and Nuclei do not provide clean request-level denominators for WAF TP/FN/TN/
   "scenario": "ftw | zap-<vhost> | nuclei-<vhost> | load-<vhost>",
   "target_vhost": "juice.local",
   "policy": {
-    "name": "Lab Baseline",
+    "name": "Lab juice.local",
     "paranoia": 1,
     "inbound_threshold": 5,
+    "outbound_threshold": 4,
     "mode": "block"
   },
   "detection": {
@@ -362,5 +374,5 @@ Flat CSV with one row per scenario run. Consumed directly by `thesis/chapters/06
 
 Columns include: `run_id`, `scenario`, `target_vhost`, `policy`, `paranoia_level`, `tpr`, `fpr`, `crs_conformance_rate`, `crs_passed`, `crs_failed`, `tp`, `fn`, `tn`, `fp`, `corpus_cases`, `zap_total_alerts`, `nuclei_findings`, `waf_blocks_from_log`, `rps_waf`, `rps_direct`, `rps_degradation_pct`, latency percentiles, and resource fields.
 
-`paranoia_level` is `1` for the baseline (`Lab Baseline`) policy and `2` for the high-paranoia
-(`Lab PL2`) policy — see §8.5 for running both passes.
+`policy` is the name of the target vhost's own policy (`Lab <domain>`) and `paranoia_level` its
+paranoia level at run time: `1` under the `pl1` profile and `2` under `pl2` — see §8.2 for running both passes.

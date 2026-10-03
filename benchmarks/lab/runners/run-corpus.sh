@@ -13,6 +13,7 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TARGET_VHOST="${TARGET_VHOST:-${LAB_WP_DOMAIN}}"
+resolve_policy
 SCENARIO="corpus-${TARGET_VHOST}"
 OUT_DIR="$(setup_run_dir "${SCENARIO}")"
 CASES_JSONL="${OUT_DIR}/cases.jsonl"
@@ -119,8 +120,7 @@ with open(os.path.join(os.path.dirname(os.environ["CASES_JSONL"]), "detection.js
 PY
 
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
-resolve_policy
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}" "${POLICY_PARANOIA}"
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "${DETECTION}" "{}" "{}"
 
 echo ""
 python3 - <<PY

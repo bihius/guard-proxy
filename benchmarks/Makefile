@@ -12,8 +12,9 @@ TARGET_VHOST ?=
 DIRECT_HOST  ?= juiceshop
 DIRECT_PORT  ?= 3000
 
-# POLICY selects which WAF policy is active for the run: pl1 (baseline, default)
-# or pl2 (high-paranoia sweep, see benchmarks/lab/.env.example LAB_PL2_POLICY_*).
+# POLICY names the settings profile the run uses: pl1 (baseline, default) or pl2
+# (high-paranoia sweep, see benchmarks/lab/.env.example LAB_PL2_POLICY_*). Every
+# lab vhost has its own policy; `make set-policy` writes the profile into it.
 POLICY       ?= pl1
 # Each policy pass gets its own results directory: run-<RUN_ID>-pl1 / run-<RUN_ID>-pl2.
 EFFECTIVE_RUN_ID := $(RUN_ID)-$(POLICY)
@@ -93,9 +94,10 @@ eval-all: eval-ftw eval-corpus eval-zap eval-nuclei eval-load eval-metrics
 
 # ── Paranoia level sweep ────────────────────────────────────────────────────
 
-## Switch all lab vhosts to the given POLICY (pl1|pl2) and reload HAProxy/Coraza config.
+## Write the POLICY profile (pl1|pl2) into each lab vhost's own policy and reload
+## HAProxy/Coraza config. TARGET_VHOST=<domain> limits it to one vhost.
 set-policy:
-	POLICY=$(POLICY) bash $(REPO_ROOT)/benchmarks/lab/set-policy.sh
+	POLICY=$(POLICY) TARGET_VHOST=$(TARGET_VHOST) bash $(REPO_ROOT)/benchmarks/lab/set-policy.sh
 
 ## Run the full eval suite at PL1, then switch to PL2 and run it again, sharing
 ## one base RUN_ID. Produces run-<id>-pl1/ and run-<id>-pl2/ for side-by-side comparison.
@@ -145,9 +147,10 @@ help:
 	@echo ""
 	@echo "Variables:"
 	@echo "  RUN_ID=<id>         Override run ID (default: timestamp)"
-	@echo "  POLICY=pl1|pl2      Active WAF policy (default: pl1). Results go to"
+	@echo "  POLICY=pl1|pl2      Policy profile (default: pl1). Results go to"
 	@echo "                      benchmarks/results/run-<RUN_ID>-<POLICY>/."
-	@echo "  TARGET_VHOST=<host> Override scenario vhost (defaults: ftw.local/wp.local/juice.local)"
+	@echo "  TARGET_VHOST=<host> Override scenario vhost (defaults: ftw.local/wp.local/juice.local);"
+	@echo "                      with set-policy, change only that vhost's policy"
 	@echo "  DIRECT_HOST=<name>  Direct-access Docker service name"
 	@echo "  DIRECT_PORT=<port>  Direct-access port (bypasses HAProxy)"
 	@echo ""

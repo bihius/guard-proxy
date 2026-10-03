@@ -22,7 +22,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from app.config import settings
-from app.services.config_generator import GeneratedConfig
+from app.services.config_generator import CorazaAppConfig, GeneratedConfig
+
+# Release layout read by Coraza (see the generated coraza-spoa.yaml):
+#   coraza-spoa.yaml
+#   coraza/<application>/crs-setup.conf
+#   coraza/<application>/rule-overrides.conf
+CORAZA_SPOA_YAML = "coraza-spoa.yaml"
+CORAZA_APPS_DIR = "coraza"
 
 logger = logging.getLogger(__name__)
 
@@ -266,9 +273,9 @@ def seed_runtime_config(generated: GeneratedConfig) -> str | None:
 
     HAProxy and Coraza both read their config from
     `<runtime_root>/current` on startup. Until the first admin "Apply
-    config" runs, that symlink does not exist, so Coraza's
-    `Include /runtime/current/crs-setup.conf` resolves to nothing and CRS
-    fails to load. Called on every backend startup to seed `current` from
+    config" runs, that symlink does not exist, so Coraza's includes under
+    `/runtime/current` resolve to nothing and CRS fails to load. Called on
+    every backend startup to seed `current` from
     the database state, without reloading anything (no service has started
     yet, so there is nothing to reload).
 
@@ -287,14 +294,11 @@ def seed_runtime_config(generated: GeneratedConfig) -> str | None:
     runtime_root = Path(settings.runtime_generated_config_root).resolve()
     current_link = runtime_root / "current"
 
-    # A complete release contains both files. The container entrypoint seeds a
-    # minimal crs-setup.conf stub (without haproxy.cfg) so Coraza can start
+    # A real release always contains haproxy.cfg. The container entrypoint
+    # seeds a minimal CRS stub (without haproxy.cfg) so Coraza can start
     # before the backend; that stub must be replaced with the full rendered
     # config here, so only skip seeding when a real release is active.
-    if (
-        (current_link / "crs-setup.conf").exists()
-        and (current_link / "haproxy.cfg").exists()
-    ):
+    if (current_link / "haproxy.cfg").exists():
         return _read_active_checksum(current_link)
 
     correlation_id = uuid.uuid4().hex
@@ -363,14 +367,18 @@ def _write_candidate(
     _ensure_geoip_map_file()
     candidate_dir.mkdir(parents=True, exist_ok=False)
     (candidate_dir / "haproxy.cfg").write_text(generated.haproxy_cfg, encoding="utf-8")
-    (candidate_dir / "crs-setup.conf").write_text(
-        generated.crs_setup_conf,
+    (candidate_dir / CORAZA_SPOA_YAML).write_text(
+        generated.coraza_spoa_yaml,
         encoding="utf-8",
     )
-    (candidate_dir / "rule-overrides.conf").write_text(
-        generated.rule_overrides_conf,
-        encoding="utf-8",
-    )
+    for app in generated.coraza_apps:
+        app_dir = candidate_dir / CORAZA_APPS_DIR / app.name
+        app_dir.mkdir(parents=True)
+        (app_dir / "crs-setup.conf").write_text(app.crs_setup_conf, encoding="utf-8")
+        (app_dir / "rule-overrides.conf").write_text(
+            app.rule_overrides_conf,
+            encoding="utf-8",
+        )
 
     # Certificates live in a single shared directory (not per-release) so the
     # absolute `crt` path baked into haproxy.cfg resolves to the same files
@@ -525,30 +533,46 @@ def calculate_checksum(generated: GeneratedConfig) -> str:
     digest = hashlib.sha256()
     digest.update(generated.haproxy_cfg.encode("utf-8"))
     digest.update(b"\n---\n")
-    digest.update(generated.crs_setup_conf.encode("utf-8"))
-    digest.update(b"\n---\n")
-    digest.update(generated.rule_overrides_conf.encode("utf-8"))
+    digest.update(generated.coraza_spoa_yaml.encode("utf-8"))
+    for app in sorted(generated.coraza_apps, key=lambda app: app.name):
+        digest.update(f"\n--- {app.name}\n".encode())
+        digest.update(app.crs_setup_conf.encode("utf-8"))
+        digest.update(b"\n---\n")
+        digest.update(app.rule_overrides_conf.encode("utf-8"))
     return digest.hexdigest()
 
 
 def _read_active_checksum(current_link: Path) -> str | None:
-    """Checksum of whatever release `current` actually points to, if any."""
+    """Checksum of whatever release `current` actually points to, if any.
+
+    None for releases written before per-policy Coraza applications existed:
+    they differ from anything generated now, so they show as pending changes.
+    """
     active_dir = _resolve_current(current_link)
     if active_dir is None:
         return None
     try:
         haproxy_cfg = (active_dir / "haproxy.cfg").read_text(encoding="utf-8")
-        crs_setup_conf = (active_dir / "crs-setup.conf").read_text(encoding="utf-8")
-        rule_overrides_conf = (active_dir / "rule-overrides.conf").read_text(
-            encoding="utf-8"
+        coraza_spoa_yaml = (active_dir / CORAZA_SPOA_YAML).read_text(encoding="utf-8")
+        coraza_apps = tuple(
+            CorazaAppConfig(
+                name=app_dir.name,
+                crs_setup_conf=(app_dir / "crs-setup.conf").read_text(
+                    encoding="utf-8"
+                ),
+                rule_overrides_conf=(app_dir / "rule-overrides.conf").read_text(
+                    encoding="utf-8"
+                ),
+            )
+            for app_dir in (active_dir / CORAZA_APPS_DIR).iterdir()
         )
     except OSError:
         return None
     return calculate_checksum(
         GeneratedConfig(
             haproxy_cfg=haproxy_cfg,
-            crs_setup_conf=crs_setup_conf,
-            rule_overrides_conf=rule_overrides_conf,
+            coraza_spoa_yaml=coraza_spoa_yaml,
+            coraza_apps=coraza_apps,
             certs={},
         )
     )

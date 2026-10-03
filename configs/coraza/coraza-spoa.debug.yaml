@@ -1,5 +1,6 @@
-# Debug variant of coraza-spoa.yaml.
-# Mounted by docker-compose.debug.yml (used by `make dev`).
+# Debug variant of the fallback coraza-spoa.yaml.
+# Mounted by docker-compose.debug.yml (used by `make dev`), which also sets
+# CORAZA_LOG_LEVEL=debug so the generated configuration logs at debug too.
 # Do NOT use against real traffic: all request details are logged.
 
 bind: 0.0.0.0:9000
@@ -13,6 +14,10 @@ applications:
   - name: default
     directives: |
       Include /etc/coraza/coraza.conf
+      Include /runtime/current/crs-setup.conf
+      Include /etc/coraza/crs/rules/*.conf
+      Include /etc/coraza/guard-proxy-exceptions.conf
+      Include /runtime/current/rule-overrides.conf
     response_check: false
     transaction_ttl_ms: 60000
     log_level: debug

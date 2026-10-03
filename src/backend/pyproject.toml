@@ -31,6 +31,7 @@ dev = [
     "mypy>=1.13.0",
     "ruff>=0.8.0",
     "types-passlib>=1.7.7.20260211",
+    "pyyaml>=6.0.3",
 ]
 
 [build-system]

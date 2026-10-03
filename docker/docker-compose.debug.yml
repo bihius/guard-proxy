@@ -12,6 +12,12 @@ services:
         "set -eu; if [ ! -f /etc/haproxy/generated/current/haproxy.cfg ]; then mkdir -p /etc/haproxy/generated/releases/seed; cp /usr/local/etc/haproxy/haproxy.cfg /etc/haproxy/generated/releases/seed/haproxy.cfg; ln -sfn releases/seed /etc/haproxy/generated/current; fi; exec haproxy -d -W -S /var/run/haproxy/master.sock,mode,666,level,operator -f /etc/haproxy/generated/current/haproxy.cfg",
       ]
 
+  backend:
+    environment:
+      # Log level of the coraza-spoa.yaml the backend generates.
+      CORAZA_LOG_LEVEL: debug
+
   coraza:
     volumes:
+      # Fallback config, used until the first generated release is active.
       - ../configs/coraza/coraza-spoa.debug.yaml:/etc/coraza-spoa/coraza-spoa.yaml:ro

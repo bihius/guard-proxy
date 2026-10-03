@@ -3,10 +3,18 @@
 from pydantic import BaseModel
 
 
-class GeneratedConfigOut(BaseModel):
-    haproxy_cfg: str
+class CorazaAppOut(BaseModel):
+    """Generated files of one Coraza application (one per WAF policy)."""
+
+    name: str
     crs_setup_conf: str
     rule_overrides_conf: str
+
+
+class GeneratedConfigOut(BaseModel):
+    haproxy_cfg: str
+    coraza_spoa_yaml: str
+    coraza_apps: list[CorazaAppOut]
 
 
 class ConfigApplyResponse(BaseModel):

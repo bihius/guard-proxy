@@ -18,6 +18,7 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TARGET_VHOST="${TARGET_VHOST:-${LAB_JUICESHOP_DOMAIN}}"
+resolve_policy
 NUCLEI_IMAGE="projectdiscovery/nuclei:v3.3.9"
 NUCLEI_CONF="${REPO_ROOT}/benchmarks/lab/scenarios/nuclei/nuclei.yaml"
 
@@ -104,9 +105,7 @@ with open(os.path.join(out_dir, "detection.json"), "w") as f:
 PY
 
 DETECTION="$(cat "${OUT_DIR}/detection.json")"
-resolve_policy
-
-write_summary "${SCENARIO}" "${TARGET_VHOST}" "${POLICY_NAME}" "${DETECTION}" "{}" "{}" "${POLICY_PARANOIA}"
+write_summary "${SCENARIO}" "${TARGET_VHOST}" "${DETECTION}" "{}" "{}"
 
 echo ""
 echo "Nuclei findings (waf-relevant): $(python3 -c "import json; d=json.load(open('${OUT_DIR}/detection.json')); print(d.get('waf_relevant_findings', 'n/a'))")"

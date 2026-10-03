@@ -106,7 +106,7 @@ describe("ApplyConfigButton", () => {
         can_generate: false,
         checksum: null,
         generated_at: null,
-        error: "Generated config supports one active CRS policy for MVP",
+        error: "Active vhost 'app.local' references inactive policy 3",
       },
     };
 

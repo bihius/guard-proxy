@@ -1,4 +1,4 @@
-"""Pure Jinja2 render helpers for HAProxy and CRS configuration."""
+"""Pure Jinja2 render helpers for HAProxy, Coraza SPOA, and CRS configuration."""
 
 from __future__ import annotations
 
@@ -27,6 +27,25 @@ _HAPROXY_ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 _HAPROXY_HEALTH_PATH_RE = re.compile(r"^[A-Za-z0-9_./:-]+$")
 _ISO_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 _HAPROXY_MAP_PATH_RE = re.compile(r"^/[A-Za-z0-9._/-]+$")
+
+# Coraza application names travel as the SPOE `app` argument from HAProxy to
+# coraza-spoa and name the per-application config directory in a release, so
+# they must be safe both as HAProxy `str()` literals and as path segments.
+_CORAZA_APP_NAME_RE = re.compile(r"^[a-z0-9_]+$")
+_CORAZA_LOG_LEVELS = frozenset({"debug", "info", "warn", "error"})
+
+# Application for vhosts without a policy (and requests HAProxy cannot map to
+# a vhost, such as ACME challenges for a domain that is not applied yet).
+CORAZA_DEFAULT_APP = "default"
+
+
+def _validate_coraza_app_name(value: str, field: str) -> None:
+    if not _CORAZA_APP_NAME_RE.match(value):
+        raise ValueError(
+            f"{field} {value!r} must contain only lowercase letters, digits, "
+            "and underscores"
+        )
+
 
 _PHASE_BY_RULE_PHASE = {
     RulePhase.REQUEST_HEADERS: 1,
@@ -226,6 +245,8 @@ class HaproxyRoute:
     backend: HaproxyBackend
     ddos: HaproxyDdos | None = None
     geoip: HaproxyGeoip | None = None
+    # Coraza application (one per WAF policy) that inspects this vhost.
+    waf_app: str = CORAZA_DEFAULT_APP
 
     def __post_init__(self) -> None:
         _validate_haproxy_identifier(
@@ -235,6 +256,7 @@ class HaproxyRoute:
             raise ValueError("HaproxyRenderContext.vhost_hosts must not be empty")
         for host in self.vhost_hosts:
             _validate_haproxy_host(host, "HaproxyRenderContext.vhost_hosts")
+        _validate_coraza_app_name(self.waf_app, "HaproxyRenderContext.waf_app")
 
 
 @dataclass(frozen=True)
@@ -468,7 +490,7 @@ def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
 
 def _render_haproxy_routes(routes: tuple[HaproxyRoute, ...]) -> str:
     template = _ENVIRONMENT.get_template("haproxy.cfg.j2")
-    return template.render(routes=routes)
+    return template.render(routes=routes, default_waf_app=CORAZA_DEFAULT_APP)
 
 
 def render_crs_setup(policy: CrsPolicyRenderContext) -> str:
@@ -480,6 +502,26 @@ def render_crs_setup(policy: CrsPolicyRenderContext) -> str:
         else "On"
     )
     return template.render(policy=policy, sec_rule_engine=sec_rule_engine)
+
+
+def render_coraza_spoa_yaml(app_names: tuple[str, ...], log_level: str) -> str:
+    """Render coraza-spoa.yaml with one Coraza application per name.
+
+    Each application is a separate WAF instance with its own CRS setup and
+    tuning files under coraza/<name>/ in the active release.
+    """
+    if CORAZA_DEFAULT_APP not in app_names:
+        raise ValueError(f"Coraza applications must include {CORAZA_DEFAULT_APP!r}")
+    for name in app_names:
+        _validate_coraza_app_name(name, "Coraza application name")
+    _ensure_unique(app_names, "Coraza application name")
+    if log_level not in _CORAZA_LOG_LEVELS:
+        raise ValueError(
+            f"Coraza log level {log_level!r} must be one of "
+            f"{', '.join(sorted(_CORAZA_LOG_LEVELS))}"
+        )
+    template = _ENVIRONMENT.get_template("coraza-spoa.yaml.j2")
+    return template.render(app_names=app_names, log_level=log_level)
 
 
 def render_rule_overrides(
