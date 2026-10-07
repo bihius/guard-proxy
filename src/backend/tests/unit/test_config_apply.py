@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 
 import pytest
@@ -224,73 +223,32 @@ def test_apply_reloads_haproxy_without_waiting_when_no_policy_is_new(
     result = apply(_generated_with_apps("default"))
 
     assert result.status == ApplyStatus.success
-    # policy_9 is carried over for the old haproxy.cfg until HAProxy reloads.
-    assert steps == [("haproxy-reload", {"default", "policy_9"})]
+    assert steps == [("haproxy-reload", {"default"})]
 
 
-def _active_spoa_app_names(runtime_root: Path) -> list[str]:
-    yaml = (runtime_root / "current/coraza-spoa.yaml").read_text(encoding="utf-8")
-    return re.findall(r"^  - name: (\S+)$", yaml, flags=re.MULTILINE)
-
-
-def test_apply_keeps_a_dropped_policy_loaded_for_one_apply(
+def test_apply_keeps_dropped_policies_in_coraza_until_haproxy_reloads(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """A vhost moving to a new policy: the old one stays loaded during the swap.
-
-    The old haproxy.cfg keeps sending policy_3 until HAProxy reloads, so the
-    new release still contains it; the next apply drops it.
-    """
+    """A vhost moving to a new policy: the old one stays loaded during the swap."""
     runtime_root = tmp_path / "generated"
     _seed_current_release(
         runtime_root, generated=_generated_with_apps("default", "policy_3")
     )
     steps = _record_runtime_steps(monkeypatch, runtime_root)
-    switched = _generated_with_apps("default", "policy_9")
 
-    result = apply(switched)
+    result = apply(_generated_with_apps("default", "policy_9"))
 
     assert result.status == ApplyStatus.success
-    all_apps = {"default", "policy_3", "policy_9"}
+    bridge_apps = {"default", "policy_3", "policy_9"}
     assert steps == [
-        ("coraza-wait", ({"policy_9"}, all_apps)),
-        ("haproxy-reload", all_apps),
+        ("coraza-wait", ({"policy_9"}, bridge_apps)),
+        ("haproxy-reload", bridge_apps),
     ]
-    assert sorted(_active_spoa_app_names(runtime_root)) == sorted(all_apps)
-    # The deployed state is still the generated config, not what was added.
-    assert result.checksum == calculate_checksum(switched)
-    assert seed_runtime_config(switched) == calculate_checksum(switched)
-
-    steps.clear()
-    result = apply(switched)
-
-    assert result.status == ApplyStatus.success
-    assert steps == [("haproxy-reload", {"default", "policy_9"})]
-    # Nothing to carry over: the release holds exactly the generated files.
-    assert (runtime_root / "current/coraza-spoa.yaml").read_text(
-        encoding="utf-8"
-    ) == switched.coraza_spoa_yaml
-    assert not (runtime_root / "current/coraza-retired.json").exists()
-    assert seed_runtime_config(switched) == calculate_checksum(switched)
-
-
-def test_apply_carries_over_only_the_previous_releases_own_policies(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    """Carried-over policies are never carried again, so they cannot pile up."""
-    runtime_root = tmp_path / "generated"
-    _seed_current_release(
-        runtime_root, generated=_generated_with_apps("default", "policy_3")
-    )
-    _record_runtime_steps(monkeypatch, runtime_root)
-
-    apply(_generated_with_apps("default", "policy_9"))
-    result = apply(_generated_with_apps("default", "policy_11"))
-
-    assert result.status == ApplyStatus.success
-    assert _active_app_names(runtime_root) == {"default", "policy_9", "policy_11"}
+    active_dir = (runtime_root / "current").resolve()
+    assert active_dir == Path(result.active_path)
+    assert _active_app_names(runtime_root) == {"default", "policy_9"}
+    assert list((runtime_root / "releases").glob("*-bridge")) == []
 
 
 def test_apply_restores_previous_release_when_coraza_does_not_load_new_policy(
