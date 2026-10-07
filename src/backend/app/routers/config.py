@@ -35,6 +35,7 @@ _HTTP_STATUS: dict[ApplyStatus, int] = {
     ApplyStatus.state_invalid: status.HTTP_500_INTERNAL_SERVER_ERROR,
     ApplyStatus.validation_failed: status.HTTP_422_UNPROCESSABLE_CONTENT,
     ApplyStatus.reload_failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
+    ApplyStatus.coraza_reload_failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
     ApplyStatus.reload_failed_rolled_back: status.HTTP_500_INTERNAL_SERVER_ERROR,
     ApplyStatus.rollback_failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
 }

@@ -150,6 +150,126 @@ def test_apply_reload_failure_rolls_back_to_previous_release(
     assert "rollback reload ok" in (result.rollback_output or "")
 
 
+def _generated_with_apps(*names: str) -> GeneratedConfig:
+    return GeneratedConfig(
+        haproxy_cfg="global\n",
+        coraza_spoa_yaml="applications: []\n",
+        coraza_apps=tuple(
+            CorazaAppConfig(
+                name=name,
+                crs_setup_conf=f"# {name}\n",
+                rule_overrides_conf="# no overrides\n",
+            )
+            for name in names
+        ),
+        certs={},
+    )
+
+
+def _active_app_names(runtime_root: Path) -> set[str]:
+    return {p.name for p in (runtime_root / "current/coraza").iterdir()}
+
+
+def _record_runtime_steps(monkeypatch, runtime_root: Path, *, coraza_ok: bool = True):
+    """Record Coraza waits and HAProxy reloads with the apps `current` holds."""
+    steps: list[tuple[str, object]] = []
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+
+    def wait(app_names: set[str]) -> CommandResult:
+        steps.append(("coraza-wait", (set(app_names), _active_app_names(runtime_root))))
+        return CommandResult(ok=coraza_ok, output="coraza did not load policy_9")
+
+    def reload() -> CommandResult:
+        steps.append(("haproxy-reload", _active_app_names(runtime_root)))
+        return CommandResult(ok=True, output="reloaded")
+
+    monkeypatch.setattr("app.services.config_apply._wait_for_coraza_apps", wait)
+    monkeypatch.setattr("app.services.config_apply._reload_haproxy", reload)
+    return steps
+
+
+def test_apply_waits_for_coraza_to_load_new_policies_before_haproxy_reload(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """HAProxy must not send an application name Coraza has not loaded yet."""
+    runtime_root = tmp_path / "generated"
+    _seed_current_release(runtime_root, generated=_generated_with_apps("default"))
+    steps = _record_runtime_steps(monkeypatch, runtime_root)
+
+    result = apply(_generated_with_apps("default", "policy_9"))
+
+    assert result.status == ApplyStatus.success
+    assert steps == [
+        ("coraza-wait", ({"policy_9"}, {"default", "policy_9"})),
+        ("haproxy-reload", {"default", "policy_9"}),
+    ]
+
+
+def test_apply_reloads_haproxy_without_waiting_when_no_policy_is_new(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    _seed_current_release(
+        runtime_root, generated=_generated_with_apps("default", "policy_9")
+    )
+    steps = _record_runtime_steps(monkeypatch, runtime_root)
+
+    result = apply(_generated_with_apps("default"))
+
+    assert result.status == ApplyStatus.success
+    assert steps == [("haproxy-reload", {"default"})]
+
+
+def test_apply_keeps_dropped_policies_in_coraza_until_haproxy_reloads(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A vhost moving to a new policy: the old one stays loaded during the swap."""
+    runtime_root = tmp_path / "generated"
+    _seed_current_release(
+        runtime_root, generated=_generated_with_apps("default", "policy_3")
+    )
+    steps = _record_runtime_steps(monkeypatch, runtime_root)
+
+    result = apply(_generated_with_apps("default", "policy_9"))
+
+    assert result.status == ApplyStatus.success
+    bridge_apps = {"default", "policy_3", "policy_9"}
+    assert steps == [
+        ("coraza-wait", ({"policy_9"}, bridge_apps)),
+        ("haproxy-reload", bridge_apps),
+    ]
+    active_dir = (runtime_root / "current").resolve()
+    assert active_dir == Path(result.active_path)
+    assert _active_app_names(runtime_root) == {"default", "policy_9"}
+    assert list((runtime_root / "releases").glob("*-bridge")) == []
+
+
+def test_apply_restores_previous_release_when_coraza_does_not_load_new_policy(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    previous = _seed_current_release(
+        runtime_root, generated=_generated_with_apps("default", "policy_3")
+    )
+    steps = _record_runtime_steps(monkeypatch, runtime_root, coraza_ok=False)
+
+    result = apply(_generated_with_apps("default", "policy_9"))
+
+    assert result.status == ApplyStatus.coraza_reload_failed
+    assert "policy_9" in (result.reload_output or "")
+    assert [step for step, _ in steps] == ["coraza-wait"]
+    assert (runtime_root / "current").resolve() == previous.resolve()
+    assert sorted(p.name for p in (runtime_root / "releases").iterdir()) == ["previous"]
+
+
 def test_apply_reports_rollback_failed_when_second_reload_fails(
     tmp_path: Path,
     monkeypatch,
