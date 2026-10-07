@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -30,8 +32,11 @@ from app.services.config_renderer import render_coraza_spoa_yaml
 #   coraza-spoa.yaml
 #   coraza/<application>/crs-setup.conf
 #   coraza/<application>/rule-overrides.conf
+#   coraza-retired.json  (only when applications were carried over, see
+#                         _carry_over_retired_apps)
 CORAZA_SPOA_YAML = "coraza-spoa.yaml"
 CORAZA_APPS_DIR = "coraza"
+CORAZA_RETIRED_MANIFEST = "coraza-retired.json"
 
 logger = logging.getLogger(__name__)
 
@@ -154,29 +159,45 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
         )
 
     # HAProxy picks the Coraza application per vhost and coraza-spoa fails
-    # closed (503) on a name it does not know, so the two must switch in an
-    # order where every name HAProxy sends is loaded in Coraza:
-    # - new names: Coraza loads them first, then HAProxy is reloaded;
-    # - dropped names: HAProxy stops sending them first, Coraza drops them
-    #   when it picks up the release (HAProxy reloads synchronously, Coraza
-    #   only on its supervisor's next poll).
-    # When a release does both, Coraza first loads a bridge release that also
-    # keeps the dropped applications, then the final release once HAProxy no
-    # longer references them.
-    previous_apps = _release_app_names(previous_target)
+    # closed (503) on a name it does not know, so every name either HAProxy
+    # config can send must stay loaded in Coraza while they switch over:
+    # - the old haproxy.cfg keeps sending the previous release's applications
+    #   until HAProxy reloads, so the candidate carries over the ones the new
+    #   config dropped (see _carry_over_retired_apps);
+    # - the new haproxy.cfg sends the new release's applications, so HAProxy
+    #   is only reloaded once Coraza serves every application that is new.
+    # Carried-over applications disappear with the next apply, when the
+    # running HAProxy no longer references them.
+    try:
+        previous_apps = _generated_app_names(previous_target)
+    except (OSError, ValueError) as exc:
+        shutil.rmtree(candidate_dir, ignore_errors=True)
+        logger.error(
+            "config-apply state-invalid correlation_id=%s error=%s",
+            correlation_id,
+            exc,
+        )
+        return ApplyResult(
+            status=ApplyStatus.state_invalid,
+            correlation_id=correlation_id,
+            checksum=checksum,
+            message=f"Runtime directory state is invalid: {exc}",
+            candidate_path=str(candidate_dir),
+            active_path=str(_resolve_current(current_link)),
+        )
     new_apps = {app.name for app in generated.coraza_apps}
     added_apps = new_apps - previous_apps
     retired_apps = previous_apps - new_apps
-    bridge_dir: Path | None = None
-    if added_apps and retired_apps and previous_target is not None:
-        bridge_dir = releases_root / f"{correlation_id}-bridge"
+    if retired_apps and previous_target is not None:
         try:
-            _write_bridge(bridge_dir, candidate_dir, previous_target, retired_apps)
+            _carry_over_retired_apps(
+                candidate_dir, generated, previous_target, retired_apps
+            )
         except (OSError, ValueError) as error:
             shutil.rmtree(candidate_dir, ignore_errors=True)
-            shutil.rmtree(bridge_dir, ignore_errors=True)
             logger.exception(
-                "config-apply bridge write failed correlation_id=%s",
+                "config-apply carrying over retired coraza applications failed "
+                "correlation_id=%s",
                 correlation_id,
             )
             return ApplyResult(
@@ -188,7 +209,7 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
                 active_path=str(_resolve_current(current_link)),
             )
 
-    _swap_current_link(current_link, bridge_dir or candidate_dir, runtime_root)
+    _swap_current_link(current_link, candidate_dir, runtime_root)
 
     if added_apps:
         coraza_wait = _wait_for_coraza_apps(added_apps)
@@ -206,8 +227,6 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
             else:
                 _swap_current_link(current_link, previous_target, runtime_root)
             shutil.rmtree(candidate_dir, ignore_errors=True)
-            if bridge_dir is not None:
-                shutil.rmtree(bridge_dir, ignore_errors=True)
             return ApplyResult(
                 status=ApplyStatus.coraza_reload_failed,
                 correlation_id=correlation_id,
@@ -223,11 +242,6 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
             )
 
     reload_result = _reload_haproxy()
-    if bridge_dir is not None:
-        # Also on reload failure: the rollback below expects `current` to
-        # point at the candidate, and the bridge directory is removed.
-        _swap_current_link(current_link, candidate_dir, runtime_root)
-        shutil.rmtree(bridge_dir, ignore_errors=True)
     if reload_result.ok:
         logger.info(
             "config-apply success correlation_id=%s",
@@ -576,37 +590,93 @@ def _wait_for_coraza_apps(app_names: set[str]) -> CommandResult:
     )
 
 
-def _release_app_names(release_dir: Path | None) -> set[str]:
-    """Coraza applications of a release (empty for none or a pre-#305 release).
+@dataclass(frozen=True)
+class _RetiredManifest:
+    retired_apps: frozenset[str]
+    generated_coraza_spoa_yaml: str
 
-    A release without per-policy applications runs on the image's fallback
-    config, whose default_application accepts any name, so it has nothing
-    HAProxy could lose.
+
+def _read_retired_manifest(release_dir: Path) -> _RetiredManifest | None:
+    """The carried-over application manifest of a release, if it has one.
+
+    Raises ValueError when the manifest exists but is malformed.
+    """
+    try:
+        raw = (release_dir / CORAZA_RETIRED_MANIFEST).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    data: Any = json.loads(raw)
+    retired = data.get("retired_apps") if isinstance(data, dict) else None
+    generated_yaml = (
+        data.get("generated_coraza_spoa_yaml") if isinstance(data, dict) else None
+    )
+    if (
+        not isinstance(retired, list)
+        or not all(isinstance(name, str) for name in retired)
+        or not isinstance(generated_yaml, str)
+    ):
+        raise ValueError(f"{release_dir / CORAZA_RETIRED_MANIFEST} is malformed")
+    return _RetiredManifest(frozenset(retired), generated_yaml)
+
+
+def _generated_app_names(release_dir: Path | None) -> set[str]:
+    """Coraza applications a release's own haproxy.cfg can send.
+
+    That is every application directory except the ones carried over from
+    the release before it. Empty for no release or a pre-#305 release: that
+    one runs on the image's fallback config, whose default_application
+    accepts any name, so it has nothing HAProxy could lose.
     """
     if release_dir is None:
         return set()
     apps_dir = release_dir / CORAZA_APPS_DIR
     if not apps_dir.is_dir():
         return set()
-    return {entry.name for entry in apps_dir.iterdir() if entry.is_dir()}
+    names = {entry.name for entry in apps_dir.iterdir() if entry.is_dir()}
+    manifest = _read_retired_manifest(release_dir)
+    if manifest is not None:
+        names -= manifest.retired_apps
+    return names
 
 
-def _write_bridge(
-    bridge_dir: Path,
+def _carry_over_retired_apps(
     candidate_dir: Path,
+    generated: GeneratedConfig,
     previous_dir: Path,
     retired_apps: set[str],
 ) -> None:
-    """Candidate release plus the previous release's retired applications."""
-    shutil.copytree(candidate_dir, bridge_dir)
+    """Keep the previous release's dropped applications loaded in Coraza.
+
+    `retired_apps` must come from the previous release's own (generated)
+    applications, never from what it carried over itself: an application
+    survives exactly one apply after its last vhost stopped using it, so
+    carried-over applications cannot pile up across applies.
+
+    The manifest records which applications were carried over and the
+    coraza-spoa.yaml that was generated, so the next apply knows what not to
+    carry again and `_read_active_checksum` still yields the checksum of the
+    generated config rather than of what was added to it.
+    """
     for name in retired_apps:
         shutil.copytree(
             previous_dir / CORAZA_APPS_DIR / name,
-            bridge_dir / CORAZA_APPS_DIR / name,
+            candidate_dir / CORAZA_APPS_DIR / name,
         )
-    app_names = _release_app_names(candidate_dir) | retired_apps
-    (bridge_dir / CORAZA_SPOA_YAML).write_text(
-        render_coraza_spoa_yaml(tuple(sorted(app_names)), settings.coraza_log_level),
+    app_names = tuple(app.name for app in generated.coraza_apps) + tuple(
+        sorted(retired_apps)
+    )
+    (candidate_dir / CORAZA_SPOA_YAML).write_text(
+        render_coraza_spoa_yaml(app_names, settings.coraza_log_level),
+        encoding="utf-8",
+    )
+    (candidate_dir / CORAZA_RETIRED_MANIFEST).write_text(
+        json.dumps(
+            {
+                "retired_apps": sorted(retired_apps),
+                "generated_coraza_spoa_yaml": generated.coraza_spoa_yaml,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
 
@@ -676,7 +746,13 @@ def calculate_checksum(generated: GeneratedConfig) -> str:
 
 
 def _read_active_checksum(current_link: Path) -> str | None:
-    """Checksum of whatever release `current` actually points to, if any.
+    """Checksum of the generated config `current` was written from, if any.
+
+    Recomputed from the release's files, minus what apply carried over from
+    the release before it (see `_carry_over_retired_apps`): those
+    applications and the extended coraza-spoa.yaml are not part of the
+    generated config, and counting them would show every restart after a
+    policy switch as pending changes.
 
     None for releases written before per-policy Coraza applications existed:
     they differ from anything generated now, so they show as pending changes.
@@ -685,8 +761,14 @@ def _read_active_checksum(current_link: Path) -> str | None:
     if active_dir is None:
         return None
     try:
+        manifest = _read_retired_manifest(active_dir)
+        retired = manifest.retired_apps if manifest is not None else frozenset()
         haproxy_cfg = (active_dir / "haproxy.cfg").read_text(encoding="utf-8")
-        coraza_spoa_yaml = (active_dir / CORAZA_SPOA_YAML).read_text(encoding="utf-8")
+        coraza_spoa_yaml = (
+            manifest.generated_coraza_spoa_yaml
+            if manifest is not None
+            else (active_dir / CORAZA_SPOA_YAML).read_text(encoding="utf-8")
+        )
         coraza_apps = tuple(
             CorazaAppConfig(
                 name=app_dir.name,
@@ -698,8 +780,9 @@ def _read_active_checksum(current_link: Path) -> str | None:
                 ),
             )
             for app_dir in (active_dir / CORAZA_APPS_DIR).iterdir()
+            if app_dir.name not in retired
         )
-    except OSError:
+    except (OSError, ValueError):
         return None
     return calculate_checksum(
         GeneratedConfig(

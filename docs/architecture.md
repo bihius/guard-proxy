@@ -95,20 +95,30 @@ machine-readable degraded reason header.
    generated `coraza-spoa.yaml` has no `default_application`, so a name
    Coraza does not know fails the SPOE call and HAProxy answers `503`
    instead of inspecting the request with another vhost's policy.
-7. Because of that, `POST /config/apply` switches Coraza and HAProxy in an
-   order where HAProxy never sends a name Coraza has not loaded. When a
-   release adds applications, the backend swaps `current`, waits until
-   `coraza-spoa` serves every new application (it asks over SPOP the same way
-   HAProxy does, `app/services/coraza_probe.py`), and only then reloads
-   HAProxy. If the release also drops applications, Coraza first gets a
-   bridge release that still contains them and the final release only after
-   HAProxy has reloaded. If Coraza does not load the new applications within
-   `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the apply fails with
-   `coraza_reload_failed` and the previous release stays active.
+7. Because of that, `POST /config/apply` keeps every name either HAProxy
+   config can send loaded in Coraza while they switch over:
+   - Applications the new config drops are carried over: the new release
+     also contains the previous release's `coraza/<application>/` directories
+     for them, and its `coraza-spoa.yaml` lists them, because the old
+     `haproxy.cfg` keeps sending them until HAProxy reloads. Only the
+     previous release's own applications are carried, never ones it carried
+     itself, so a dropped application disappears with the next apply.
+   - When the release adds applications, the backend swaps `current`, waits
+     until `coraza-spoa` serves every new one (it asks over SPOP the same way
+     HAProxy does, `app/services/coraza_probe.py`), and only then reloads
+     HAProxy. If Coraza does not load them within
+     `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the apply fails with
+     `coraza_reload_failed` and the previous release stays active.
+
+   Carried-over applications are not part of the generated config: the
+   deployed checksum is the generated config's, and `coraza-retired.json`
+   records what was carried over so the checksum read back from the release
+   at backend startup matches it.
 
 **Limitations.** Each application compiles the whole CRS rule set, so Coraza's
 memory grows with the number of distinct policies in use (vhosts sharing a
-policy share its application). Rule changes to applications that already
+policy share its application); a policy no vhost uses any more stays compiled
+until the next apply drops it. Rule changes to applications that already
 exist still reach Coraza about a second after HAProxy reloads (the
 supervisor's poll plus rule compilation); until then they are inspected with
 the previous rules of the same policy. Path-scoped policy bindings
@@ -359,6 +369,10 @@ The active release is selected through the `current` symlink:
   coraza/policy_<id>/crs-setup.conf  # per-policy CRS setup
   coraza/policy_<id>/rule-overrides.conf  # per-policy overrides,
                                           # exclusions, custom rules
+  coraza-retired.json                # only after a policy was dropped: the
+                                     # applications carried over from the
+                                     # previous release, and the generated
+                                     # coraza-spoa.yaml
 ```
 
 The backend container starts as root only long enough to seed a minimal
