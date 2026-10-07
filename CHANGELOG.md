@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [0.1.0-beta.6] - 2026-10-07
+
+### Fixed
+
+- Config apply no longer answers requests with 503 when it introduces a new
+  WAF policy. Coraza loads a policy's application only after HAProxy had
+  already started sending its name, and coraza-spoa fails closed on an
+  unknown application. Apply now waits until Coraza serves every new
+  application before reloading HAProxy; if Coraza does not load them within
+  `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the previous release is
+  restored and `POST /config/apply` returns the new status
+  `coraza_reload_failed` (HTTP 500). Applications a release drops stay
+  loaded until HAProxy has stopped sending them. An apply that introduces a
+  policy now takes a second or two longer.
+- The CRS compliance benchmark renders go-ftw config values before running.
+
 ## [0.1.0-beta.5] - 2026-10-03
 
 ### Fixed
@@ -166,6 +182,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[0.1.0-beta.6]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.2...v0.1.0-beta.3
