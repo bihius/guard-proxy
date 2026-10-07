@@ -22,7 +22,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from app.config import settings
+from app.services import coraza_probe
 from app.services.config_generator import CorazaAppConfig, GeneratedConfig
+from app.services.config_renderer import render_coraza_spoa_yaml
 
 # Release layout read by Coraza (see the generated coraza-spoa.yaml):
 #   coraza-spoa.yaml
@@ -55,6 +57,7 @@ class ApplyStatus(StrEnum):
     state_invalid = "state_invalid"
     validation_failed = "validation_failed"
     reload_failed = "reload_failed"
+    coraza_reload_failed = "coraza_reload_failed"
     reload_failed_rolled_back = "reload_failed_rolled_back"
     rollback_failed = "rollback_failed"
 
@@ -150,9 +153,81 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
             validation_output=validation.output,
         )
 
-    _swap_current_link(current_link, candidate_dir, runtime_root)
+    # HAProxy picks the Coraza application per vhost and coraza-spoa fails
+    # closed (503) on a name it does not know, so the two must switch in an
+    # order where every name HAProxy sends is loaded in Coraza:
+    # - new names: Coraza loads them first, then HAProxy is reloaded;
+    # - dropped names: HAProxy stops sending them first, Coraza drops them
+    #   when it picks up the release (HAProxy reloads synchronously, Coraza
+    #   only on its supervisor's next poll).
+    # When a release does both, Coraza first loads a bridge release that also
+    # keeps the dropped applications, then the final release once HAProxy no
+    # longer references them.
+    previous_apps = _release_app_names(previous_target)
+    new_apps = {app.name for app in generated.coraza_apps}
+    added_apps = new_apps - previous_apps
+    retired_apps = previous_apps - new_apps
+    bridge_dir: Path | None = None
+    if added_apps and retired_apps and previous_target is not None:
+        bridge_dir = releases_root / f"{correlation_id}-bridge"
+        try:
+            _write_bridge(bridge_dir, candidate_dir, previous_target, retired_apps)
+        except (OSError, ValueError) as error:
+            shutil.rmtree(candidate_dir, ignore_errors=True)
+            shutil.rmtree(bridge_dir, ignore_errors=True)
+            logger.exception(
+                "config-apply bridge write failed correlation_id=%s",
+                correlation_id,
+            )
+            return ApplyResult(
+                status=ApplyStatus.write_failed,
+                correlation_id=correlation_id,
+                checksum=checksum,
+                message=f"Failed to prepare candidate files: {error}",
+                candidate_path=str(candidate_dir),
+                active_path=str(_resolve_current(current_link)),
+            )
+
+    _swap_current_link(current_link, bridge_dir or candidate_dir, runtime_root)
+
+    if added_apps:
+        coraza_wait = _wait_for_coraza_apps(added_apps)
+        if not coraza_wait.ok:
+            logger.error(
+                "config-apply coraza did not load new applications "
+                "correlation_id=%s output=%s",
+                correlation_id,
+                coraza_wait.output,
+            )
+            # HAProxy was not reloaded, so restoring the previous release is
+            # enough: Coraza picks it up again on its next poll.
+            if previous_target is None:
+                current_link.unlink(missing_ok=True)
+            else:
+                _swap_current_link(current_link, previous_target, runtime_root)
+            shutil.rmtree(candidate_dir, ignore_errors=True)
+            if bridge_dir is not None:
+                shutil.rmtree(bridge_dir, ignore_errors=True)
+            return ApplyResult(
+                status=ApplyStatus.coraza_reload_failed,
+                correlation_id=correlation_id,
+                checksum=checksum,
+                message=(
+                    "Coraza did not load the new WAF policies; the previous "
+                    "release is still active. Check the coraza container logs."
+                ),
+                candidate_path=str(candidate_dir),
+                active_path=str(_resolve_current(current_link)),
+                validation_output=validation.output,
+                reload_output=coraza_wait.output,
+            )
 
     reload_result = _reload_haproxy()
+    if bridge_dir is not None:
+        # Also on reload failure: the rollback below expects `current` to
+        # point at the candidate, and the bridge directory is removed.
+        _swap_current_link(current_link, candidate_dir, runtime_root)
+        shutil.rmtree(bridge_dir, ignore_errors=True)
     if reload_result.ok:
         logger.info(
             "config-apply success correlation_id=%s",
@@ -476,6 +551,64 @@ def _reload_haproxy() -> CommandResult:
     # as success.
     is_error = bool(_RELOAD_ERROR_RE.search(output))
     return CommandResult(ok=not is_error, output=output)
+
+
+def _wait_for_coraza_apps(app_names: set[str]) -> CommandResult:
+    """Wait until coraza-spoa serves every application in `app_names`."""
+    missing = coraza_probe.wait_until_served(
+        app_names,
+        host=settings.coraza_spoa_host,
+        port=settings.coraza_spoa_port,
+        timeout_seconds=settings.coraza_reload_timeout_seconds,
+    )
+    if missing:
+        return CommandResult(
+            ok=False,
+            output=(
+                f"coraza-spoa at {settings.coraza_spoa_host}:"
+                f"{settings.coraza_spoa_port} did not load "
+                f"{', '.join(sorted(missing))} within "
+                f"{settings.coraza_reload_timeout_seconds}s"
+            ),
+        )
+    return CommandResult(
+        ok=True, output=f"coraza-spoa serves {', '.join(sorted(app_names))}"
+    )
+
+
+def _release_app_names(release_dir: Path | None) -> set[str]:
+    """Coraza applications of a release (empty for none or a pre-#305 release).
+
+    A release without per-policy applications runs on the image's fallback
+    config, whose default_application accepts any name, so it has nothing
+    HAProxy could lose.
+    """
+    if release_dir is None:
+        return set()
+    apps_dir = release_dir / CORAZA_APPS_DIR
+    if not apps_dir.is_dir():
+        return set()
+    return {entry.name for entry in apps_dir.iterdir() if entry.is_dir()}
+
+
+def _write_bridge(
+    bridge_dir: Path,
+    candidate_dir: Path,
+    previous_dir: Path,
+    retired_apps: set[str],
+) -> None:
+    """Candidate release plus the previous release's retired applications."""
+    shutil.copytree(candidate_dir, bridge_dir)
+    for name in retired_apps:
+        shutil.copytree(
+            previous_dir / CORAZA_APPS_DIR / name,
+            bridge_dir / CORAZA_APPS_DIR / name,
+        )
+    app_names = _release_app_names(candidate_dir) | retired_apps
+    (bridge_dir / CORAZA_SPOA_YAML).write_text(
+        render_coraza_spoa_yaml(tuple(sorted(app_names)), settings.coraza_log_level),
+        encoding="utf-8",
+    )
 
 
 def _swap_current_link(current_link: Path, target: Path, runtime_root: Path) -> None:
