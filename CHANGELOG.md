@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [Unreleased]
+
+### Changed
+
+- Third-party images are pinned to an exact version and digest instead of
+  floating tags: HAProxy `3.0.29`, coraza-spoa `0.6.1`, Alpine `3.19.9`,
+  PostgreSQL `16.15`, Python `3.13.16` (Debian trixie) and Node `24.21.0`.
+  The backend now installs exactly the HAProxy release the `haproxy`
+  container runs, so `POST /config/apply` validates generated configs with
+  the same HAProxy that loads them. A new `version-pins` CI job fails on
+  unpinned or diverging pins. Release-kit users get the pinned `haproxy` and
+  `postgres` images on their next `docker compose pull`; `postgres` moves
+  only within the 16 series, so existing data volumes keep working.
+
 ## [0.1.0-beta.6] - 2026-10-07
 
 ### Fixed

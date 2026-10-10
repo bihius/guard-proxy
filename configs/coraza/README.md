@@ -16,9 +16,13 @@ git submodule update --init --recursive
 
 ## Pinned versions
 
-- Coraza SPOA image: `ghcr.io/corazawaf/coraza-spoa:0.6.1`
+- Coraza SPOA image: `ghcr.io/corazawaf/coraza-spoa:0.6.1`, pinned by digest
+  in `docker/coraza.Dockerfile`
 - OWASP Core Rule Set: `v4.25.0`, pinned as the `configs/coraza/crs` git
   submodule
+
+See "Pinned component versions" in `docs/architecture.md` for every pinned
+image and how to bump them.
 
 ## Files
 

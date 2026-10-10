@@ -7,6 +7,16 @@ on:
       - main
 
 jobs:
+  version-pins:
+    name: version-pins
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check third-party component pins
+        run: python3 .github/scripts/check_version_pins.py
+
   backend:
     name: backend
     runs-on: ubuntu-latest

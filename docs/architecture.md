@@ -392,6 +392,50 @@ An earlier version restarted `coraza-spoa` instead. Port 9000 was then closed
 for a moment on every apply, and HAProxy's fail-closed rules answered every
 request in that window with 503 (#303).
 
+### Pinned component versions
+
+Every third-party image the stack builds from or runs is pinned to an exact
+version tag plus its multi-arch index digest (`name:tag@sha256:…`), so a
+re-pushed or moved upstream tag cannot change a build or a running
+deployment. The tag is for humans; Docker resolves the digest.
+
+| Component | Version | Pinned in |
+|-----------|---------|-----------|
+| HAProxy (runtime) | `haproxy:3.0.29-alpine` | `docker/docker-compose.yml`, `release/docker-compose.yml` |
+| HAProxy (backend `haproxy -c` validation) | `3.0.29-1~bpo12+1` from haproxy.debian.net | `HAPROXY_DEB_VERSION` in `src/backend/Dockerfile` |
+| coraza-spoa | `ghcr.io/corazawaf/coraza-spoa:0.6.1` | `docker/coraza.Dockerfile` |
+| OWASP CRS | `v4.25.0` | `configs/coraza/crs` git submodule |
+| Coraza image base | `alpine:3.19.9` | `docker/coraza.Dockerfile` |
+| PostgreSQL | `postgres:16.15-alpine` | `docker/docker-compose.yml`, `release/docker-compose.yml` |
+| Backend and log-shipper base | `python:3.13.16-slim-trixie` | `src/backend/Dockerfile`, `src/log-shipper/Dockerfile` |
+| Frontend base | `node:24.21.0-alpine` | `src/frontend/Dockerfile` |
+
+The backend validates each generated `haproxy.cfg` with its own `haproxy`
+binary before the `haproxy` container loads it, so both must be the same
+HAProxy release; otherwise a config can pass validation and then fail to load,
+or the other way round. The `version-pins` CI job
+(`python3 .github/scripts/check_version_pins.py`) fails when an image in a
+Dockerfile or in the dev/release Compose files is not digest-pinned, when one
+image is pinned differently in two places, or when `HAPROXY_DEB_VERSION` and
+the `haproxy` image tag name different releases. The benchmark lab
+(`benchmarks/`) is not covered.
+
+Pins do not pick up upstream security fixes on their own; bump them
+deliberately:
+
+1. Resolve the digest of the new tag with
+   `docker buildx imagetools inspect <image>:<tag>` (the top-level `Digest`,
+   which covers every architecture).
+2. Replace the tag and digest everywhere the image is referenced.
+3. For HAProxy, change the image in both Compose files and
+   `HAPROXY_DEB_VERSION` together. The Debian version must exist in
+   `http://haproxy.debian.net/dists/bookworm-backports-<major.minor>/main/binary-amd64/Packages`.
+4. For coraza-spoa, recheck the SPOP readiness probe
+   (`src/backend/app/services/coraza_probe.py`) and the version-specific notes
+   in `configs/coraza/README.md`. For CRS, follow "Updating CRS" there.
+5. Run `python3 .github/scripts/check_version_pins.py` and the end-to-end
+   smoke test (`bash benchmarks/smoke/e2e.sh`).
+
 ## Key Decisions
 
 See `notes/decisions/` for Architecture Decision Records:
