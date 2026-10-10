@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionCard } from "@/components/shared/SectionCard";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { listRuleOverrides } from "@/features/policies/api";
 import {
@@ -329,14 +330,13 @@ export function VHostDetailPage() {
                     ))}
                   </Select>
                 </div>
-                <button
+                <Button
                   type="button"
                   disabled={!selectedPolicyChanged || savingPolicy}
                   onClick={() => void handlePolicySave()}
-                  className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
                 >
                   {savingPolicy ? "Saving..." : "Save policy"}
-                </button>
+                </Button>
               </div>
             ) : (
               <p className="text-sm text-fg">
@@ -395,7 +395,7 @@ export function VHostDetailPage() {
             description="Individual CRS rules enabled or disabled for the assigned policy."
             actions={
               isAdmin && vhost.policy_id != null ? (
-                <button
+                <Button
                   type="button"
                   onClick={() =>
                     setOverrideModal({
@@ -403,10 +403,9 @@ export function VHostDetailPage() {
                       policyId: vhost.policy_id as number,
                     })
                   }
-                  className="btn-primary px-4 py-2 text-sm"
                 >
                   Add override
-                </button>
+                </Button>
               ) : undefined
             }
           >

@@ -11,6 +11,8 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Changed
 
+- The policy editor uses a wider responsive layout with grouped settings and a
+  scrollable body; policy actions use the shared green primary button style.
 - Third-party images are pinned to an exact version and digest instead of
   floating tags: HAProxy `3.0.29`, coraza-spoa `0.6.1`, Alpine `3.19.9`,
   PostgreSQL `16.15`, Python `3.13.16` (Debian trixie) and Node `24.21.0`.
@@ -20,6 +22,12 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   unpinned or diverging pins. Release-kit users get the pinned `haproxy` and
   `postgres` images on their next `docker compose pull`; `postgres` moves
   only within the 16 series, so existing data volumes keep working.
+
+### Fixed
+
+- Policy editor fields stay on aligned rows when DDoS protection, automatic
+  IP banning or country filtering are expanded, and the dashboard's empty
+  "Recent blocks" card matches the height of its neighbours.
 
 ## [0.1.0-beta.6] - 2026-10-07
 - The evaluation lab runs three tests on two targets: the tagged corpus on
@@ -206,6 +214,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[Unreleased]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.6...HEAD
 [0.1.0-beta.6]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.3...v0.1.0-beta.4

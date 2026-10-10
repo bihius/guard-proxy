@@ -63,7 +63,7 @@ export function RecentBlocksCard({ blocks }: RecentBlocksCardProps) {
       <SectionCard title="Recent blocks" actions={viewAll}>
         <EmptyState
           title="Nothing blocked yet"
-          description="No request has been denied so far. Blocked traffic will show up here as soon as a rule fires."
+          description="No request has been denied yet."
         />
       </SectionCard>
     );
