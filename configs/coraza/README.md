@@ -146,12 +146,12 @@ Parts `ABIJDEFHZ` produce a top-level structure like:
 | `method` | `transaction.request.method` | Uppercase |
 | `request_uri` | `transaction.request.uri` | |
 | `status_code` | `transaction.response.status` | May be absent for blocked requests |
-| `action` | derived | `deny` if `transaction.is_interrupted` or any `messages[].data.severity` < 2; `monitor` when `SecRuleEngine DetectionOnly`; else `allow` |
+| `action` | derived | `deny` if `transaction.is_interrupted`; `monitor` if not interrupted but a CRS blocking-evaluation rule (949110, 949111, 959100, 959101) matched, i.e. a DetectionOnly policy reached its threshold; when `is_interrupted` is absent, `deny` if the first rule's severity is emergency/alert/critical; else `allow` |
 | `rule_id` | `messages[0].data.id` | First (or highest-severity) fired rule |
 | `rule_message` | `messages[0].data.msg` | Corresponding rule message |
 | `anomaly_score` | `transaction.variables.tx.anomaly_score` | String → int; absent when no rules fired |
 | `paranoia_level` | `transaction.variables.tx.paranoia_level` | String → int |
-| `severity` | derived from `messages[0].data.severity` | Numeric Coraza severity: 0–2 → `critical`/`error`; 3–4 → `warning`; ≥5 → `info` |
+| `severity` | not sent by the shipper; the backend derives it at ingest | `high` if `anomaly_score` >= 2x the resolved policy's `inbound_anomaly_threshold`; `medium` if the request was denied or monitored, or the score reached the threshold; else `low`. Vhosts without a policy use the default threshold `5` |
 | `raw_context` | full Coraza event JSON | Fallback; stores everything not mapped above |
 
 ### Known gaps in the mapped fields

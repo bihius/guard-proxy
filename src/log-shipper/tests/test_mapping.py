@@ -143,8 +143,6 @@ def test_real_event_maps_correctly() -> None:
     assert p["action"] == "deny"               # is_interrupted=True
     assert p["rule_id"] == 941100              # first message
     assert p["rule_message"] == "XSS Attack Detected via libinjection"
-    # Score 20 (parsed from the blocking message) is far above the threshold.
-    assert p["severity"] == "critical"
     assert p["status_code"] is None            # status=0 out of range
     assert p["anomaly_score"] == 20            # parsed from "(Total Score: 20)"
     assert p["raw_context"] is _REAL_EVENT
@@ -239,7 +237,6 @@ def test_action_allow_when_critical_severity_not_interrupted() -> None:
     payload = coraza_event_to_ingest(event)
     assert payload is not None
     assert payload["action"] == "allow"
-    assert payload["severity"] == "warning"
 
 
 def test_action_allow_when_warning_severity_not_interrupted() -> None:
@@ -248,72 +245,51 @@ def test_action_allow_when_warning_severity_not_interrupted() -> None:
     payload = coraza_event_to_ingest(event)
     assert payload is not None
     assert payload["action"] == "allow"
-    assert payload["severity"] == "warning"
 
 
-# ---------------------------------------------------------------------------
-# Tests: event severity derivation
-# ---------------------------------------------------------------------------
-
-def test_severity_string_buckets() -> None:
-    """Event severity is derived from action + score, not copied per-rule.
-
-    Per-rule severities are capped at "warning" for non-blocking events.
-    """
-    cases = {
-        "emergency": "warning",
-        "alert": "warning",
-        "critical": "warning",
-        "error": "warning",      # allow, capped at warning
-        "warning": "warning",
-        "notice": "info",
-        "info": "info",
-        "debug": "info",
+def _blocking_evaluation_entry(score: int = 12) -> dict[str, Any]:
+    return {
+        "actionset": "", "message": "",
+        "error_message": (
+            '[client "203.0.113.7"] Coraza: Warning. '
+            f'Inbound Anomaly Score Exceeded (Total Score: {score}) '
+            '[id "949110"] '
+            f'[msg "Inbound Anomaly Score Exceeded (Total Score: {score})"]'
+        ),
+        "data": None,
     }
-    for sev_str, expected in cases.items():
-        event = _base_event(messages=[_message_entry(severity=sev_str)])
-        p = coraza_event_to_ingest(event)
-        assert p is not None, f"got None for severity={sev_str!r}"
-        assert p["severity"] == expected, f"severity={sev_str!r} → {p['severity']!r}, want {expected!r}"
 
 
-def test_blocked_event_with_high_score_is_critical() -> None:
-    event = _base_event(transaction={"is_interrupted": True})
-    event["transaction"]["variables"] = {"tx": {"anomaly_score": 15}}
-    p = coraza_event_to_ingest(event)
-    assert p is not None
-    assert p["action"] == "deny"
-    assert p["severity"] == "critical"
-
-
-def test_blocked_event_with_low_score_is_error() -> None:
-    event = _base_event(transaction={"is_interrupted": True})
-    event["transaction"]["variables"] = {"tx": {"anomaly_score": 5}}
-    p = coraza_event_to_ingest(event)
-    assert p is not None
-    assert p["action"] == "deny"
-    assert p["severity"] == "error"
-
-
-def test_blocked_event_without_score_is_error() -> None:
-    event = _base_event(transaction={"is_interrupted": True})
-    p = coraza_event_to_ingest(event)
-    assert p is not None
-    assert p["action"] == "deny"
-    assert p["severity"] == "error"
-
-
-def test_allowed_event_with_high_score_is_critical() -> None:
-    """In DetectionOnly mode nothing is ever blocked (action stays "allow"),
-    but a high anomaly score must still surface as "critical" so the
-    dashboard isn't blind to severe attacks under detect-only policies."""
-    event = _base_event(messages=[_message_entry(severity="critical")])
+def test_action_monitor_when_detection_only_policy_exceeds_threshold() -> None:
+    """DetectionOnly still runs 949110, but never interrupts the transaction."""
+    event = _base_event(
+        messages=[_message_entry(), _blocking_evaluation_entry(score=12)]
+    )
     event["transaction"]["is_interrupted"] = False
-    event["transaction"]["variables"] = {"tx": {"anomaly_score": 15}}
     p = coraza_event_to_ingest(event)
     assert p is not None
-    assert p["action"] == "allow"
-    assert p["severity"] == "critical"
+    assert p["action"] == "monitor"
+    assert p["anomaly_score"] == 12
+    assert p["rule_id"] == 941100
+
+
+def test_action_monitor_when_outbound_threshold_exceeded_via_structured_data() -> None:
+    event = _base_event(messages=[{
+        "message": "Outbound Anomaly Score Exceeded",
+        "data": {"id": "959100", "msg": "Outbound Anomaly Score Exceeded"},
+    }])
+    event["transaction"]["is_interrupted"] = False
+    p = coraza_event_to_ingest(event)
+    assert p is not None
+    assert p["action"] == "monitor"
+
+
+def test_action_deny_wins_over_blocking_evaluation_match() -> None:
+    event = _base_event(messages=[_message_entry(), _blocking_evaluation_entry()])
+    event["transaction"]["is_interrupted"] = True
+    p = coraza_event_to_ingest(event)
+    assert p is not None
+    assert p["action"] == "deny"
 
 
 def test_anomaly_score_parsed_from_blocking_message() -> None:
@@ -332,30 +308,27 @@ def test_anomaly_score_parsed_from_blocking_message() -> None:
     p = coraza_event_to_ingest(event)
     assert p is not None
     assert p["anomaly_score"] == 12
-    assert p["severity"] == "critical"
 
 
-def test_severity_numeric_string_still_works() -> None:
+def test_structured_data_rule_fields_still_work() -> None:
     """Backward compat: if data dict is populated with numeric severity string."""
     event = _base_event()
     event["messages"][0]["data"] = {"id": "941100", "msg": "XSS", "severity": "2"}
     p = coraza_event_to_ingest(event)
     assert p is not None
-    # Rule severity "2" maps to error; non-blocking events are capped at warning.
     assert p["action"] == "allow"
-    assert p["severity"] == "warning"
     assert p["rule_id"] == 941100
+    assert p["rule_message"] == "XSS"
 
 
 # ---------------------------------------------------------------------------
 # Tests: edge cases
 # ---------------------------------------------------------------------------
 
-def test_missing_messages_defaults_to_info_and_allow() -> None:
+def test_missing_messages_defaults_to_allow() -> None:
     event = _base_event(messages=[])
     payload = coraza_event_to_ingest(event)
     assert payload is not None
-    assert payload["severity"] == "info"
     assert payload["action"] == "allow"
     assert payload["rule_id"] is None
 

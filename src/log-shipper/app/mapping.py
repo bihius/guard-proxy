@@ -10,8 +10,8 @@ skip them instead of wedging).
 
 The README mapping table was written against the expected coraza audit schema, but
 the actual coraza-spoa v0.6.1 binary does not populate ``messages[].data``; that
-field is always ``null``. Rule id, rule message, and severity are instead embedded
-in the ``messages[].error_message`` log-formatted string, e.g.:
+field is always ``null``. Rule id, rule message, and rule severity are instead
+embedded in the ``messages[].error_message`` log-formatted string, e.g.:
 
     [id "941100"] [msg "XSS Attack Detected"] [severity "critical"]
 
@@ -40,26 +40,15 @@ _BRACKET_SEV = re.compile(r'\[severity "([\w]+)"\]')
 # reliable source of the score for blocked requests.
 _TOTAL_SCORE = re.compile(r"\(Total Score:\s*(\d+)\)")
 
-# Severity strings Coraza writes in error_message → LogSeverity enum values.
-# ModSecurity/Coraza uses: emergency, alert, critical, error, warning, notice, info, debug
-_SEVERITY_STRING_MAP: dict[str, str] = {
-    "emergency": "critical",
-    "alert": "critical",
-    "critical": "critical",
-    "error": "error",
-    "warning": "warning",
-    "notice": "info",
-    "info": "info",
-    "debug": "info",
-}
-
-# Severity strings that indicate a blocking/deny action even without is_interrupted.
+# Per-rule severity strings that indicate a blocking/deny action when the
+# interruption flag is missing from the event.
 _DENY_SEVERITY_STRINGS = frozenset({"emergency", "alert", "critical"})
 
-# Anomaly score from which a blocked event is escalated to "critical" severity.
-# With the CRS default inbound threshold of 5, a score of 10+ means at least two
-# high-severity rules matched - a clear attack rather than a borderline block.
-_CRITICAL_ANOMALY_SCORE = 10
+# CRS blocking-evaluation rules (REQUEST-949 / RESPONSE-959). They only match
+# once the anomaly score reaches the policy threshold, so seeing one on a
+# transaction that was not interrupted means a DetectionOnly policy let
+# through a request it would otherwise have blocked.
+_ANOMALY_EVALUATION_RULE_IDS = frozenset({949110, 949111, 959100, 959101})
 
 # Timestamp formats Coraza may emit in addition to ISO 8601.
 _CORAZA_TS_FORMATS = (
@@ -97,7 +86,7 @@ def coraza_event_to_ingest(event: dict[str, Any]) -> dict[str, Any] | None:
     # Prefer the structured data field; fall back to parsing error_message.
     primary_data = _primary_rule_data(messages)
 
-    action = _action(is_interrupted, primary_data)
+    action = _action(is_interrupted, primary_data, messages)
     anomaly_score = _anomaly_score(transaction.get("variables"))
     if anomaly_score is None:
         anomaly_score = _anomaly_score_from_messages(messages)
@@ -115,7 +104,6 @@ def coraza_event_to_ingest(event: dict[str, Any]) -> dict[str, Any] | None:
         "rule_message": _rule_message(primary_data),
         "anomaly_score": anomaly_score,
         "paranoia_level": _paranoia_level(transaction.get("variables")),
-        "severity": _event_severity(action, anomaly_score, primary_data),
         "message": None,
         "raw_context": event,
     }
@@ -171,11 +159,13 @@ def _primary_rule_data(messages: list[Any]) -> _RuleData | None:
 # Field derivation helpers
 # ---------------------------------------------------------------------------
 
-def _action(is_interrupted: Any, primary_data: _RuleData | None) -> str:
+def _action(
+    is_interrupted: Any, primary_data: _RuleData | None, messages: list[Any]
+) -> str:
     if is_interrupted is True:
         return "deny"
     if is_interrupted is False:
-        return "allow"
+        return "monitor" if _anomaly_threshold_exceeded(messages) else "allow"
     # Fallback for older or malformed events where the interruption flag is
     # absent. Do not apply it to explicit False; DetectionOnly policies emit
     # high-severity matches without blocking the request.
@@ -183,6 +173,21 @@ def _action(is_interrupted: Any, primary_data: _RuleData | None) -> str:
         if primary_data.severity_str.lower() in _DENY_SEVERITY_STRINGS:
             return "deny"
     return "allow"
+
+
+def _anomaly_threshold_exceeded(messages: list[Any]) -> bool:
+    """Whether a CRS blocking-evaluation rule matched on this transaction."""
+    for raw in messages:
+        msg = _as_dict(raw)
+        rule_id = _coerce_int(_as_dict(msg.get("data")).get("id"))
+        if rule_id is None:
+            error_msg = msg.get("error_message")
+            if isinstance(error_msg, str):
+                match = _BRACKET_INT.search(error_msg)
+                rule_id = _coerce_int(match.group(1)) if match else None
+        if rule_id in _ANOMALY_EVALUATION_RULE_IDS:
+            return True
+    return False
 
 
 def _rule_id(rd: _RuleData | None) -> int | None:
@@ -194,53 +199,6 @@ def _rule_id(rd: _RuleData | None) -> int | None:
 
 def _rule_message(rd: _RuleData | None) -> str | None:
     return rd.msg if rd is not None else None
-
-
-def _event_severity(
-    action: str,
-    anomaly_score: int | None,
-    rd: _RuleData | None,
-) -> str:
-    """Derive event-level severity instead of copying the per-rule severity.
-
-    Most CRS attack rules carry severity "critical", so copying it verbatim
-    made every blocked request a critical alert. Instead, the anomaly score is
-    the primary signal: a score clearly above the blocking threshold is
-    "critical" regardless of whether the request was actually blocked, so
-    policies in DetectionOnly mode (where nothing is ever denied) still surface
-    critical alerts. Otherwise, blocked events are "error" and non-blocked
-    events are capped at "warning".
-    """
-    if anomaly_score is not None and anomaly_score >= _CRITICAL_ANOMALY_SCORE:
-        return "critical"
-
-    if action == "deny":
-        return "error"
-
-    rule_severity = _rule_severity(rd)
-    if rule_severity in ("critical", "error"):
-        return "warning"
-    return rule_severity
-
-
-def _rule_severity(rd: _RuleData | None) -> str:
-    if rd is None or rd.severity_str is None:
-        return "info"
-    key = rd.severity_str.lower()
-    # Named string severity (actual coraza-spoa output).
-    if key in _SEVERITY_STRING_MAP:
-        return _SEVERITY_STRING_MAP[key]
-    # Numeric string (documented schema assumption: "0"–"7").
-    numeric = _coerce_int(rd.severity_str)
-    if numeric is not None:
-        if numeric <= 1:
-            return "critical"
-        if numeric == 2:
-            return "error"
-        if numeric <= 4:
-            return "warning"
-        return "info"
-    return "info"
 
 
 def _event_at(value: Any) -> str:
