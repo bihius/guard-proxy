@@ -154,7 +154,12 @@ def list_logs(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> LogListResponse:
-    """Return paginated log events with investigation-oriented filters."""
+    """Return paginated logs. All query parameters are optional.
+
+    The Bearer access token is required. Without filters, returns the newest
+    events (page 1, 50 events per page).
+    Example: `GET /logs?severity=critical&page=1&page_size=20`.
+    """
 
     if date_from is not None and date_to is not None and date_from > date_to:
         raise HTTPException(
