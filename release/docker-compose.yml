@@ -4,11 +4,11 @@ name: guard-proxy-release
 #
 # This file pulls prebuilt images from GHCR instead of building from
 # source. Set GUARD_PROXY_IMAGE_TAG (see .env.example) to the release
-# you want to run, e.g. v0.1.0-beta.5.
+# you want to run, e.g. v0.1.0-beta.6.
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -26,7 +26,7 @@ services:
       - gp_internal
 
   backend:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-backend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.5}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-backend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.6}
     restart: unless-stopped
     env_file:
       - .env
@@ -55,7 +55,7 @@ services:
       - gp_internal
 
   frontend:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-frontend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.5}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-frontend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.6}
     restart: unless-stopped
     environment:
       # Explicit base URL is optional. If unset, the frontend uses relative
@@ -78,7 +78,7 @@ services:
       - gp_internal
 
   coraza:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-coraza:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.5}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-coraza:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.6}
     restart: unless-stopped
     depends_on:
       backend:
@@ -96,7 +96,7 @@ services:
       - gp_internal
 
   log-shipper:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-log-shipper:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.5}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-log-shipper:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.6}
     restart: unless-stopped
     env_file:
       - .env
@@ -116,7 +116,10 @@ services:
       - gp_internal
 
   haproxy:
-    image: haproxy:3.0-alpine
+    # Keep in sync with HAPROXY_DEB_VERSION in src/backend/Dockerfile: the
+    # backend validates generated configs with that HAProxy before this one
+    # loads them.
+    image: haproxy:3.0.29-alpine@sha256:56b887da77428b7a6621e59e480cdbd330cc805c22d3cedb66ceea76ffdea2c6
     user: "0:0"
     command:
       [

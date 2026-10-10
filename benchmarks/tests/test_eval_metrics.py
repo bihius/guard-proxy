@@ -11,6 +11,8 @@ sys.path.insert(0, str(RUNNERS))
 from eval_metrics import (  # noqa: E402
     classify_ftw_tests,
     count_blocks,
+    crs_rule_paranoia_levels,
+    ftw_exclusions,
     load_json_lines,
     summarize_ftw,
     summarize_tagged_corpus,
@@ -72,56 +74,98 @@ def test_tagged_corpus_computes_tp_fn_tn_fp_with_missing_allow_events() -> None:
     assert summary["fpr"] == 0.5
 
 
-def test_block_counts_deduplicate_cumulative_audit_snapshots() -> None:
+def test_block_counts_deduplicate_snapshots_and_ignore_other_runs() -> None:
     first = _event(tx_id="same", case_id="sqli-1", interrupted=True, status=403)
     duplicate = json.loads(json.dumps(first))
+    other_run = _event(tx_id="old", case_id="sqli-1", run_id="run-0", interrupted=True, status=403)
 
-    counts = count_blocks([first, duplicate])
+    counts = count_blocks([first, duplicate, other_run], "run-1")
 
-    assert counts["by_vhost"] == {"wp.local": 1}
-    assert counts["by_scenario"] == {"corpus-wp.local": 1}
+    assert counts == {"corpus-wp.local": 1}
 
 
-def test_ftw_yaml_classification_and_summary(tmp_path: Path) -> None:
-    tests_dir = tmp_path / "tests"
-    tests_dir.mkdir()
+def test_ftw_classification_reads_crs_log_expectations(tmp_path: Path) -> None:
+    # Real CRS tests mostly assert rule IDs, not a status code.
+    tests_dir = tmp_path / "tests" / "REQUEST-941-APPLICATION-ATTACK-XSS"
+    tests_dir.mkdir(parents=True)
     (tests_dir / "941100.yaml").write_text(
         """
-meta:
-  enabled: true
+rule_id: 941100
 tests:
   - test_id: 1
     stages:
-      - stage:
-          output:
-            status: 403
+      - input:
+          uri: "/?x=<script>"
+        output:
+          log:
+            expect_ids: [941100]
   - test_id: 2
     stages:
-      - stage:
-          output:
-            status: 200
+      - input:
+          uri: "/?x=hello"
+        output:
+          log:
+            no_expect_ids: [941100]
+  - test_id: 3
+    stages:
+      - input:
+          method: "     GET"
+        output:
+          status: 400
 """,
         encoding="utf-8",
     )
 
-    classifications = classify_ftw_tests(tests_dir)
+    classifications = classify_ftw_tests(tmp_path / "tests")
     summary = summarize_ftw(
-        {
-            "run": 2,
-            "success": ["941100-1"],
-            "failed": ["941100-2"],
-            "skipped": [],
-        },
+        {"success": ["941100-1", "941100-3"], "failed": ["941100-2"], "ignored": []},
         classifications,
+        {},
     )
 
-    assert classifications["941100-1"]["expected"] == "block"
-    assert classifications["941100-2"]["expected"] == "allow"
-    assert summary["crs_conformance_rate"] == 0.5
-    assert summary["expected_block_tests"] == 1
-    assert summary["expected_allow_tests"] == 1
-    assert summary["passed_expected_block"] == 1
-    assert summary["failed_expected_allow"] == 1
+    assert [classifications[f"941100-{i}"]["expected"] for i in (1, 2, 3)] == [
+        "match",
+        "no_match",
+        "other",
+    ]
+    assert summary["crs_run"] == 3
+    assert summary["expect_match_passed"] == 1
+    assert summary["expect_no_match_failed"] == 1
+    assert summary["expect_other_passed"] == 1
+
+
+def test_ftw_exclusions_skip_rules_above_paranoia_and_response_rules(tmp_path: Path) -> None:
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    (rules / "REQUEST-942-APPLICATION-ATTACK-SQLI.conf").write_text(
+        """
+SecRule TX:DETECTION_PARANOIA_LEVEL "@lt 1" "id:942011,phase:1,pass,nolog,skipAfter:END"
+SecRule ARGS "@rx a" \\
+    "id:942100,\\
+    tag:'paranoia-level/1'"
+SecRule TX:DETECTION_PARANOIA_LEVEL "@lt 2" "id:942013,phase:1,pass,nolog,skipAfter:END"
+SecRule ARGS "@rx b" \\
+    "id:942200,\\
+    tag:'paranoia-level/2'"
+SecRule ARGS "@rx c" "id:942210,phase:2,block"
+""",
+        encoding="utf-8",
+    )
+    levels = crs_rule_paranoia_levels(rules)
+    classifications = {
+        "942100-1": {"rule_id": "942100", "expected": "match", "phase": "request"},
+        "942200-1": {"rule_id": "942200", "expected": "match", "phase": "request"},
+        "942210-1": {"rule_id": "942210", "expected": "match", "phase": "request"},
+        "951100-1": {"rule_id": "951100", "expected": "match", "phase": "response"},
+    }
+
+    assert levels == {"942100": 1, "942200": 2, "942210": 2}
+    assert sorted(ftw_exclusions(classifications, levels, 1)) == [
+        "^942200-",
+        "^942210-",
+        "^951100-",
+    ]
+    assert sorted(ftw_exclusions(classifications, levels, 2)) == ["^951100-"]
 
 
 def test_load_json_lines_ignores_malformed_lines(tmp_path: Path) -> None:

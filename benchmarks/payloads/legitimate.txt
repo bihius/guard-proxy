@@ -1,28 +1,66 @@
-# Legitimate request paths — expected outcome: allow.
-# Used by the tagged corpus runner to compute TN/FP for this corpus only.
-/
-/index.html
-/robots.txt
-/favicon.ico
-/about
-/contact
-/login
-/search?q=hello+world
-/search?q=buy+laptop
-/search?q=how+to+cook+pasta
-/api/v1/status
-/api/v1/products
-/api/v1/products?page=1&per_page=20
-/api/v1/products?sort=price&order=asc
-/api/v1/users/me
-/wp-login.php
-/wp-admin/
-/wp-content/themes/twentytwentyfour/style.css
-/wp-json/wp/v2/posts
-/?p=1
-/?page_id=2
-/category/news/
-/tag/technology/
-/?s=wordpress+tutorial
-/feed/
-/sitemap.xml
+# Benign WordPress requests — expected outcome: allow.
+# Used by the tagged corpus runner (Test 1) to compute TN/FP for this corpus.
+#
+# Format, one request per line:
+#   GET  <path>
+#   POST <path> form <url-encoded body>
+#   POST <path> json <JSON body>
+#
+# Every request is something an ordinary visitor or editor of a fresh
+# WordPress install sends. Some are deliberately "tricky" but legitimate:
+# apostrophes and quotes in names, SQL words in plain sentences, a code
+# snippet in a comment, Polish diacritics. Those are where false positives
+# appear in practice.
+
+# --- Pages, posts, archives -------------------------------------------------
+GET /
+GET /?p=1
+GET /?page_id=2
+GET /?cat=1
+GET /?m=202610
+GET /?p=1&replytocom=1
+GET /feed/
+GET /?feed=rss2
+GET /wp-sitemap.xml
+GET /robots.txt
+GET /favicon.ico
+
+# --- Static assets ----------------------------------------------------------
+GET /wp-includes/css/dist/block-library/style.min.css
+GET /wp-includes/js/jquery/jquery.min.js
+
+# --- Search: ordinary and tricky queries ------------------------------------
+GET /?s=wordpress+tutorial
+GET /?s=jak+skonfigurowa%C4%87+serwer+proxy
+GET /?s=O%27Reilly+books
+GET /?s=%22reverse+proxy%22+configuration
+GET /?s=select+a+product+from+the+menu
+GET /?s=drop+shipping+and+union+jobs
+GET /?s=C%2B%2B+vs+C%23
+GET /?s=rock+%26+roll
+GET /?s=50%25+off+sale
+GET /?s=1+%2B+1+%3D+2
+GET /?s=jan.kowalski%40example.com
+
+# --- REST API (read) --------------------------------------------------------
+GET /wp-json/
+GET /wp-json/wp/v2/posts
+GET /wp-json/wp/v2/posts?per_page=5&orderby=date&order=desc
+GET /wp-json/wp/v2/pages/2
+GET /wp-json/wp/v2/search?search=hello
+
+# --- Login ------------------------------------------------------------------
+GET /wp-login.php
+GET /wp-admin/
+POST /wp-login.php form log=admin&pwd=wrong-password&wp-submit=Log+In&redirect_to=http%3A%2F%2Fwp.local%2Fwp-admin%2F&testcookie=1
+
+# --- Comments ---------------------------------------------------------------
+POST /wp-comments-post.php form comment=Great+article%2C+thanks+for+sharing%21&author=Jan+Kowalski&email=jan.kowalski%40example.com&url=https%3A%2F%2Fexample.com&comment_post_ID=1&comment_parent=0&submit=Post+Comment
+POST /wp-comments-post.php form comment=I+can%27t+agree+more+-+it%27s+%22the%22+best+setup+I%27ve+seen.&author=Anna+O%27Neil&email=anna%40example.com&url=&comment_post_ID=1&comment_parent=0&submit=Post+Comment
+POST /wp-comments-post.php form comment=Please+select+the+right+option+from+the+drop-down+and+update+your+profile+where+needed.&author=Marek&email=marek%40example.com&url=&comment_post_ID=1&comment_parent=0&submit=Post+Comment
+POST /wp-comments-post.php form comment=Use+%3Ccode%3Eprint%28%22hello%22%29%3C%2Fcode%3E+in+Python+3.&author=Piotr&email=piotr%40example.com&url=&comment_post_ID=1&comment_parent=0&submit=Post+Comment
+POST /wp-comments-post.php form comment=Dzi%C4%99kuj%C4%99+za+artyku%C5%82%2C+bardzo+przydatny%21&author=Zofia+%C5%BB%C3%B3%C5%82kiewska&email=zofia%40example.pl&url=&comment_post_ID=1&comment_parent=0&submit=Post+Comment
+POST /wp-json/wp/v2/comments json {"post":1,"author_name":"Jan Kowalski","author_email":"jan.kowalski@example.com","content":"Nice post, thanks!"}
+
+# --- Background requests of the admin UI ------------------------------------
+POST /wp-admin/admin-ajax.php form action=heartbeat&_nonce=0123456789&data%5Bwp-auth-check%5D=true&interval=60&has_focus=false

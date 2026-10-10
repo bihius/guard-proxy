@@ -180,7 +180,7 @@ The configuration is exercised in two ways:
    ```sh
    docker run --rm \
      -v "$PWD/configs/haproxy:/usr/local/etc/haproxy:ro" \
-     haproxy:3.0-alpine \
+     haproxy:3.0.29-alpine@sha256:56b887da77428b7a6621e59e480cdbd330cc805c22d3cedb66ceea76ffdea2c6 \
      haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
    ```
 

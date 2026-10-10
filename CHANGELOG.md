@@ -13,6 +13,47 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 - The policy editor uses a wider responsive layout with grouped settings and a
   scrollable body; policy actions use the shared green primary button style.
+- Third-party images are pinned to an exact version and digest instead of
+  floating tags: HAProxy `3.0.29`, coraza-spoa `0.6.1`, Alpine `3.19.9`,
+  PostgreSQL `16.15`, Python `3.13.16` (Debian trixie) and Node `24.21.0`.
+  The backend now installs exactly the HAProxy release the `haproxy`
+  container runs, so `POST /config/apply` validates generated configs with
+  the same HAProxy that loads them. A new `version-pins` CI job fails on
+  unpinned or diverging pins. Release-kit users get the pinned `haproxy` and
+  `postgres` images on their next `docker compose pull`; `postgres` moves
+  only within the 16 series, so existing data volumes keep working.
+
+### Fixed
+
+- Policy editor fields stay on aligned rows when DDoS protection, automatic
+  IP banning or country filtering are expanded, and the dashboard's empty
+  "Recent blocks" card matches the height of its neighbours.
+
+## [0.1.0-beta.6] - 2026-10-07
+- The evaluation lab runs three tests on two targets: the tagged corpus on
+  WordPress (`wp.local`), go-ftw on Albedo (`ftw.local`), and the wrk load test
+  on Albedo. Juice Shop, DVWA, OWASP ZAP and Nuclei are removed: the scanners
+  gave no TP/FN/TN/FP denominator, and Juice Shop crashed under load.
+- The benign corpus is a set of real WordPress requests, including POST forms,
+  a JSON body, and legitimate text with SQL words, quotes and a code snippet;
+  every attack payload is sent in a query parameter and in a POST body.
+- The load test targets Albedo instead of Juice Shop, adds POST requests to the
+  mix, records direct-path latency, and marks a run with errors as invalid.
+
+### Fixed
+
+- Coraza parses JSON and XML request bodies with the matching body processor
+  and rejects bodies that fail to parse (rules 200000–200002 and 200006 from
+  Coraza's recommended configuration). Before, a JSON body was read as one
+  URL-encoded argument name, so any JSON request was blocked as SQL injection
+  at PL2 and JSON fields were not inspected one by one.
+- go-ftw runs in log mode. In cloud mode every CRS test that asserts no HTTP
+  status passed without a check, so the reported conformance (99.8 %) did not
+  depend on the WAF. Tests for rules above the policy's paranoia level and for
+  response rules are excluded and counted separately.
+- `make lab-up` installs WordPress. The `wp-cli` command was split across
+  lines by YAML folding, so WordPress stayed uninstalled and the corpus hit the
+  installer redirect.
 
 ## [0.1.0-beta.5] - 2026-10-03
 
@@ -173,7 +214,8 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
-[Unreleased]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...HEAD
+[Unreleased]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.6...HEAD
+[0.1.0-beta.6]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.2...v0.1.0-beta.3
