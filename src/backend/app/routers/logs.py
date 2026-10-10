@@ -24,6 +24,7 @@ from app.schemas.log import (
 from app.schemas.rule_exclusion import RuleExclusionSuggestion
 from app.services.exclusion_suggestion import suggest_exclusion
 from app.services.log_retention import purge_logs_older_than
+from app.services.log_severity import classify_severity, inbound_threshold_for
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -119,6 +120,11 @@ def ingest_log_event(
     log = Log(**body.model_dump())
     log.vhost_id, log.policy_id = _resolve_vhost_refs(db, log.vhost)
     _backfill_paranoia_level(db, log)
+    log.severity = classify_severity(
+        body.action,
+        body.anomaly_score,
+        inbound_threshold_for(db, log.policy_id),
+    )
     persisted, created = _persist_log_event(
         db=db,
         log=log,

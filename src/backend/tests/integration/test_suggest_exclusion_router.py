@@ -45,7 +45,7 @@ def _create_log(
         request_uri="/search?q=<script>alert(1)</script>",
         rule_id=rule_id,
         rule_message="XSS Attack Detected via libinjection",
-        severity=LogSeverity.critical,
+        severity=LogSeverity.high,
         raw_context={"messages": [{"error_message": _XSS_MESSAGE, "data": None}]},
         policy_id=policy_id,
     )

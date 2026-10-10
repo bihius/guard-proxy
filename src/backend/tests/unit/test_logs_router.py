@@ -24,7 +24,7 @@ def _make_log(producer_event_id: str | None = "event-123") -> Log:
         rule_message="SQL injection attack detected",
         anomaly_score=15,
         paranoia_level=2,
-        severity=LogSeverity.error,
+        severity=LogSeverity.high,
         message="Blocked by Coraza",
         raw_context={"engine": "coraza"},
     )

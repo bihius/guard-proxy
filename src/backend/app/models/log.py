@@ -14,12 +14,11 @@ if TYPE_CHECKING:
 
 
 class LogSeverity(enum.StrEnum):
-    """Severity level assigned to an event."""
+    """How serious an event is relative to its policy's inbound anomaly threshold."""
 
-    info = "info"
-    warning = "warning"
-    error = "error"
-    critical = "critical"
+    low = "low"
+    medium = "medium"
+    high = "high"
 
 
 class LogAction(enum.StrEnum):

@@ -52,7 +52,11 @@ class LogCleanupResponse(BaseModel):
 
 
 class LogIngestRequest(BaseModel):
-    """Payload accepted from a future runtime log producer."""
+    """Payload accepted from a runtime log producer.
+
+    Severity is not accepted: the backend derives it at ingest from the action,
+    the anomaly score, and the resolved policy's inbound threshold.
+    """
 
     producer_event_id: str | None = Field(default=None, min_length=1, max_length=128)
     event_at: datetime
@@ -66,7 +70,6 @@ class LogIngestRequest(BaseModel):
     rule_message: str | None = None
     anomaly_score: int | None = Field(default=None, ge=0)
     paranoia_level: int | None = Field(default=None, ge=1, le=4)
-    severity: LogSeverity
     message: str | None = None
     raw_context: dict[str, Any] | None = None
 

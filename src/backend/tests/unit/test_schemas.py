@@ -540,7 +540,6 @@ def test_log_ingest_request_normalizes_vhost_method_and_optional_text() -> None:
         source_ip=" 203.0.113.10 ",
         method=" post ",
         request_uri=" /login ",
-        severity="error",
         message=" blocked ",
         rule_message=" attack detected ",
     )
@@ -563,7 +562,6 @@ def test_log_ingest_request_rejects_invalid_ip() -> None:
             source_ip="definitely-not-an-ip",
             method="POST",
             request_uri="/login",
-            severity="error",
         )
 
 
@@ -577,5 +575,4 @@ def test_log_ingest_request_rejects_invalid_paranoia_level() -> None:
             method="POST",
             request_uri="/login",
             paranoia_level=5,
-            severity="error",
         )

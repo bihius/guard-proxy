@@ -94,7 +94,7 @@ def _log(
         request_uri=request_uri,
         rule_id=941100,
         rule_message="XSS Attack Detected via libinjection",
-        severity=LogSeverity.critical,
+        severity=LogSeverity.high,
         raw_context=raw_context,
     )
 

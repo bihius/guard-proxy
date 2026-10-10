@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 # CRS settings for vhosts without a policy: CRS defaults, log only.
-_UNASSIGNED_CRS_POLICY = CrsPolicyRenderContext(
+UNASSIGNED_CRS_POLICY = CrsPolicyRenderContext(
     paranoia_level=1,
     inbound_anomaly_threshold=5,
     outbound_anomaly_threshold=4,
@@ -117,7 +117,7 @@ def generate(
     coraza_apps = (
         CorazaAppConfig(
             name=CORAZA_DEFAULT_APP,
-            crs_setup_conf=render_crs_setup(_UNASSIGNED_CRS_POLICY),
+            crs_setup_conf=render_crs_setup(UNASSIGNED_CRS_POLICY),
             rule_overrides_conf=render_rule_overrides(()),
         ),
         *(

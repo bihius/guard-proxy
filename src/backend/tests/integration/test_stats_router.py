@@ -18,7 +18,7 @@ def _seed_log(
     *,
     minutes_ago: int,
     action: LogAction = LogAction.deny,
-    severity: LogSeverity = LogSeverity.warning,
+    severity: LogSeverity = LogSeverity.medium,
     source_ip: str = "203.0.113.5",
     rule_id: int | None = 942100,
     vhost: str = "app.example.com",
@@ -64,7 +64,7 @@ def test_overview_counts_events_inside_the_window(
     db: Session,
 ) -> None:
     _seed_log(db, minutes_ago=10, action=LogAction.deny)
-    _seed_log(db, minutes_ago=20, action=LogAction.deny, severity=LogSeverity.critical)
+    _seed_log(db, minutes_ago=20, action=LogAction.deny, severity=LogSeverity.high)
     _seed_log(db, minutes_ago=30, action=LogAction.allow)
     _seed_log(db, minutes_ago=40, action=LogAction.monitor)
     # Outside the 1h window — must not be counted as current.
@@ -77,7 +77,7 @@ def test_overview_counts_events_inside_the_window(
     assert body["requests"]["current"] == 4
     assert body["blocked"]["current"] == 2
     assert body["monitored"]["current"] == 1
-    assert body["critical"]["current"] == 1
+    assert body["high_severity"]["current"] == 1
 
 
 def test_overview_compares_against_the_previous_window(

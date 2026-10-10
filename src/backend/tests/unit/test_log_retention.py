@@ -17,7 +17,7 @@ def _make_log(event_at: datetime) -> Log:
         method="GET",
         request_uri="/health",
         status_code=200,
-        severity=LogSeverity.info,
+        severity=LogSeverity.low,
     )
 
 
