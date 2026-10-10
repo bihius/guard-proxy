@@ -12,12 +12,17 @@ TARGET_VHOST ?=
 DIRECT_HOST  ?= ftw-backend
 DIRECT_PORT  ?= 8080
 
-# POLICY names the settings profile the run uses: pl1 (baseline, default) or pl2
-# (high-paranoia sweep, see benchmarks/lab/.env.example LAB_PL2_POLICY_*). Every
-# lab vhost has its own policy; `make set-policy` writes the profile into it.
+# POLICY names the settings profile the run uses: pl1 (baseline, default) or pl2.
+# The two differ only in paranoia level (see benchmarks/lab/policy-profiles.sh).
+# Every lab vhost has its own policy; `make set-policy` writes the profile into it.
 POLICY       ?= pl1
 # Each policy pass gets its own results directory: run-<RUN_ID>-pl1 / run-<RUN_ID>-pl2.
 EFFECTIVE_RUN_ID := $(RUN_ID)-$(POLICY)
+
+# Off-host wrk settings (see benchmarks/lab/runners/run-load.sh). Exported so
+# that eval-load, eval-all and eval-sweep pass them on to the load runner.
+export LOAD_CLIENT_SSH LOAD_CLIENT_KEY LOAD_CLIENT_WRK LOAD_SERVER_ADDR \
+       LOAD_WAF_URL LOAD_DIRECT_URL LOAD_THREADS LOAD_CONNECTIONS LOAD_DURATION
 
 .PHONY: lab-up lab-down lab-clean \
         eval-ftw eval-corpus eval-load eval-metrics eval-all \
@@ -90,8 +95,9 @@ set-policy:
 
 ## Run the full eval suite at PL1, then switch to PL2 and run it again, sharing
 ## one base RUN_ID. Produces run-<id>-pl1/ and run-<id>-pl2/ for side-by-side comparison.
+## Stops at the first failing step. LOAD_* variables enable off-host wrk.
 eval-sweep:
-	@base_run_id=$(RUN_ID); \
+	@set -e; base_run_id=$(RUN_ID); \
 	echo "==> PL1 pass (run-$${base_run_id}-pl1)"; \
 	$(MAKE) set-policy POLICY=pl1; \
 	$(MAKE) eval-all RUN_ID=$${base_run_id} POLICY=pl1; \
@@ -143,6 +149,11 @@ help:
 	@echo "                      that vhost's policy"
 	@echo "  DIRECT_HOST=<name>  Direct-access Docker service name"
 	@echo "  DIRECT_PORT=<port>  Direct-access port (bypasses HAProxy)"
+	@echo "  LOAD_CLIENT_SSH=<user@addr>  Run wrk on this separate client (off-host load)"
+	@echo "  LOAD_SERVER_ADDR=<addr>      Server address the client reaches (WAF + Albedo port)"
+	@echo "  LOAD_CLIENT_KEY=<path>       Optional SSH key for the client"
+	@echo "  LOAD_THREADS/LOAD_CONNECTIONS/LOAD_DURATION  wrk settings (default 2/20/30s)"
 	@echo ""
 	@echo "Example (PL1 vs PL2 sweep across all tests):"
 	@echo "  make eval-sweep"
+	@echo "  make eval-sweep LOAD_CLIENT_SSH=user@10.99.99.30 LOAD_SERVER_ADDR=10.99.99.20"

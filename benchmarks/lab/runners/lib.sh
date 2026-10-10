@@ -57,6 +57,8 @@ resolve_policy() {
     PROFILE="${POLICY:-pl1}" \
     PROFILE_PARANOIA="${PROFILE_PARANOIA}" \
     PROFILE_INBOUND_THRESHOLD="${PROFILE_INBOUND_THRESHOLD}" \
+    PROFILE_OUTBOUND_THRESHOLD="${PROFILE_OUTBOUND_THRESHOLD}" \
+    PROFILE_MODE="${PROFILE_MODE}" \
     python3 - <<'PY'
 import json, os, sys, time, urllib.error, urllib.request
 
@@ -91,26 +93,37 @@ vhost = next(
 )
 if vhost is None:
     sys.exit(f"vhost {domain!r} not found. Run `make lab-up` first.")
-policy = call(f"/vhosts/{vhost['id']}", token).get("policy")
-if policy is None:
+vhost_policy = call(f"/vhosts/{vhost['id']}", token).get("policy")
+if vhost_policy is None:
     sys.exit(f"vhost {domain!r} has no policy. Run `make lab-up` first.")
-if (policy["paranoia_level"], policy["inbound_anomaly_threshold"]) != (
-    int(os.environ["PROFILE_PARANOIA"]),
-    int(os.environ["PROFILE_INBOUND_THRESHOLD"]),
-):
-    print(
-        f"WARNING: {domain} runs policy {policy['name']!r} at PL{policy['paranoia_level']}"
-        f" / threshold {policy['inbound_anomaly_threshold']}, not the"
-        f" {os.environ['PROFILE']} profile. Run `make set-policy POLICY=...` first"
-        " if that is not intended.",
-        file=sys.stderr,
-    )
-print(json.dumps({
-    "name": policy["name"],
+policy = call(f"/policies/{vhost_policy['id']}", token)
+actual = {
     "paranoia": policy["paranoia_level"],
     "inbound_threshold": policy["inbound_anomaly_threshold"],
     "outbound_threshold": policy["outbound_anomaly_threshold"],
     "mode": policy["enforcement_mode"],
+}
+expected = {
+    "paranoia": int(os.environ["PROFILE_PARANOIA"]),
+    "inbound_threshold": int(os.environ["PROFILE_INBOUND_THRESHOLD"]),
+    "outbound_threshold": int(os.environ["PROFILE_OUTBOUND_THRESHOLD"]),
+    "mode": os.environ["PROFILE_MODE"],
+}
+if actual != expected:
+    print(
+        f"WARNING: {domain} runs policy {policy['name']!r} with {actual}, not the"
+        f" {os.environ['PROFILE']} profile {expected}. Run `make set-policy POLICY=...`"
+        " first if that is not intended.",
+        file=sys.stderr,
+    )
+print(json.dumps({
+    "name": policy["name"],
+    **actual,
+    "rate_limiting": policy["ddos_protection_enabled"],
+    "geoip_mode": policy["geoip_mode"],
+    "rule_exclusions": len(policy.get("rule_exclusions", [])),
+    "rule_overrides": len(policy.get("rule_overrides", [])),
+    "custom_rules": len(policy.get("custom_rules", [])),
 }))
 PY
   )"
@@ -148,7 +161,7 @@ manifest = {
         "cpu_cores": "${host_cpu}",
         "mem_gb": "${host_mem_gb}",
         "load_avg_at_start": "${host_load}",
-        "noisy_neighbor": True  # shared Proxmox homelab — see evaluation-plan.md §9
+        "noisy_neighbor": True  # lab services share slayer with other workloads
     },
     "config": {
         "haproxy_http_port": int("${HAPROXY_HTTP_PORT}"),
@@ -178,42 +191,65 @@ compose_container_id() {
     ps -q "${service}" 2>/dev/null || true
 }
 
-# Sample peak memory + avg CPU for a container over a duration.
-# Writes to a file and prints the final JSON snippet.
+# Sample a container's CPU and memory with `docker stats` for a duration
+# (wrk syntax: 30s, 2m, 1h) and write peak memory, mean CPU and the sampling
+# actually achieved to a JSON file. Each `docker stats --no-stream` call takes
+# about a second or two itself, so the real interval between samples can be
+# longer than RESOURCE_SAMPLE_INTERVAL_S; the file records both.
 sample_container_resources() {
-  local container_name="$1"  # docker service name
-  local duration_s="${2:-60}"
+  local container_id="$1"
+  local duration="${2:-60}"
   local out_file="$3"
-  local interval=2
-  local samples=0
-  local cpu_sum=0
-  local mem_peak=0
+  CONTAINER_ID="${container_id}" DURATION="${duration}" \
+  INTERVAL_S="${RESOURCE_SAMPLE_INTERVAL_S:-2}" python3 - > "${out_file}" <<'PY'
+import json, os, re, subprocess, time
 
-  local end_time=$(( SECONDS + duration_s ))
-  while (( SECONDS < end_time )); do
-    local stats
-    stats="$(docker stats --no-stream --format '{{.CPUPerc}}\t{{.MemUsage}}' "${container_name}" 2>/dev/null || true)"
-    if [[ -n "${stats}" ]]; then
-      local cpu_pct mem_mb
-      cpu_pct="$(awk -F'\t' '{gsub(/%/,"",$1); print $1}' <<< "${stats}")"
-      mem_mb="$(awk -F'\t' '{split($2,a,/[A-Za-z]/); print a[1]+0}' <<< "${stats}")"
-      cpu_sum="$(python3 -c "print(${cpu_sum} + ${cpu_pct:-0})")"
-      if python3 -c "exit(0 if ${mem_mb:-0} > ${mem_peak} else 1)" 2>/dev/null; then
-        mem_peak="${mem_mb:-0}"
-      fi
-      samples=$(( samples + 1 ))
-    fi
-    sleep "${interval}"
-  done
+UNITS_MIB = {"B": 1 / 2**20, "KIB": 1 / 1024, "MIB": 1, "GIB": 1024, "TIB": 2**20,
+             "KB": 1e3 / 2**20, "MB": 1e6 / 2**20, "GB": 1e9 / 2**20, "TB": 1e12 / 2**20}
 
-  local cpu_avg=0
-  if (( samples > 0 )); then
-    cpu_avg="$(python3 -c "print(round(${cpu_sum} / ${samples}, 2))")"
-  fi
+def seconds(value):
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)([smh]?)", value.strip())
+    if not m:
+        raise SystemExit(f"Unsupported duration {value!r}")
+    return float(m.group(1)) * {"": 1, "s": 1, "m": 60, "h": 3600}[m.group(2)]
 
-  python3 - <<PY > "${out_file}"
-import json
-print(json.dumps({"mem_mb_peak": ${mem_peak}, "cpu_pct_avg": ${cpu_avg}, "samples": ${samples}}))
+def mem_mib(usage):
+    m = re.match(r"\s*([\d.]+)\s*([A-Za-z]+)", usage)
+    factor = UNITS_MIB.get(m.group(2).upper()) if m else None
+    return float(m.group(1)) * factor if factor else None
+
+interval = float(os.environ["INTERVAL_S"])
+duration = seconds(os.environ["DURATION"])
+start = time.monotonic()
+times, cpu, mem = [], [], []
+while time.monotonic() - start < duration:
+    taken = time.monotonic()
+    out = subprocess.run(
+        ["docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}\t{{.MemUsage}}",
+         os.environ["CONTAINER_ID"]],
+        capture_output=True, text=True,
+    ).stdout.strip()
+    cpu_field, _, mem_field = out.partition("\t")
+    try:
+        cpu.append(float(cpu_field.rstrip("%")))
+    except ValueError:
+        pass  # no stats (container stopping, "--"): not a sample
+    else:
+        times.append(taken)
+        value = mem_mib(mem_field)
+        if value is not None:
+            mem.append(value)
+    time.sleep(max(0.0, taken + interval - time.monotonic()))
+
+gaps = [b - a for a, b in zip(times, times[1:])]
+print(json.dumps({
+    "mem_mb_peak": round(max(mem), 2) if mem else None,
+    "cpu_pct_avg": round(sum(cpu) / len(cpu), 2) if cpu else None,
+    "samples": len(cpu),
+    "interval_s_target": interval,
+    "interval_s_mean": round(sum(gaps) / len(gaps), 3) if gaps else None,
+    "window_s": round(times[-1] - times[0], 3) if len(times) > 1 else 0.0,
+}))
 PY
 }
 

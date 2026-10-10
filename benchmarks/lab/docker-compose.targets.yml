@@ -8,8 +8,8 @@
 #     --env-file benchmarks/lab/.env \
 #     up -d --build
 #
-# All target containers attach to gp_internal only; they are exposed
-# to the outside world exclusively through HAProxy (via vhost routing).
+# Targets remain on gp_internal; Albedo also exposes a baseline-only port
+# bound to localhost by default (override the bind address for remote tests).
 #
 # Pinned image digests ensure reproducible test results across runs.
 # Update pins by running: docker pull <image> && docker inspect --format '{{index .RepoDigests 0}}' <image>
@@ -64,6 +64,9 @@ services:
     image: ghcr.io/coreruleset/albedo:0.2.0
     cpuset: "${LAB_WAF_CPUSET:-}"
     restart: unless-stopped
+    # Expose the baseline only to the selected benchmark interface.
+    ports:
+      - "${LAB_FTW_DIRECT_BIND:-127.0.0.1}:${LAB_FTW_DIRECT_PORT:-18080}:8080"
     networks:
       - gp_internal
 

@@ -108,8 +108,10 @@ login() {
 echo "Logging in..."
 token="$(login)"
 vhosts_response="$(api_json GET "/vhosts?per_page=500" "${token}")"
-profile_body="$(printf '{"paranoia_level":%s,"inbound_anomaly_threshold":%s,"outbound_anomaly_threshold":%s,"enforcement_mode":"block","is_active":true}' \
-  "${PROFILE_PARANOIA}" "${PROFILE_INBOUND_THRESHOLD}" "${PROFILE_OUTBOUND_THRESHOLD}")"
+# Rate limiting (ddos_protection_enabled, which also gates auto-ban) and GeoIP
+# are switched off so that only CRS decides what is blocked.
+profile_body="$(printf '{"paranoia_level":%s,"inbound_anomaly_threshold":%s,"outbound_anomaly_threshold":%s,"enforcement_mode":"%s","is_active":true,"ddos_protection_enabled":false,"auto_ban_enabled":false,"geoip_mode":"off"}' \
+  "${PROFILE_PARANOIA}" "${PROFILE_INBOUND_THRESHOLD}" "${PROFILE_OUTBOUND_THRESHOLD}" "${PROFILE_MODE}")"
 
 set_vhost_profile() {
   local domain="$1"
@@ -138,7 +140,30 @@ print(policy["id"])
 PY
   )"
   api_json PATCH "/policies/${policy_id}" "${token}" "${profile_body}" >/dev/null
-  echo "  ${domain}: '$(lab_policy_name "${domain}")' -> PL${PROFILE_PARANOIA}, inbound threshold ${PROFILE_INBOUND_THRESHOLD}"
+  # Read the policy back: the stored settings, not the request, are what the
+  # results describe. Exclusions, overrides and custom rules would change what
+  # CRS blocks per vhost, so they are refused rather than silently deleted.
+  POLICY_DETAIL="$(api_json GET "/policies/${policy_id}" "${token}")" \
+  EXPECTED_BODY="${profile_body}" DOMAIN="${domain}" python3 - <<'PY'
+import json, os, sys
+policy = json.loads(os.environ["POLICY_DETAIL"])
+expected = json.loads(os.environ["EXPECTED_BODY"])
+problems = [
+    f"{key}={policy.get(key)!r} (expected {value!r})"
+    for key, value in expected.items()
+    if policy.get(key) != value
+]
+for key in ("rule_exclusions", "rule_overrides", "custom_rules"):
+    if policy.get(key):
+        problems.append(f"{len(policy[key])} {key.replace('_', ' ')}")
+if problems:
+    sys.exit(
+        f"ERROR: policy {policy['name']!r} for {os.environ['DOMAIN']} does not match the lab profile: "
+        + "; ".join(problems)
+        + ". Remove the tuning in the admin panel or reset the lab (make lab-clean lab-up)."
+    )
+PY
+  echo "  ${domain}: '$(lab_policy_name "${domain}")' -> PL${PROFILE_PARANOIA}, thresholds ${PROFILE_INBOUND_THRESHOLD}/${PROFILE_OUTBOUND_THRESHOLD}, ${PROFILE_MODE}"
 }
 
 echo "Setting profile ${POLICY} on ${#DOMAINS[@]} lab vhost(s)..."

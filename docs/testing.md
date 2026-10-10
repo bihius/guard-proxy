@@ -81,6 +81,12 @@ make eval-results
 
 See `benchmarks/lab/` for scenario configs and `docs/evaluation-plan.md` for methodology.
 
+For an off-host performance run, keep the stack and target on the server and
+run native `wrk` on a separate client via `LOAD_CLIENT_SSH` and
+`LOAD_SERVER_SSH` (see [commands.md](commands.md#performance-testing)).
+Both WAF and direct paths travel over the direct cable; SSH is used only to launch wrk
+and transfer its Lua script. Keep demo traffic generation off during measurements.
+
 ## Test Data
 
 - Payloads: `benchmarks/payloads/` (sqli.txt, xss.txt, lfi.txt, legitimate.txt)

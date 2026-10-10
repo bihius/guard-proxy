@@ -11,6 +11,15 @@
 # directly, so any non-2xx response through the WAF is a false positive and
 # makes that run invalid (fast 403s would inflate RPS).
 #
+# Two ways to run wrk:
+#   - local (default): wrk runs in a container on the lab's Docker network.
+#     Load generator and WAF share the host's CPUs.
+#   - off-host: set LOAD_CLIENT_SSH (and LOAD_SERVER_ADDR). The script uploads
+#     benign-mix.lua to the client over SSH and starts its native `wrk`
+#     there. SSH only carries the control session and wrk's text output; the
+#     measured HTTP traffic goes from the client straight to the server's
+#     HAProxy port (WAF) and to Albedo's baseline port (direct).
+#
 # Samples coraza + haproxy container resource usage during the WAF run.
 #
 # Output:
@@ -23,8 +32,17 @@
 #
 # Usage:
 #   RUN_ID=... bash benchmarks/lab/runners/run-load.sh
-#   RUN_ID=... TARGET_VHOST=ftw.local DIRECT_HOST=ftw-backend DIRECT_PORT=8080 \
+#   RUN_ID=... LOAD_CLIENT_SSH=user@<client-addr> LOAD_SERVER_ADDR=<server-addr> \
 #     bash benchmarks/lab/runners/run-load.sh
+#
+# Off-host variables:
+#   LOAD_CLIENT_SSH   SSH destination of the load client (enables off-host mode)
+#   LOAD_CLIENT_KEY   optional private key for that SSH connection
+#   LOAD_SERVER_ADDR  server address the client reaches (e.g. its VPN address);
+#                     the lab must be started with LAB_FTW_DIRECT_BIND set to it
+#   LOAD_WAF_URL      override; default http://<LOAD_SERVER_ADDR>:<HAPROXY_HTTP_PORT>/
+#   LOAD_DIRECT_URL   override; default http://<LOAD_SERVER_ADDR>:<LAB_FTW_DIRECT_PORT>/
+#   LOAD_CLIENT_WRK   wrk binary on the client (default: wrk, Homebrew paths added)
 
 set -Eeuo pipefail
 : "${RUN_ID:=$(date +%Y%m%d-%H%M%S)}"
@@ -44,32 +62,104 @@ THREADS="${LOAD_THREADS:-2}"
 CONNECTIONS="${LOAD_CONNECTIONS:-20}"
 DURATION="${LOAD_DURATION:-30s}"
 
+LOAD_CLIENT_SSH="${LOAD_CLIENT_SSH:-}"
+LOAD_CLIENT_KEY="${LOAD_CLIENT_KEY:-}"
+LOAD_CLIENT_WRK="${LOAD_CLIENT_WRK:-wrk}"
+LOAD_SERVER_ADDR="${LOAD_SERVER_ADDR:-}"
+LOAD_WAF_URL="${LOAD_WAF_URL:-}"
+LOAD_DIRECT_URL="${LOAD_DIRECT_URL:-}"
+
+if [[ -n "${LOAD_CLIENT_SSH}" ]]; then
+  LOAD_MODE="off-host"
+  if [[ -n "${LOAD_SERVER_ADDR}" ]]; then
+    LOAD_WAF_URL="${LOAD_WAF_URL:-http://${LOAD_SERVER_ADDR}:${HAPROXY_HTTP_PORT}/}"
+    LOAD_DIRECT_URL="${LOAD_DIRECT_URL:-http://${LOAD_SERVER_ADDR}:$(env_value LAB_FTW_DIRECT_PORT 18080)/}"
+  fi
+  if [[ -z "${LOAD_WAF_URL}" || -z "${LOAD_DIRECT_URL}" ]]; then
+    echo "Off-host load needs LOAD_SERVER_ADDR (or LOAD_WAF_URL and LOAD_DIRECT_URL)." >&2
+    exit 1
+  fi
+  WAF_URL="${LOAD_WAF_URL}"
+  DIRECT_URL="${LOAD_DIRECT_URL}"
+  SSH_OPTS=(-o BatchMode=yes)
+  [[ -z "${LOAD_CLIENT_KEY}" ]] || SSH_OPTS+=(-i "${LOAD_CLIENT_KEY}" -o IdentitiesOnly=yes)
+else
+  LOAD_MODE="local"
+  WAF_URL="http://haproxy:80/"
+  DIRECT_URL="http://${DIRECT_HOST}:${DIRECT_PORT}/"
+fi
+
 write_manifest
 SCENARIO="load-${TARGET_VHOST}"
 OUT_DIR="$(setup_run_dir "${SCENARIO}")"
 
+# Run a bash script on the load client. The script goes over stdin to
+# `bash -s`, so the client's login shell (zsh, fish, ...) never parses it.
+# Non-interactive sessions skip the login profile, so Homebrew's paths are
+# added for wrk.
+client_bash() {
+  { printf 'export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH\n'; cat; } \
+    | ssh "${SSH_OPTS[@]}" "${LOAD_CLIENT_SSH}" bash -s
+}
+
+if [[ "${LOAD_MODE}" == off-host ]]; then
+  WRK_VERSION="$(printf '%q -v 2>&1 | head -n 1\n' "${LOAD_CLIENT_WRK}" | client_bash || true)"
+  if [[ "${WRK_VERSION}" != wrk* ]]; then
+    echo "Could not run '${LOAD_CLIENT_WRK}' on ${LOAD_CLIENT_SSH}: ${WRK_VERSION:-no output}" >&2
+    exit 1
+  fi
+else
+  WRK_VERSION="$(docker run --rm "${WRK_IMAGE}" -v 2>&1 | head -n 1 || true)"
+fi
+
 echo "=== Load test: WAF vs direct ==="
 echo "Target vhost : ${TARGET_VHOST}"
-echo "Direct host  : ${DIRECT_HOST}:${DIRECT_PORT}"
+echo "Load client  : ${LOAD_MODE}${LOAD_CLIENT_SSH:+ (${LOAD_CLIENT_SSH})}, ${WRK_VERSION}"
+echo "WAF URL      : ${WAF_URL}"
+echo "Direct URL   : ${DIRECT_URL}"
 echo "Load         : ${THREADS} threads, ${CONNECTIONS} connections, ${DURATION}"
 echo "Output dir   : ${OUT_DIR}"
 echo ""
 
 run_wrk() {
   local case_id="$1" url="$2" out_file="$3"
-  docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
-    --network "${DOCKER_NETWORK}" \
-    -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
-    -e "LOAD_VHOST=${TARGET_VHOST}" \
-    -e "EVAL_RUN_ID=${RUN_ID}" \
-    -e "EVAL_SCENARIO=${SCENARIO}" \
-    -e "EVAL_CASE=${case_id}" \
-    "${WRK_IMAGE}" \
-    -t "${THREADS}" -c "${CONNECTIONS}" -d "${DURATION}" \
-    -s /benign-mix.lua \
-    --latency \
-    "${url}" \
-    > "${out_file}" 2>&1
+  if [[ "${LOAD_MODE}" == local ]]; then
+    docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
+      --network "${DOCKER_NETWORK}" \
+      -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
+      -e "LOAD_VHOST=${TARGET_VHOST}" \
+      -e "EVAL_RUN_ID=${RUN_ID}" \
+      -e "EVAL_SCENARIO=${SCENARIO}" \
+      -e "EVAL_CASE=${case_id}" \
+      "${WRK_IMAGE}" \
+      -t "${THREADS}" -c "${CONNECTIONS}" -d "${DURATION}" \
+      -s /benign-mix.lua \
+      --latency \
+      "${url}" \
+      > "${out_file}" 2>&1
+    return
+  fi
+
+  # The Lua script travels inside the remote script, so the client needs no
+  # access to the server's file system.
+  {
+    printf 'set -eu\n'
+    printf 'lua="$(mktemp)"\n'
+    printf 'trap '\''rm -f "$lua"'\'' EXIT\n'
+    printf "cat > \"\$lua\" <<'GP_BENIGN_MIX_EOF'\n"
+    cat "${LUA_SCRIPT}"
+    printf 'GP_BENIGN_MIX_EOF\n'
+    printf 'env LOAD_VHOST=%q EVAL_RUN_ID=%q EVAL_SCENARIO=%q EVAL_CASE=%q ' \
+      "${TARGET_VHOST}" "${RUN_ID}" "${SCENARIO}" "${case_id}"
+    printf '%q -t %q -c %q -d %q -s "$lua" --latency %q\n' \
+      "${LOAD_CLIENT_WRK}" "${THREADS}" "${CONNECTIONS}" "${DURATION}" "${url}"
+  } | client_bash > "${out_file}" 2>&1
+}
+
+wrk_failed() {
+  echo "wrk failed; last lines of $1:" >&2
+  tail -n 5 "$1" >&2
+  exit 1
 }
 
 # ── Run 1: through WAF ─────────────────────────────────────────────────────
@@ -78,18 +168,16 @@ echo "--- Run 1: through HAProxy+Coraza ---"
 
 CORAZA_CONTAINER="$(compose_container_id coraza)"
 HAPROXY_CONTAINER="$(compose_container_id haproxy)"
-DURATION_S="${DURATION%s}"
-
 if [[ -n "${CORAZA_CONTAINER}" ]]; then
-  sample_container_resources "${CORAZA_CONTAINER}" "${DURATION_S}" "${OUT_DIR}/resources-coraza.json" &
+  sample_container_resources "${CORAZA_CONTAINER}" "${DURATION}" "${OUT_DIR}/resources-coraza.json" &
   SAMPLER_CORAZA_PID=$!
 fi
 if [[ -n "${HAPROXY_CONTAINER}" ]]; then
-  sample_container_resources "${HAPROXY_CONTAINER}" "${DURATION_S}" "${OUT_DIR}/resources-haproxy.json" &
+  sample_container_resources "${HAPROXY_CONTAINER}" "${DURATION}" "${OUT_DIR}/resources-haproxy.json" &
   SAMPLER_HAPROXY_PID=$!
 fi
 
-run_wrk wrk-waf "http://haproxy:80/" "${OUT_DIR}/waf.txt"
+run_wrk wrk-waf "${WAF_URL}" "${OUT_DIR}/waf.txt" || wrk_failed "${OUT_DIR}/waf.txt"
 
 wait "${SAMPLER_CORAZA_PID:-}" 2>/dev/null || true
 wait "${SAMPLER_HAPROXY_PID:-}" 2>/dev/null || true
@@ -98,9 +186,14 @@ copy_audit_log_snapshot "${OUT_DIR}"
 
 # ── Run 2: direct (WAF bypassed) ───────────────────────────────────────────
 
-echo "--- Run 2: direct to ${DIRECT_HOST}:${DIRECT_PORT} ---"
-run_wrk wrk-direct "http://${DIRECT_HOST}:${DIRECT_PORT}/" "${OUT_DIR}/direct.txt"
+echo "--- Run 2: direct to ${DIRECT_URL} ---"
+run_wrk wrk-direct "${DIRECT_URL}" "${OUT_DIR}/direct.txt" || wrk_failed "${OUT_DIR}/direct.txt"
 echo "Direct run complete. Output: ${OUT_DIR}/direct.txt"
+
+if ! grep -q 'WRK_SUMMARY ' "${OUT_DIR}/waf.txt" || ! grep -q 'WRK_SUMMARY ' "${OUT_DIR}/direct.txt"; then
+  echo "wrk produced no parseable summary; see waf.txt / direct.txt." >&2
+  exit 1
+fi
 
 # ── Parse & compute overhead ───────────────────────────────────────────────
 
@@ -108,7 +201,8 @@ echo "Parsing results..."
 
 # Exported rather than interpolated: the heredoc is quoted ('PY') so its regex
 # backslashes stay intact, which also means shell variables are not expanded.
-export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE
+export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE WRK_VERSION LOAD_MODE \
+  LOAD_CLIENT_SSH WAF_URL DIRECT_URL
 
 python3 - <<'PY'
 import json
@@ -154,6 +248,7 @@ rps_deg = None
 if waf.get("rps") and direct.get("rps"):
     rps_deg = round((direct["rps"] - waf["rps"]) / direct["rps"] * 100, 2)
 
+off_host = os.environ["LOAD_MODE"] == "off-host"
 performance = {
     "rps": waf.get("rps"),
     "baseline_rps": direct.get("rps"),
@@ -176,7 +271,12 @@ performance = {
         "threads": int(os.environ["THREADS"]),
         "connections": int(os.environ["CONNECTIONS"]),
         "duration": os.environ["DURATION"],
-        "wrk_image": os.environ["WRK_IMAGE"],
+        "mode": os.environ["LOAD_MODE"],
+        "client_ssh": os.environ["LOAD_CLIENT_SSH"] or None,
+        "wrk_image": None if off_host else os.environ["WRK_IMAGE"],
+        "wrk_version": os.environ["WRK_VERSION"] or None,
+        "waf_url": os.environ["WAF_URL"],
+        "direct_url": os.environ["DIRECT_URL"],
     },
 }
 

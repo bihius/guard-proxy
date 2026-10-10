@@ -1,7 +1,7 @@
 """Shared evaluation metrics helpers for benchmark runner scripts.
 
 The functions in this module are intentionally dependency-free so they can run
-inside the lab LXC without installing the backend Python environment.
+on the lab host without installing the backend Python environment.
 """
 
 from __future__ import annotations

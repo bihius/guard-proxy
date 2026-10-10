@@ -123,3 +123,17 @@ make eval-results  # Show latest CSV summary
 wrk -t4 -c100 -d30s --latency http://localhost:8080/test  # HTTP benchmark
 make eval-load                                              # RPS/latency overhead vs. direct backend
 ```
+
+For a separate load generator, run the stack on the server with the target's
+direct port bound only to the dedicated benchmark interface. For Albedo set
+`LAB_FTW_DIRECT_BIND=10.99.99.20` when bringing up the lab; its baseline port
+is `18080` by default. Run `eval-load` on the server with
+`TARGET_VHOST=ftw.local DIRECT_HOST=ftw-backend DIRECT_PORT=8080`,
+`LOAD_CLIENT_SSH=monte@10.99.99.30`, `LOAD_SERVER_SSH=monte@10.99.99.20`,
+`LOAD_WAF_URL=http://10.99.99.20:8081/` and
+`LOAD_DIRECT_URL=http://10.99.99.20:18080/` (and `LOAD_CLIENT_KEY` if needed).
+Both hosts need reciprocal SSH authentication for script transfer; install
+native `wrk` on the Mac. SSH controls the run but HTTP travels directly over
+the cable for both variants. The target is restarted before each measurement.
+Do not run other generators on either host during the benchmark. Remove the
+direct port binding after the evaluation if it is no longer needed.
