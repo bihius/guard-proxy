@@ -19,6 +19,8 @@ describe("filtersFromSearchParams", () => {
   it("ignores values outside the allowed enums", () => {
     expect(parse("action=explode").action).toBe("");
     expect(parse("severity=catastrophic").severity).toBe("");
+    expect(parse("severity=critical").severity).toBe("");
+    expect(parse("severity=high").severity).toBe("high");
   });
 
   it("ignores a non-numeric rule id", () => {

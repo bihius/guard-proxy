@@ -35,7 +35,7 @@ const SERIES = [
   },
   {
     key: "monitor",
-    label: "Monitored",
+    label: "Detected",
     fillClass: "fill-chart-monitor",
     dotClass: "bg-chart-monitor",
   },

@@ -195,15 +195,15 @@ export function DashboardPage() {
                 isLoading={showMetricSkeletons}
               />
               <MetricTile
-                label="Critical"
-                metric={overviewData?.critical ?? null}
+                label="High severity"
+                metric={overviewData?.high_severity ?? null}
                 tone="error"
                 icon={<PulseIcon />}
                 deltaMeaning="increase-is-bad"
                 isLoading={showMetricSkeletons}
               />
               <MetricTile
-                label="Monitored"
+                label="Detected"
                 metric={overviewData?.monitored ?? null}
                 tone="warning"
                 icon={<ServerIcon />}

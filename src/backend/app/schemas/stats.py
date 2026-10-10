@@ -31,8 +31,10 @@ class OverviewResponse(WindowBounds):
 
     requests: MetricValue
     blocked: MetricValue
+    # Detection-only matches that reached the threshold (action "monitor").
     monitored: MetricValue
-    critical: MetricValue
+    # Any action; severity "high" is relative to each event's policy threshold.
+    high_severity: MetricValue
     # None for non-admins and whenever the HAProxy Runtime API is unreachable —
     # a dead stats socket must not take the whole dashboard down with it.
     banned_ips: int | None = None

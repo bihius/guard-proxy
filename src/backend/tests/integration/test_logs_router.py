@@ -24,7 +24,7 @@ def _create_log(
     rule_message: str | None = None,
     anomaly_score: int | None = None,
     paranoia_level: int | None = None,
-    severity: LogSeverity = LogSeverity.info,
+    severity: LogSeverity = LogSeverity.low,
     message: str | None = None,
     raw_context: dict[str, object] | None = None,
     producer_event_id: str | None = None,
@@ -68,7 +68,6 @@ def _ingest_payload(**overrides: object) -> dict[str, object]:
         "rule_message": "SQL injection attack detected",
         "anomaly_score": 15,
         "paranoia_level": 2,
-        "severity": "error",
         "message": "Request blocked by Coraza",
         "raw_context": {"engine": "coraza", "phase": "request"},
     }
@@ -86,7 +85,7 @@ def test_list_logs_returns_paginated_results_for_admin(
         db,
         event_at=datetime(2026, 3, 20, 10, 0, 0),
         action=LogAction.monitor,
-        severity=LogSeverity.warning,
+        severity=LogSeverity.medium,
         message="Older event",
     )
     newer = _create_log(
@@ -95,7 +94,7 @@ def test_list_logs_returns_paginated_results_for_admin(
         action=LogAction.deny,
         status_code=403,
         rule_id=949110,
-        severity=LogSeverity.error,
+        severity=LogSeverity.high,
         message="Newer event",
         raw_context={"engine": "coraza"},
     )
@@ -124,7 +123,7 @@ def test_list_logs_viewer_has_read_access(
         event_at=datetime(2026, 3, 21, 10, 0, 0),
         vhost="frontend.example.com",
         action=LogAction.allow,
-        severity=LogSeverity.info,
+        severity=LogSeverity.low,
         message="Rendered dashboard",
     )
 
@@ -151,7 +150,7 @@ def test_list_logs_filters_by_vhost_action_and_severity(
         event_at=datetime(2026, 3, 21, 8, 0, 0),
         vhost="api.example.com",
         action=LogAction.deny,
-        severity=LogSeverity.error,
+        severity=LogSeverity.high,
         message="Matched",
     )
     _create_log(
@@ -159,7 +158,7 @@ def test_list_logs_filters_by_vhost_action_and_severity(
         event_at=datetime(2026, 3, 21, 9, 0, 0),
         vhost="api.example.com",
         action=LogAction.allow,
-        severity=LogSeverity.error,
+        severity=LogSeverity.high,
         message="Wrong action",
     )
     _create_log(
@@ -167,7 +166,7 @@ def test_list_logs_filters_by_vhost_action_and_severity(
         event_at=datetime(2026, 3, 21, 10, 0, 0),
         vhost="www.example.com",
         action=LogAction.deny,
-        severity=LogSeverity.error,
+        severity=LogSeverity.high,
         message="Wrong vhost",
     )
 
@@ -177,7 +176,7 @@ def test_list_logs_filters_by_vhost_action_and_severity(
         params={
             "vhost": "API.EXAMPLE.COM",
             "action": "deny",
-            "severity": "error",
+            "severity": "high",
         },
     )
     assert resp.status_code == 200
@@ -410,13 +409,14 @@ def test_ingest_log_event_rejects_invalid_payload(
     client: TestClient,
     log_ingest_headers: dict[str, str],
 ) -> None:
-    """Malformed ingest payloads should fail with 422 validation errors."""
+    """An invalid source IP is the only reason a payload is rejected."""
     resp = client.post(
         "/logs/ingest",
-        json=_ingest_payload(source_ip="not-an-ip", severity="fatal"),
+        json=_ingest_payload(source_ip="not-an-ip"),
         headers=log_ingest_headers,
     )
     assert resp.status_code == 422
+    assert [err["loc"] for err in resp.json()["detail"]] == [["body", "source_ip"]]
 
 
 def test_ingest_log_event_allows_optional_fields_to_be_omitted(
@@ -614,6 +614,83 @@ def test_ingest_sets_vhost_id_but_not_policy_id_when_vhost_has_no_policy(
     body = resp.json()
     assert body["vhost_id"] == vh.id
     assert body["policy_id"] is None
+
+
+def test_ingest_derives_severity_from_the_bound_policy_threshold(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """A bound policy's inbound threshold, not a fixed default, sets severity."""
+    policy = _create_policy(db, name="threshold-20")
+    policy.inbound_anomaly_threshold = 20
+    _create_vhost(db, domain="app.example.com", policy=policy)
+    db.commit()
+
+    medium = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="sev-medium",
+            action="deny",
+            anomaly_score=25,
+        ),
+        headers=log_ingest_headers,
+    )
+    high = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="sev-high",
+            action="deny",
+            anomaly_score=40,
+        ),
+        headers=log_ingest_headers,
+    )
+
+    assert medium.status_code == 201
+    assert medium.json()["severity"] == "medium"
+    assert high.status_code == 201
+    assert high.json()["severity"] == "high"
+
+
+def test_ingest_uses_default_threshold_for_an_unknown_vhost(
+    client: TestClient,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """No matching vhost means the unassigned CRS threshold of 5."""
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="sev-unknown-vhost",
+            vhost="unknown.example.com",
+            anomaly_score=10,
+        ),
+        headers=log_ingest_headers,
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["severity"] == "high"
+    assert resp.json()["policy_id"] is None
+
+
+def test_ingest_ignores_a_client_supplied_severity(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """Old shippers may still send severity; the stored value is derived."""
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(
+            producer_event_id="sev-ignored",
+            severity="critical",
+        ),
+        headers=log_ingest_headers,
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["severity"] == "high"
+    persisted = db.query(Log).filter(Log.producer_event_id == "sev-ignored").one()
+    assert persisted.severity == LogSeverity.high
 
 
 # ---------------------------------------------------------------------------

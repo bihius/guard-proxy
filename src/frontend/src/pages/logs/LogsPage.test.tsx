@@ -48,7 +48,7 @@ const mockLog = {
   rule_message: "SQL injection attack detected",
   anomaly_score: 15,
   paranoia_level: 2,
-  severity: "error" as const,
+  severity: "high" as const,
   message: null,
   raw_context: null,
   vhost_id: 1,
@@ -217,7 +217,7 @@ describe("LogsPage", () => {
     await waitFor(() => expect(screen.getByText("app.example.com")).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole("button", { name: /filters/i }));
-    await userEvent.selectOptions(screen.getByLabelText(/severity/i), "critical");
+    await userEvent.selectOptions(screen.getByLabelText(/^severity$/i), "high");
     await userEvent.type(screen.getByLabelText(/^method$/i), "POST");
     await userEvent.type(screen.getByLabelText(/source ip/i), "203.0.113.10");
     await userEvent.type(screen.getByLabelText(/rule id/i), "942290");
@@ -228,7 +228,7 @@ describe("LogsPage", () => {
       expect(vi.mocked(logsApi.listLogs)).toHaveBeenCalledWith(
         "test-token",
         expect.objectContaining({
-          severity: "critical",
+          severity: "high",
           method: "POST",
           source_ip: "203.0.113.10",
           rule_id: 942290,

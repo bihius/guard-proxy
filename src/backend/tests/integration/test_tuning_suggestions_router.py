@@ -61,7 +61,7 @@ def _log(
         source_ip=ip,
         method="GET",
         request_uri=uri,
-        severity=LogSeverity.critical,
+        severity=LogSeverity.high,
         raw_context={"messages": list(messages)},
         policy_id=policy_id,
     )

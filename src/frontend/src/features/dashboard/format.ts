@@ -56,7 +56,8 @@ export function formatRelativeTime(iso: string, now: Date = new Date()): string 
   const seconds = Math.round((now.getTime() - target.getTime()) / 1000);
   if (seconds < 60) return "just now";
 
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  // Words, not just digits: match the English UI instead of the OS locale.
+  const formatter = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
     ["year", 31_536_000],
     ["month", 2_592_000],

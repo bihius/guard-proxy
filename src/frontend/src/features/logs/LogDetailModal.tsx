@@ -28,8 +28,8 @@ function actionTone(action: LogAction) {
 }
 
 function severityTone(severity: LogSeverity) {
-  if (severity === "critical" || severity === "error") return "error" as const;
-  if (severity === "warning") return "warning" as const;
+  if (severity === "high") return "error" as const;
+  if (severity === "medium") return "warning" as const;
   return "info" as const;
 }
 

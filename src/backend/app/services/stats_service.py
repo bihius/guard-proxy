@@ -170,7 +170,7 @@ class StatsService:
             "requests": [0, 0],
             "blocked": [0, 0],
             "monitored": [0, 0],
-            "critical": [0, 0],
+            "high_severity": [0, 0],
         }
         for is_current, action, severity, total in rows:
             index = int(is_current)
@@ -179,8 +179,8 @@ class StatsService:
                 counters["blocked"][index] += total
             elif action == LogAction.monitor:
                 counters["monitored"][index] += total
-            if severity == LogSeverity.critical:
-                counters["critical"][index] += total
+            if severity == LogSeverity.high:
+                counters["high_severity"][index] += total
 
         return OverviewResponse(
             window=window,
@@ -189,7 +189,9 @@ class StatsService:
             requests=_metric(counters["requests"][1], counters["requests"][0]),
             blocked=_metric(counters["blocked"][1], counters["blocked"][0]),
             monitored=_metric(counters["monitored"][1], counters["monitored"][0]),
-            critical=_metric(counters["critical"][1], counters["critical"][0]),
+            high_severity=_metric(
+                counters["high_severity"][1], counters["high_severity"][0]
+            ),
             banned_ips=self._banned_ip_count() if include_banned_ips else None,
             protected_vhosts=self._protected_vhost_count(),
             total_vhosts=self._total_vhost_count(),

@@ -1,5 +1,5 @@
 export type LogAction = "allow" | "deny" | "monitor";
-export type LogSeverity = "info" | "warning" | "error" | "critical";
+export type LogSeverity = "low" | "medium" | "high";
 
 export type Log = {
   id: number;
