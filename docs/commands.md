@@ -99,6 +99,41 @@ bash benchmarks/smoke/e2e.sh  # Compose stack: benign request returns 200, SQLi 
 cd src/backend && uv run pytest -m e2e tests/e2e/test_policy_apply.py  # Policy apply changes live WAF behavior
 ```
 
+## Screenshot demo events
+
+`src/backend/scripts/generate_demo_traffic.py` posts **synthetic** log events to
+`/logs/ingest` (not actual HAProxy traffic or proof of WAF blocks). It produces
+SQLi, XSS, LFI and scanner examples across three `.test` display hosts and 48
+hours by default; events carry `raw_context.synthetic = true` and `demo:` IDs.
+Use only in a disposable demo database, never in evaluation measurements.
+Display hosts need not be registered vhosts; the proxy routing host **must**
+be an existing vhost. Use `--dry-run` to preview five examples without a secret.
+
+```bash
+cd src/backend
+export LOG_INGEST_SHARED_SECRET  # set this variable from your local .env first
+python3 scripts/generate_demo_traffic.py --api-url http://127.0.0.1:8080 \
+    --route-host app.local --count 240 --hours 48
+```
+
+For a one-hour live dashboard demo (still synthetic ingest, **not** actual
+proxy requests), run the same command with `--live-minutes 60` instead of
+`--count`/`--hours`. It first fills the 1h and 24h chart buckets with
+different random counts, then sends a random batch once per minute and exits
+after one hour. Each event retains `raw_context.synthetic = true`. The script
+stops on an ingest failure; do not run it against the evaluation database.
+
+If HAProxy does not route the ingest endpoint, use an API address reachable
+directly from the demo machine as `--api-url`. The ingest secret is read only
+from the environment; never put it in a command argument or commit it.
+`--hosts shop.example.test api.example.test portal.example.test` changes
+display hosts. `--seed` makes the random choices reproducible; without a
+seed, live mode varies between runs. For one-shot mode, `--run-id <id>`
+allows a failed run to resume without duplicate rows. Synthetic rows are
+subject to normal log retention; remove only the demo rows via
+`DELETE FROM logs WHERE producer_event_id LIKE 'demo:%';` in a disposable
+database when finished.
+
 ## Security Testing
 
 ```bash

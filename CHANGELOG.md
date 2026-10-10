@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [Unreleased]
+
+### Added
+
+- Optional screenshot-only log generator creates clearly marked synthetic WAF
+  events for several display hosts, rule categories, and times of day through
+  the existing ingest API. It does not send real proxy traffic or prove blocks.
+
 ## [0.1.0-beta.6] - 2026-10-07
 
 ### Fixed
