@@ -27,12 +27,12 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 
 ## 2. Hardware and Software Environment
 
-The lab uses two hosts connected by a WireGuard VPN:
+The lab uses two hosts connected directly by an Ethernet cable (no switch, no VPN):
 
 | Host        | Thesis lab address | Role                                                        |
 | ----------- | ------------------ | ----------------------------------------------------------- |
-| Lab server  | `10.99.99.20`      | Guard Proxy stack, targets, curl corpus, go-ftw             |
-| Load client | `10.99.99.30`      | native `wrk` only, started by hand                          |
+| Lab server  | `192.168.2.5`      | Guard Proxy stack, targets, curl corpus, go-ftw             |
+| Load client | `192.168.2.1`      | native `wrk` only, started by hand                          |
 
 The server's address is the only one the lab needs: set it as `LAB_SERVER_ADDR` in `benchmarks/lab/.env`. Albedo's direct port is published on it, and the load test builds the wrk URLs from it.
 
@@ -63,7 +63,7 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the r
 ## 3. Test-Bed Architecture
 
 ```
-┌─ Lab server (LAB_SERVER_ADDR, 10.99.99.20) ──────────────────────────────┐
+┌─ Lab server (LAB_SERVER_ADDR, 192.168.2.5) ──────────────────────────────┐
 │                                                                          │
 │  ┌─ Test containers ──────┐   ┌─ guard-proxy stack (gp_internal) ─────┐  │
 │  │  curl (corpus)         ├──►│  HAProxy :80  ──►  Coraza SPOA :9000  │  │
@@ -78,8 +78,8 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the r
 │    HAPROXY_HTTP_PORT → HAProxy (WAF path)                                │
 │    LAB_FTW_DIRECT_PORT (18080) → Albedo (direct path, no WAF)            │
 └──────────────────────────────▲───────────────────────────────────────────┘
-                               │ HTTP over the VPN (both paths)
-┌─ Load client (10.99.99.30) ──┴───────────────────────────────────────────┐
+                               │ HTTP over the direct cable (both paths)
+┌─ Load client (192.168.2.1) ──┴───────────────────────────────────────────┐
 │  native wrk + benign-mix.lua, started by hand with the printed command   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -168,7 +168,7 @@ Reported: `passed / run` (CRS conformance), split into tests that expect a rule 
 **Tool:** native `wrk` 4.2.0 on the load client, with `benchmarks/lab/scenarios/load/benign-mix.lua`  
 **Runner:** `benchmarks/lab/runners/run-load.sh` (on the lab server)
 
-Two runs against Albedo (`ftw.local`), both from the load client over the VPN:
+Two runs against Albedo (`ftw.local`), both from the load client over the direct cable:
 
 1. **Through HAProxy+Coraza** — `http://LAB_SERVER_ADDR:HAPROXY_HTTP_PORT/` (production WAF path)
 2. **Direct to Albedo** — `http://LAB_SERVER_ADDR:18080/`, the baseline-only port, published only on `LAB_SERVER_ADDR`
@@ -250,7 +250,7 @@ On the load client: install `wrk` (`brew install wrk`) and clone the repository 
 
 ### 8.2 The evaluation (one command)
 
-On the lab server, set `LAB_SERVER_ADDR=10.99.99.20` in `benchmarks/lab/.env`, then:
+On the lab server, set `LAB_SERVER_ADDR=192.168.2.5` in `benchmarks/lab/.env`, then:
 
 ```bash
 make -C benchmarks lab-up
@@ -270,7 +270,7 @@ Every runner reads the policy that protects its target vhost back from the API a
 
 Without `LOAD_CLIENT=manual`, `make -C benchmarks eval-sweep RUN_ID=<id>` runs everything on one machine (wrk in a container) without pauses; use that for smoke runs, not for thesis numbers.
 
-After the evaluation, set `LAB_SERVER_ADDR` back to `127.0.0.1` and run `make -C benchmarks lab-up` again if the direct port should no longer be reachable over the VPN.
+After the evaluation, set `LAB_SERVER_ADDR` back to `127.0.0.1` and run `make -C benchmarks lab-up` again if the direct port should no longer be reachable from the client.
 
 ### 8.3 Manual runs
 
@@ -291,9 +291,9 @@ make -C benchmarks results RUN_ID=<id> POLICY=pl2
 
 The lab server also runs unrelated services. They can compete for CPU, memory and I/O with the WAF stack and the targets. **Mitigation:** `manifest.json` records the load average at the start of each run; run sweeps when the other services are idle, repeat the measurement, and report the variance. `LAB_WAF_CPUSET` can pin the lab containers when the server has spare cores.
 
-### 9.2 Load generator over a VPN
+### 9.2 Load generator on a separate host
 
-`wrk` runs on a separate client, so it does not take CPU from the WAF. Its traffic crosses the WireGuard VPN, which adds latency and jitter to every request. Both the WAF path and the direct path take the same route, so the overhead (WAF − direct) remains comparable, but absolute latencies include the VPN and are not comparable with a LAN or loopback measurement. Resource sampling starts when the operator presses Enter, so its window can be offset from the wrk run by a second or two. Do not run other load on either host during a measurement.
+`wrk` runs on a separate client, so it does not take CPU from the WAF. Its traffic crosses the direct cable between the hosts, which adds a small network latency to every request. Both the WAF path and the direct path take the same route, so the overhead (WAF − direct) remains comparable, but absolute latencies include the link and are not comparable with a loopback measurement. Resource sampling starts when the operator presses Enter, so its window can be offset from the wrk run by a second or two. Do not run other load on either host during a measurement.
 
 ### 9.3 WordPress false positives without CRS exclusions
 
@@ -348,7 +348,7 @@ The lab overrides every CRS test's `Host` header to route it to `ftw.local`, and
     "config": {
       "threads": 2, "connections": 20, "duration": "30s",
       "mode": "manual", "wrk_image": null, "wrk_version": null,
-      "waf_url": "http://10.99.99.20:8081/", "direct_url": "http://10.99.99.20:18080/"
+      "waf_url": "http://192.168.2.5:8081/", "direct_url": "http://192.168.2.5:18080/"
     }
   },
   "resources": {

@@ -74,7 +74,7 @@ the lab server, with `wrk` started by hand on the load client:
 ```sh
 # Prerequisites
 cp docker/.env.example docker/.env               # must set ADMIN_EMAIL and ADMIN_PASSWORD
-cp benchmarks/lab/.env.example benchmarks/lab/.env   # set LAB_SERVER_ADDR=10.99.99.20
+cp benchmarks/lab/.env.example benchmarks/lab/.env   # set LAB_SERVER_ADDR=192.168.2.5
 git submodule update --init --recursive
 
 make -C benchmarks lab-up
