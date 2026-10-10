@@ -169,7 +169,7 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
     <Modal
       title={title}
       contentClassName="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl lg:max-w-4xl"
-      bodyClassName="min-h-0 overflow-y-auto pr-2"
+      bodyClassName="-mr-2 min-h-0 overflow-y-auto pr-2"
       onClose={onClose}
       footer={
         <>
@@ -289,7 +289,7 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           </div>
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <div className="grid gap-4 lg:grid-cols-2">
           <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
             <h3 className="text-sm font-semibold text-foreground">Traffic limits</h3>
             <Label
@@ -400,19 +400,21 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
 
           <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
             <h3 className="text-sm font-semibold text-foreground">Country filtering</h3>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="policy-geoip-mode">GeoIP country filtering</Label>
-              <InfoTooltip label="Allowlist: only the listed countries may reach this vhost; everything else gets 403. Blocklist: the listed countries get 403. Requests whose country cannot be resolved are allowed by default." />
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="policy-geoip-mode">GeoIP country filtering</Label>
+                <InfoTooltip label="Allowlist: only the listed countries may reach this vhost; everything else gets 403. Blocklist: the listed countries get 403. Requests whose country cannot be resolved are allowed by default." />
+              </div>
+              <Select
+                id="policy-geoip-mode"
+                value={geoipMode}
+                onChange={(e) => setGeoipMode(e.target.value as GeoipMode)}
+              >
+                <option value="off">Off</option>
+                <option value="allowlist">Allowlist</option>
+                <option value="blocklist">Blocklist</option>
+              </Select>
             </div>
-            <Select
-              id="policy-geoip-mode"
-              value={geoipMode}
-              onChange={(e) => setGeoipMode(e.target.value as GeoipMode)}
-            >
-              <option value="off">Off</option>
-              <option value="allowlist">Allowlist</option>
-              <option value="blocklist">Blocklist</option>
-            </Select>
 
             {geoipMode !== "off" && (
               <div className="space-y-1.5">
