@@ -50,11 +50,11 @@ The lab uses two hosts connected by a WireGuard VPN. The documentation refers to
 | -------- | ------------------------------------------ |
 | Host     | Mac mini (Apple M4, 16 GB)                 |
 | Tool     | native `wrk` 4.2.0 (Homebrew)              |
-| Access   | SSH from the lab server (key-based, no password prompt) |
+| Access   | none: wrk is started by hand; its output is pasted into the server terminal |
 
 ### Software versions (recorded per run)
 
-Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the runner scripts. The CRS submodule is pinned at v4.25.0. Each run writes the git SHA, host CPU/RAM and load average to `manifest.json`; the load test also records the `wrk` version and the client in `performance.json`.
+Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the runner scripts. The CRS submodule is pinned at v4.25.0. Each run writes the git SHA, host CPU/RAM and load average to `manifest.json`; the load test also records the load mode and both URLs in `performance.json`. Record the client's `wrk -v` output in the thesis, because a manual run cannot read it.
 
 ---
 
@@ -78,13 +78,13 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the r
 └──────────────────────────────▲───────────────────────────────────────────┘
                                │ HTTP over the VPN (both paths)
 ┌─ Load client (CLIENT_ADDR) ──┴───────────────────────────────────────────┐
-│  native wrk + benign-mix.lua, started by run-load.sh over SSH            │
+│  native wrk + benign-mix.lua, started by hand with the printed command   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-The corpus (curl) and go-ftw containers attach to `gp_internal` and reach HAProxy at `http://haproxy:80` with the target's `Host:` header. Only `wrk` runs on the separate client: `run-load.sh` on the server sends it the Lua script and the command over SSH and reads its text output back. The measured HTTP traffic goes from the client to `SERVER_ADDR` directly, for the WAF path and for the direct path alike.
+The corpus (curl) and go-ftw containers attach to `gp_internal` and reach HAProxy at `http://haproxy:80` with the target's `Host:` header. Only `wrk` runs on the separate client, and nothing on the server connects to it: for each run, `run-load.sh` prints the exact `wrk` command, the operator starts it on the client, and pastes wrk's output back into the server terminal. The measured HTTP traffic goes from the client to `SERVER_ADDR` directly, for the WAF path and for the direct path alike.
 
-Without `LOAD_CLIENT_SSH`, `run-load.sh` runs `wrk` in a container on the server instead (single-machine mode, used for smoke runs).
+Without `LOAD_CLIENT=manual`, `run-load.sh` runs `wrk` in a container on the server instead (single-machine mode, used for smoke runs).
 
 Lab source: `benchmarks/lab/`  
 Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
@@ -244,7 +244,7 @@ cp benchmarks/lab/.env.example benchmarks/lab/.env
 # Do not set LAB_POLICY_* or LAB_PL2_POLICY_* in benchmarks/lab/.env.
 ```
 
-On the load client: install `wrk` (`brew install wrk`) and authorise the server's SSH key for the account in `LOAD_CLIENT_SSH`. The runner uses `ssh -o BatchMode=yes`, so a password prompt fails the run instead of hanging it. The client's login shell does not matter: commands go to `bash -s` over stdin.
+On the load client: install `wrk` (`brew install wrk`) and clone the repository at the same commit as the server; the printed command uses `benchmarks/lab/scenarios/load/benign-mix.lua` relative to the repository root. The command uses `env VAR=value wrk …`, which works in bash, zsh and fish.
 
 ### 8.2 The evaluation (one command)
 
@@ -252,12 +252,9 @@ On the lab server, start the lab with Albedo's baseline port bound to the server
 
 ```bash
 SERVER_ADDR=10.99.99.20
-CLIENT_ADDR=10.99.99.30
 
 LAB_FTW_DIRECT_BIND=$SERVER_ADDR make -C benchmarks lab-up
-make -C benchmarks eval-sweep RUN_ID=<id> \
-  LOAD_CLIENT_SSH=<user>@$CLIENT_ADDR \
-  LOAD_SERVER_ADDR=$SERVER_ADDR
+make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual LOAD_SERVER_ADDR=$SERVER_ADDR
 ```
 
 All lab targets live in `benchmarks/Makefile`; run them with `make -C benchmarks …` from the repository root (or plain `make …` inside `benchmarks/`).
@@ -265,13 +262,13 @@ All lab targets live in `benchmarks/Makefile`; run them with `make -C benchmarks
 `eval-sweep` stops at the first failing step. It:
 
 1. writes the **PL1** profile into both lab policies and applies the config;
-2. runs Test 1 (corpus on `wp.local`), Test 2 (go-ftw on `ftw.local`) and Test 3 (wrk from the load client to `ftw.local`), then aggregates `results.csv` into `benchmarks/results/run-<id>-pl1/`;
+2. runs Test 1 (corpus on `wp.local`), Test 2 (go-ftw on `ftw.local`) and Test 3 (wrk from the load client to `ftw.local`), then aggregates `results.csv` into `benchmarks/results/run-<id>-pl1/`. Test 3 pauses twice, once for the WAF run and once for the direct run. Each time, run the printed command on the client, press Enter on the server as you start it (resource sampling starts then), and paste wrk's whole output when it finishes; reading stops at the `WRK_SUMMARY` line;
 3. writes the **PL2** profile and repeats all three tests into `benchmarks/results/run-<id>-pl2/`;
 4. prints both result tables.
 
 Every runner reads the policy that protects its target vhost back from the API and records it in `summary.json` (paranoia, thresholds, mode, rate limiting, GeoIP mode and the number of exclusions, overrides and custom rules); it warns when those settings do not match the `POLICY` profile. `manifest.json` records the git SHA of the checkout, so commit lab changes before a measured run.
 
-Without the `LOAD_*` variables, `make -C benchmarks eval-sweep RUN_ID=<id>` runs everything on one machine (wrk in a container); use that for smoke runs, not for thesis numbers.
+Without `LOAD_CLIENT=manual`, `make -C benchmarks eval-sweep RUN_ID=<id>` runs everything on one machine (wrk in a container) without pauses; use that for smoke runs, not for thesis numbers.
 
 After the evaluation, restart the lab without `LAB_FTW_DIRECT_BIND` (default `127.0.0.1`) if the direct port should no longer be reachable over the VPN.
 
@@ -280,7 +277,7 @@ After the evaluation, restart the lab without `LAB_FTW_DIRECT_BIND` (default `12
 ```bash
 make -C benchmarks set-policy POLICY=pl2                     # both lab vhosts
 make -C benchmarks eval-corpus RUN_ID=<id> POLICY=pl2        # one test
-make -C benchmarks eval-load RUN_ID=<id> POLICY=pl2 LOAD_CLIENT_SSH=<user>@$CLIENT_ADDR LOAD_SERVER_ADDR=$SERVER_ADDR
+make -C benchmarks eval-load RUN_ID=<id> POLICY=pl2 LOAD_CLIENT=manual LOAD_SERVER_ADDR=$SERVER_ADDR
 make -C benchmarks results RUN_ID=<id> POLICY=pl2
 ```
 
@@ -296,7 +293,7 @@ The lab server also runs unrelated services. They can compete for CPU, memory an
 
 ### 9.2 Load generator over a VPN
 
-`wrk` runs on a separate client, so it does not take CPU from the WAF. Its traffic crosses the WireGuard VPN, which adds latency and jitter to every request. Both the WAF path and the direct path take the same route, so the overhead (WAF − direct) remains comparable, but absolute latencies include the VPN and are not comparable with a LAN or loopback measurement. SSH carries only the control session and wrk's text output. Do not run other load on either host during a measurement.
+`wrk` runs on a separate client, so it does not take CPU from the WAF. Its traffic crosses the WireGuard VPN, which adds latency and jitter to every request. Both the WAF path and the direct path take the same route, so the overhead (WAF − direct) remains comparable, but absolute latencies include the VPN and are not comparable with a LAN or loopback measurement. Resource sampling starts when the operator presses Enter, so its window can be offset from the wrk run by a second or two. Do not run other load on either host during a measurement.
 
 ### 9.3 WordPress false positives without CRS exclusions
 
@@ -350,8 +347,7 @@ The lab overrides every CRS test's `Host` header to route it to `ftw.local`, and
     "valid": true,
     "config": {
       "threads": 2, "connections": 20, "duration": "30s",
-      "mode": "off-host", "client_ssh": "monte@10.99.99.30",
-      "wrk_version": "wrk 4.2.0 [kqueue] Copyright (C) 2012 Will Glozer",
+      "mode": "manual", "wrk_image": null, "wrk_version": null,
       "waf_url": "http://10.99.99.20:8081/", "direct_url": "http://10.99.99.20:18080/"
     }
   },

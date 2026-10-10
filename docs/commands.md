@@ -120,16 +120,15 @@ git submodule update --init --recursive          # CRS v4.25.0
 cp docker/.env.example docker/.env
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 
-# Full evaluation: PL1 then PL2, all three tests each, wrk on the load client
-SERVER_ADDR=10.99.99.20 CLIENT_ADDR=10.99.99.30
+# Full evaluation: PL1 then PL2, all three tests each, wrk started by hand on the load client
+SERVER_ADDR=10.99.99.20
 LAB_FTW_DIRECT_BIND=$SERVER_ADDR make -C benchmarks lab-up
-make -C benchmarks eval-sweep RUN_ID=<id> \
-  LOAD_CLIENT_SSH=<user>@$CLIENT_ADDR LOAD_SERVER_ADDR=$SERVER_ADDR
+make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual LOAD_SERVER_ADDR=$SERVER_ADDR
 ```
 
 `eval-sweep` writes results to `benchmarks/results/run-<id>-pl1/` and
-`run-<id>-pl2/`. Without the `LOAD_*` variables it runs `wrk` in a container
-on the same machine (smoke runs only).
+`run-<id>-pl2/`. Without `LOAD_CLIENT=manual` it runs `wrk` in a container on
+the same machine (smoke runs only).
 
 Single steps (`POLICY=pl1|pl2`, default `pl1`):
 
@@ -142,23 +141,25 @@ make -C benchmarks eval-all               # corpus → ftw → load → metrics
 make -C benchmarks results RUN_ID=<id> POLICY=pl2
 ```
 
-Off-host load variables (also accepted by `eval-all` and `eval-sweep`):
+Load-client variables (also accepted by `eval-all` and `eval-sweep`):
 
 | Variable           | Meaning                                                                 |
 | ------------------ | ----------------------------------------------------------------------- |
-| `LOAD_CLIENT_SSH`  | SSH destination of the load client; enables off-host `wrk`              |
+| `LOAD_CLIENT`      | `manual`: wrk is started by hand on a separate client (default `local`: container on the server) |
 | `LOAD_SERVER_ADDR` | Server address the client reaches; WAF URL uses `HAPROXY_HTTP_PORT`, direct URL uses `LAB_FTW_DIRECT_PORT` (18080) |
-| `LOAD_CLIENT_KEY`  | Optional SSH private key for the client                                 |
 | `LOAD_WAF_URL`, `LOAD_DIRECT_URL` | Optional explicit URLs instead of the derived ones       |
 | `LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION` | wrk settings (default 2, 20, 30s)      |
 
-The server must reach the client with key-based SSH (`BatchMode`, no
-password prompt) and the client needs `wrk` (`brew install wrk`). SSH only
-carries the control session, the Lua script and wrk's output; the measured HTTP
-goes from the client to `SERVER_ADDR` over the VPN for both paths. Albedo's
-direct port is published only on `LAB_FTW_DIRECT_BIND` (default `127.0.0.1`);
-restart the lab without it after the evaluation. Do not run other load on
-either host during a measurement.
+With `LOAD_CLIENT=manual`, every load test pauses twice (WAF run, then direct
+run). For each run the server prints the exact `wrk` command. On the client
+(a checkout of the same commit, `brew install wrk`), run it from the repository
+root; press Enter on the server when you start it, so that resource sampling
+covers the WAF run. When wrk finishes, paste its whole output into the server
+terminal; reading stops at the `WRK_SUMMARY` line. Nothing connects to the
+client. The measured HTTP goes from the client to `SERVER_ADDR` over the VPN for
+both paths. Albedo's direct port is published only on `LAB_FTW_DIRECT_BIND`
+(default `127.0.0.1`); restart the lab without it after the evaluation. Do not
+run other load on either host during a measurement.
 
 ## Performance Testing
 
