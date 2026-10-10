@@ -2,7 +2,7 @@ name: guard-proxy
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -123,7 +123,10 @@ services:
       - gp_internal
 
   haproxy:
-    image: haproxy:3.0-alpine
+    # Keep in sync with HAPROXY_DEB_VERSION in src/backend/Dockerfile: the
+    # backend validates generated configs with that HAProxy before this one
+    # loads them.
+    image: haproxy:3.0.29-alpine@sha256:56b887da77428b7a6621e59e480cdbd330cc805c22d3cedb66ceea76ffdea2c6
     user: "0:0"
     command:
       [
