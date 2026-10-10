@@ -132,6 +132,13 @@ haproxy.stats
 # Separate repository — not tracked here.
 thesis/
 
+# ===== Local-only Tooling =====
+# Synthetic screenshot traffic generator: a local demo aid, not shipped code and
+# not evaluation evidence. Kept out of the repository so nothing downstream can
+# mistake generated chart data for observed WAF decisions.
+src/backend/scripts/generate_demo_traffic.py
+src/backend/tests/unit/test_generate_demo_traffic.py
+
 # ===== Keep Empty Directories =====
 !.gitkeep
 notes/github-issues-plan.md
