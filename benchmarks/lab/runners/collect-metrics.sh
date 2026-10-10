@@ -75,12 +75,9 @@ for path in audit_paths:
     seen_paths.add(path)
     audit_events.extend(load_json_lines(path))
 
-block_counts = count_blocks(audit_events)
-blocked_by_vhost = block_counts["by_vhost"]
-blocked_by_scenario = block_counts["by_scenario"]
+blocked_by_scenario = count_blocks(audit_events, run_id)
 if audit_events:
-    print(f"Audit log: found blocks per scenario: {blocked_by_scenario}")
-    print(f"Audit log: found blocks per vhost: {blocked_by_vhost}")
+    print(f"Audit log: blocks of run {run_id} per scenario: {blocked_by_scenario}")
 
 # ── Write aggregated CSV ───────────────────────────────────────────────────
 csv_path = os.path.join(run_dir, "results.csv")
@@ -92,13 +89,14 @@ for s in summaries:
     perf = s.get("performance", {})
     lat  = perf.get("latency_ms", {})
     lat_oh = perf.get("latency_overhead_ms", {})
+    lat_direct = perf.get("baseline_latency_ms", {})
     res  = s.get("resources", {})
     cor  = res.get("coraza", {})
     hap  = res.get("haproxy", {})
 
     vhost = s.get("target_vhost", "")
     scenario = s.get("scenario", "")
-    blocked = blocked_by_scenario.get(scenario, blocked_by_vhost.get(vhost, ""))
+    blocked = blocked_by_scenario.get(scenario, 0)
 
     row = {
         "run_id":             run_id,
@@ -109,19 +107,15 @@ for s in summaries:
         "tpr":                det.get("tpr", ""),
         "fpr":                det.get("fpr", ""),
         "crs_conformance_rate": det.get("crs_conformance_rate", ""),
+        "crs_run":            det.get("crs_run", ""),
         "crs_passed":         det.get("crs_passed", ""),
         "crs_failed":         det.get("crs_failed", ""),
-        "expected_block_tests": det.get("expected_block_tests", ""),
-        "expected_allow_tests": det.get("expected_allow_tests", ""),
+        "crs_excluded":       det.get("crs_excluded", ""),
         "tp":                 det.get("true_positive", ""),
         "fn":                 det.get("false_negative", ""),
         "tn":                 det.get("true_negative", ""),
         "fp":                 det.get("false_positive", ""),
         "corpus_cases":       det.get("total_cases", ""),
-        "zap_total_alerts":    det.get("total_alerts", ""),
-        "zap_attack_alerts":   det.get("attack_severity_alerts", ""),
-        "nuclei_findings":    det.get("total_findings", ""),
-        "nuclei_waf_relevant_findings": det.get("waf_relevant_findings", ""),
         "waf_blocks_from_log":  blocked,
         "rps_waf":            perf.get("rps", ""),
         "rps_direct":         perf.get("baseline_rps", ""),
@@ -129,15 +123,17 @@ for s in summaries:
         "lat_p50_ms":         lat.get("p50", ""),
         "lat_p95_ms":         lat.get("p95", ""),
         "lat_p99_ms":         lat.get("p99", ""),
+        "lat_direct_p50_ms":  lat_direct.get("p50", ""),
+        "lat_direct_p95_ms":  lat_direct.get("p95", ""),
+        "lat_direct_p99_ms":  lat_direct.get("p99", ""),
         "lat_oh_p50_ms":      lat_oh.get("p50", ""),
         "lat_oh_p95_ms":      lat_oh.get("p95", ""),
         "lat_oh_p99_ms":      lat_oh.get("p99", ""),
         "load_waf_errors":    perf.get("waf_errors", ""),
         "load_direct_errors": perf.get("baseline_errors", ""),
-        # Non-zero: the target crashed mid-run, so this row's load numbers
-        # are invalid and must be discarded.
-        "load_waf_target_restarts": perf.get("waf_target_restarts", ""),
-        "load_direct_target_restarts": perf.get("baseline_target_restarts", ""),
+        # False: errors on either path, so this row's load numbers are not a
+        # valid overhead measurement.
+        "load_valid":         perf.get("valid", ""),
         "coraza_mem_mb_peak": cor.get("mem_mb_peak", ""),
         "coraza_cpu_pct_avg": cor.get("cpu_pct_avg", ""),
         "haproxy_mem_mb_peak": hap.get("mem_mb_peak", ""),
@@ -157,7 +153,7 @@ report = {
     "run_id": run_id,
     "scenarios": len(summaries),
     "summaries": summaries,
-    "audit_log_blocks": blocked_by_vhost,
+    "audit_log_blocks": blocked_by_scenario,
 }
 with open(report_path, "w") as f:
     json.dump(report, f, indent=2)

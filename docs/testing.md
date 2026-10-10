@@ -6,8 +6,8 @@
 |-------|----------|-------|---------------|
 | **Unit** (many, fast) | `src/backend/tests/unit/` | pytest, Vitest | >80% |
 | **Integration** (some) | `src/backend/tests/integration/` | pytest, Docker | Key flows |
-| **Security** | `benchmarks/lab/` | tagged corpus, go-ftw, OWASP ZAP, Nuclei | Configuration-specific WAF evidence |
-| **Performance** | `benchmarks/lab/` | wrk (WAF vs direct) | RPS guardrail: <20% degradation |
+| **Security** | `benchmarks/lab/` | tagged corpus, go-ftw | Configuration-specific WAF evidence |
+| **Performance** | `benchmarks/lab/` | wrk (WAF vs direct) | Latency overhead guardrail: p50 ≤ 10 ms |
 
 ## WAF Testing
 
@@ -15,9 +15,9 @@
 
 Security metrics are descriptive and configuration-specific. TP/FN/TN/FP are
 computed only for the tagged labeled corpus in `benchmarks/payloads/`. go-ftw
-reports CRS conformance, while ZAP and Nuclei provide supplemental scanner
-evidence. The only soft lab guardrail is RPS degradation under the documented
-wrk workload.
+reports CRS conformance (share of CRS regression tests whose expected rule IDs
+fire or stay silent). The only soft lab guardrail is the p50 latency overhead
+(≤ 10 ms) under the documented wrk workload.
 
 ### End-to-End Smoke
 
@@ -58,7 +58,8 @@ nightly smoke workflow. Normal backend pytest runs exclude tests marked `e2e`.
 
 ## Evaluation Lab (thesis M6)
 
-Full WAF evaluation with real target apps plus the CRS Albedo backend:
+Full WAF evaluation with two targets: WordPress (`wp.local`, tagged corpus) and
+the CRS Albedo backend (`ftw.local`, go-ftw and load test):
 
 ```sh
 # Prerequisites
@@ -71,7 +72,7 @@ git submodule update --init --recursive
 # Bring up the lab
 make eval-up
 
-# Run all scenarios (ftw → corpus → zap → nuclei → load → metrics)
+# Run all three tests (corpus → ftw → load → metrics)
 make eval-all
 
 # View results
