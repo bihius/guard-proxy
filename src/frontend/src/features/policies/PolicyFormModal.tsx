@@ -289,117 +289,117 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
           </div>
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
-            <h3 className="text-sm font-semibold text-foreground">Traffic limits</h3>
-            <Label
-              className={cn(
-                "flex cursor-pointer items-center gap-2",
-                ddosProtectionEnabled && "text-foreground",
-              )}
-            >
-              <Checkbox
-                checked={ddosProtectionEnabled}
-                onChange={(e) => {
-                  setDdosProtectionEnabled(e.target.checked);
-                  if (!e.target.checked) setAutoBanEnabled(false);
-                }}
-              />
-              DDoS protection
-              <InfoTooltip label="Enable per-vhost request-rate limiting and connection throttling in the generated HAProxy config." />
-            </Label>
+        <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Traffic limits</h3>
+          <Label
+            className={cn(
+              "flex cursor-pointer items-center gap-2",
+              ddosProtectionEnabled && "text-foreground",
+            )}
+          >
+            <Checkbox
+              checked={ddosProtectionEnabled}
+              onChange={(e) => {
+                setDdosProtectionEnabled(e.target.checked);
+                if (!e.target.checked) setAutoBanEnabled(false);
+              }}
+            />
+            DDoS protection
+            <InfoTooltip label="Enable per-vhost request-rate limiting and connection throttling in the generated HAProxy config." />
+          </Label>
 
-            {ddosProtectionEnabled && (
-              <div className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="policy-rate-limit-requests">Rate limit (requests)</Label>
-                    <Input
-                      id="policy-rate-limit-requests"
-                      type="number"
-                      required
-                      min={1}
-                      value={rateLimitRequests}
-                      onChange={(e) => setRateLimitRequests(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="policy-rate-limit-window">Rate limit window (seconds)</Label>
-                    <Input
-                      id="policy-rate-limit-window"
-                      type="number"
-                      required
-                      min={1}
-                      max={3600}
-                      value={rateLimitWindowSeconds}
-                      onChange={(e) => setRateLimitWindowSeconds(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="policy-max-connections">Max connections per IP</Label>
-                    <Input
-                      id="policy-max-connections"
-                      type="number"
-                      required
-                      min={1}
-                      value={maxConnectionsPerIp}
-                      onChange={(e) => setMaxConnectionsPerIp(e.target.value)}
-                    />
-                  </div>
+          {ddosProtectionEnabled && (
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="policy-rate-limit-requests">Rate limit (requests)</Label>
+                  <Input
+                    id="policy-rate-limit-requests"
+                    type="number"
+                    required
+                    min={1}
+                    value={rateLimitRequests}
+                    onChange={(e) => setRateLimitRequests(e.target.value)}
+                  />
                 </div>
 
-                <div className="space-y-3 border-t border-border pt-3">
-                  <Label
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2",
-                      autoBanEnabled && "text-foreground",
-                    )}
-                  >
-                    <Checkbox
-                      checked={autoBanEnabled}
-                      onChange={(e) => setAutoBanEnabled(e.target.checked)}
-                    />
-                    Automatic IP banning
-                    <InfoTooltip label="Ban a source IP after repeated rate-limit or connection-limit violations. The ban lifts automatically once the IP stays quiet for the ban duration." />
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="policy-rate-limit-window">Rate limit window (seconds)</Label>
+                  <Input
+                    id="policy-rate-limit-window"
+                    type="number"
+                    required
+                    min={1}
+                    max={3600}
+                    value={rateLimitWindowSeconds}
+                    onChange={(e) => setRateLimitWindowSeconds(e.target.value)}
+                  />
+                </div>
 
-                  {autoBanEnabled && (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="policy-ban-threshold">Ban threshold (violations)</Label>
-                        <Input
-                          id="policy-ban-threshold"
-                          type="number"
-                          required
-                          min={1}
-                          value={banThreshold}
-                          onChange={(e) => setBanThreshold(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label htmlFor="policy-ban-duration">Ban duration (seconds)</Label>
-                        <Input
-                          id="policy-ban-duration"
-                          type="number"
-                          required
-                          min={1}
-                          max={86400}
-                          value={banDurationSeconds}
-                          onChange={(e) => setBanDurationSeconds(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="policy-max-connections">Max connections per IP</Label>
+                  <Input
+                    id="policy-max-connections"
+                    type="number"
+                    required
+                    min={1}
+                    value={maxConnectionsPerIp}
+                    onChange={(e) => setMaxConnectionsPerIp(e.target.value)}
+                  />
                 </div>
               </div>
-            )}
-          </section>
 
-          <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
-            <h3 className="text-sm font-semibold text-foreground">Country filtering</h3>
+              <div className="space-y-4 border-t border-border pt-4">
+                <Label
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2",
+                    autoBanEnabled && "text-foreground",
+                  )}
+                >
+                  <Checkbox
+                    checked={autoBanEnabled}
+                    onChange={(e) => setAutoBanEnabled(e.target.checked)}
+                  />
+                  Automatic IP banning
+                  <InfoTooltip label="Ban a source IP after repeated rate-limit or connection-limit violations. The ban lifts automatically once the IP stays quiet for the ban duration." />
+                </Label>
+
+                {autoBanEnabled && (
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="policy-ban-threshold">Ban threshold (violations)</Label>
+                      <Input
+                        id="policy-ban-threshold"
+                        type="number"
+                        required
+                        min={1}
+                        value={banThreshold}
+                        onChange={(e) => setBanThreshold(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="policy-ban-duration">Ban duration (seconds)</Label>
+                      <Input
+                        id="policy-ban-duration"
+                        type="number"
+                        required
+                        min={1}
+                        max={86400}
+                        value={banDurationSeconds}
+                        onChange={(e) => setBanDurationSeconds(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Country filtering</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <Label htmlFor="policy-geoip-mode">GeoIP country filtering</Label>
@@ -418,7 +418,9 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
 
             {geoipMode !== "off" && (
               <div className="space-y-1.5">
-                <Label htmlFor="policy-geoip-countries">Country codes</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="policy-geoip-countries">Country codes</Label>
+                </div>
                 <Input
                   id="policy-geoip-countries"
                   type="text"
@@ -428,8 +430,8 @@ export function PolicyFormModal(props: PolicyFormModalProps) {
                 />
               </div>
             )}
-          </section>
-        </div>
+          </div>
+        </section>
       </form>
     </Modal>
   );
