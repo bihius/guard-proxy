@@ -323,6 +323,54 @@ def test_config_apply_keeps_serving_traffic_without_503(
     _wait_for_status(compose_stack, 503, "request with Coraza stopped")
 
 
+@pytest.mark.e2e
+def test_moving_a_vhost_to_a_new_policy_keeps_serving_traffic(
+    compose_stack: ComposeStack,
+) -> None:
+    """Neither the new nor the dropped policy may be unknown to Coraza mid-apply.
+
+    The vhost's new policy is a Coraza application HAProxy starts sending
+    right after its reload, and the old one is dropped from Coraza by the same
+    release. Reloading HAProxy before Coraza knew the new application answered
+    every request to the vhost with 503 (spoe-processing-error).
+    """
+    token = _login(compose_stack)
+    _create_policy_with_vhost(compose_stack, token, "Original policy")
+    _apply_config(compose_stack, token)
+    _wait_for_status(compose_stack, 200, "benign request before the switch")
+    vhosts = _api_json(compose_stack, "GET", "/vhosts", token=token)
+    vhost_id = vhosts["items"][0]["id"]
+
+    with _probe_traffic(compose_stack) as probe:
+        replacement = _api_json(
+            compose_stack,
+            "POST",
+            "/policies",
+            token=token,
+            expected_status=201,
+            payload={
+                "name": "Replacement policy",
+                "paranoia_level": 1,
+                "inbound_anomaly_threshold": 5,
+                "outbound_anomaly_threshold": 4,
+                "enforcement_mode": "block",
+            },
+        )
+        _api_json(
+            compose_stack,
+            "PATCH",
+            f"/vhosts/{vhost_id}",
+            token=token,
+            payload={"policy_id": replacement["id"]},
+        )
+        _apply_config(compose_stack, token)
+        time.sleep(3)
+
+    assert len(probe.results) > 20, f"probe sent too few requests: {probe.results}"
+    failures = [result for result in probe.results if result != 200]
+    assert not failures, f"traffic was interrupted during apply: {failures}"
+
+
 @dataclass
 class TrafficProbe:
     results: list[int | str] = field(default_factory=list)

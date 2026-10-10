@@ -82,6 +82,11 @@ class Settings(EnvFileSettings):
     # Log level written into the generated coraza-spoa.yaml (debug, info,
     # warn, error). The debug compose overlay sets CORAZA_LOG_LEVEL=debug.
     coraza_log_level: Literal["debug", "info", "warn", "error"] = "info"
+    # coraza-spoa as HAProxy reaches it. Config apply waits up to the timeout
+    # for Coraza to load new WAF policies before reloading HAProxy.
+    coraza_spoa_host: str = "coraza"
+    coraza_spoa_port: int = 9000
+    coraza_reload_timeout_seconds: int = 30
 
     # GeoIP country filtering (issue #175). The database is downloaded from
     # ip66.dev (free, no license key, rebuilt daily upstream) and refreshed

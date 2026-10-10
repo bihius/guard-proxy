@@ -95,12 +95,23 @@ machine-readable degraded reason header.
    generated `coraza-spoa.yaml` has no `default_application`, so a name
    Coraza does not know fails the SPOE call and HAProxy answers `503`
    instead of inspecting the request with another vhost's policy.
+7. Because of that, `POST /config/apply` switches Coraza and HAProxy in an
+   order where HAProxy never sends a name Coraza has not loaded. When a
+   release adds applications, the backend swaps `current`, waits until
+   `coraza-spoa` serves every new application (it asks over SPOP the same way
+   HAProxy does, `app/services/coraza_probe.py`), and only then reloads
+   HAProxy. If the release also drops applications, Coraza first gets a
+   bridge release that still contains them and the final release only after
+   HAProxy has reloaded. If Coraza does not load the new applications within
+   `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the apply fails with
+   `coraza_reload_failed` and the previous release stays active.
 
 **Limitations.** Each application compiles the whole CRS rule set, so Coraza's
 memory grows with the number of distinct policies in use (vhosts sharing a
-policy share its application). A vhost that switches to a policy no vhost
-used before gets `503` from the HAProxy reload until Coraza has reloaded
-(about a second plus rule compilation). Path-scoped policy bindings
+policy share its application). Rule changes to applications that already
+exist still reach Coraza about a second after HAProxy reloads (the
+supervisor's poll plus rule compilation); until then they are inspected with
+the previous rules of the same policy. Path-scoped policy bindings
 (`/vhosts/{id}/policy-bindings`) to a policy other than the vhost's own are
 rejected at generation time: HAProxy selects policies per vhost only, and WAF
 events are attributed to the vhost's policy.
