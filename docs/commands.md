@@ -108,32 +108,61 @@ zap-cli quick-scan -s all http://localhost:8080        # OWASP ZAP
 
 ## Evaluation Lab
 
+The lab runs on two hosts connected by a VPN: the lab server
+(`SERVER_ADDR`, thesis lab `10.99.99.20`) runs the stack, both targets, the
+curl corpus and go-ftw; the load client (`CLIENT_ADDR`, thesis lab
+`10.99.99.30`) runs only native `wrk`. See
+[evaluation-plan.md](evaluation-plan.md) for the methodology.
+
 ```bash
-make eval-up       # Start demo stack + lab targets (wp.local, ftw.local)
-make eval-corpus   # Test 1: tagged labeled corpus on wp.local (TP/FN/TN/FP)
-make eval-ftw      # Test 2: CRS regression suite (go-ftw, log mode) on ftw.local
-make eval-load     # Test 3: wrk RPS/latency overhead on ftw.local (WAF vs direct)
-make eval-all      # corpus → ftw → load → metrics
-make eval-results  # Show latest CSV summary
+# On the lab server, once:
+git submodule update --init --recursive          # CRS v4.25.0
+cp docker/.env.example docker/.env
+cp benchmarks/lab/.env.example benchmarks/lab/.env
+
+# Full evaluation: PL1 then PL2, all three tests each, wrk on the load client
+SERVER_ADDR=10.99.99.20 CLIENT_ADDR=10.99.99.30
+LAB_FTW_DIRECT_BIND=$SERVER_ADDR make -C benchmarks lab-up
+make -C benchmarks eval-sweep RUN_ID=<id> \
+  LOAD_CLIENT_SSH=<user>@$CLIENT_ADDR LOAD_SERVER_ADDR=$SERVER_ADDR
 ```
+
+`eval-sweep` writes results to `benchmarks/results/run-<id>-pl1/` and
+`run-<id>-pl2/`. Without the `LOAD_*` variables it runs `wrk` in a container
+on the same machine (smoke runs only).
+
+Single steps (`POLICY=pl1|pl2`, default `pl1`):
+
+```bash
+make -C benchmarks set-policy POLICY=pl2  # write the profile into both lab policies
+make -C benchmarks eval-corpus            # Test 1: 139-case corpus on wp.local (TP/FN/TN/FP)
+make -C benchmarks eval-ftw               # Test 2: CRS regression suite (go-ftw, log mode) on ftw.local
+make -C benchmarks eval-load              # Test 3: wrk RPS/latency overhead on ftw.local (WAF vs direct)
+make -C benchmarks eval-all               # corpus → ftw → load → metrics
+make -C benchmarks results RUN_ID=<id> POLICY=pl2
+```
+
+Off-host load variables (also accepted by `eval-all` and `eval-sweep`):
+
+| Variable           | Meaning                                                                 |
+| ------------------ | ----------------------------------------------------------------------- |
+| `LOAD_CLIENT_SSH`  | SSH destination of the load client; enables off-host `wrk`              |
+| `LOAD_SERVER_ADDR` | Server address the client reaches; WAF URL uses `HAPROXY_HTTP_PORT`, direct URL uses `LAB_FTW_DIRECT_PORT` (18080) |
+| `LOAD_CLIENT_KEY`  | Optional SSH private key for the client                                 |
+| `LOAD_WAF_URL`, `LOAD_DIRECT_URL` | Optional explicit URLs instead of the derived ones       |
+| `LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION` | wrk settings (default 2, 20, 30s)      |
+
+The server must reach the client with key-based SSH (`BatchMode`, no
+password prompt) and the client needs `wrk` (`brew install wrk`). SSH only
+carries the control session, the Lua script and wrk's output; the measured HTTP
+goes from the client to `SERVER_ADDR` over the VPN for both paths. Albedo's
+direct port is published only on `LAB_FTW_DIRECT_BIND` (default `127.0.0.1`);
+restart the lab without it after the evaluation. Do not run other load on
+either host during a measurement.
 
 ## Performance Testing
 
 ```bash
 wrk -t4 -c100 -d30s --latency http://localhost:8080/test  # HTTP benchmark
-make eval-load                                              # RPS/latency overhead vs. direct backend
+make -C benchmarks eval-load                               # RPS/latency overhead vs. direct backend
 ```
-
-For a separate load generator, run the stack on the server with the target's
-direct port bound only to the dedicated benchmark interface. For Albedo set
-`LAB_FTW_DIRECT_BIND=10.99.99.20` when bringing up the lab; its baseline port
-is `18080` by default. Run `eval-load` on the server with
-`TARGET_VHOST=ftw.local DIRECT_HOST=ftw-backend DIRECT_PORT=8080`,
-`LOAD_CLIENT_SSH=monte@10.99.99.30`, `LOAD_SERVER_SSH=monte@10.99.99.20`,
-`LOAD_WAF_URL=http://10.99.99.20:8081/` and
-`LOAD_DIRECT_URL=http://10.99.99.20:18080/` (and `LOAD_CLIENT_KEY` if needed).
-Both hosts need reciprocal SSH authentication for script transfer; install
-native `wrk` on the Mac. SSH controls the run but HTTP travels directly over
-the cable for both variants. The target is restarted before each measurement.
-Do not run other generators on either host during the benchmark. Remove the
-direct port binding after the evaluation if it is no longer needed.

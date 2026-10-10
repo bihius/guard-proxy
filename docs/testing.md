@@ -58,34 +58,37 @@ nightly smoke workflow. Normal backend pytest runs exclude tests marked `e2e`.
 
 ## Evaluation Lab (thesis M6)
 
-Full WAF evaluation with two targets: WordPress (`wp.local`, tagged corpus) and
-the CRS Albedo backend (`ftw.local`, go-ftw and load test):
+Full WAF evaluation with two targets — WordPress (`wp.local`) and the CRS
+Albedo backend (`ftw.local`) — and three tests:
+
+| Test | What                                                        | Runs on     | Target      |
+| ---- | ----------------------------------------------------------- | ----------- | ----------- |
+| 1    | Tagged corpus: 39 benign + 50 attacks × (GET `?s=`, POST comment form) = 139 cases | lab server (curl) | `wp.local` |
+| 2    | CRS regression suite, go-ftw in log mode (rule IDs checked) | lab server  | `ftw.local` |
+| 3    | wrk load, WAF vs direct, 8 GET + 2 POST mix                 | load client | `ftw.local` |
+
+Both PL1 and PL2 run in one command; the profiles differ only in paranoia level
+(thresholds 5/4, block mode, no exclusions, rate limiting and GeoIP off). On
+the lab server (`SERVER_ADDR`), with `wrk` on the load client (`CLIENT_ADDR`):
 
 ```sh
 # Prerequisites
-cp docker/.env.example docker/.env
+cp docker/.env.example docker/.env               # must set ADMIN_EMAIL and ADMIN_PASSWORD
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 git submodule update --init --recursive
 
-# Ensure docker/.env has ADMIN_EMAIL and ADMIN_PASSWORD set.
-
-# Bring up the lab
-make eval-up
-
-# Run all three tests (corpus → ftw → load → metrics)
-make eval-all
-
-# View results
-make eval-results
+LAB_FTW_DIRECT_BIND=$SERVER_ADDR make -C benchmarks lab-up
+make -C benchmarks eval-sweep RUN_ID=<id> \
+  LOAD_CLIENT_SSH=<user>@$CLIENT_ADDR LOAD_SERVER_ADDR=$SERVER_ADDR
 ```
 
-See `benchmarks/lab/` for scenario configs and `docs/evaluation-plan.md` for methodology.
+Without the `LOAD_*` variables (and `LAB_FTW_DIRECT_BIND`) the same commands
+run everything on one machine, which is enough for a smoke run. See
+[commands.md](commands.md#evaluation-lab) for the variables and
+[evaluation-plan.md](evaluation-plan.md) for methodology. Keep demo traffic
+generation off during measurements.
 
-For an off-host performance run, keep the stack and target on the server and
-run native `wrk` on a separate client via `LOAD_CLIENT_SSH` and
-`LOAD_SERVER_SSH` (see [commands.md](commands.md#performance-testing)).
-Both WAF and direct paths travel over the direct cable; SSH is used only to launch wrk
-and transfer its Lua script. Keep demo traffic generation off during measurements.
+Unit tests for the metric parsers: `cd benchmarks && python -m pytest tests`.
 
 ## Test Data
 
