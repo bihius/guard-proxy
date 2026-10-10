@@ -11,6 +11,15 @@
 # directly, so any non-2xx response through the WAF is a false positive and
 # makes that run invalid (fast 403s would inflate RPS).
 #
+# Two ways to run wrk:
+#   - local (default): wrk runs in a container on the lab's Docker network.
+#     Load generator and WAF share the host's CPUs. For smoke runs.
+#   - manual: set LOAD_CLIENT=manual and LAB_SERVER_ADDR in benchmarks/lab/.env. The script prints
+#     the wrk command for each run; you start it by hand on the separate load
+#     client and paste its output back here. The measured HTTP traffic goes
+#     from the client to the server's HAProxy port (WAF) and to Albedo's
+#     baseline port (direct). Nothing connects to the client.
+#
 # Samples coraza + haproxy container resource usage during the WAF run.
 #
 # Output:
@@ -23,8 +32,12 @@
 #
 # Usage:
 #   RUN_ID=... bash benchmarks/lab/runners/run-load.sh
-#   RUN_ID=... TARGET_VHOST=ftw.local DIRECT_HOST=ftw-backend DIRECT_PORT=8080 \
-#     bash benchmarks/lab/runners/run-load.sh
+#   RUN_ID=... LOAD_CLIENT=manual bash benchmarks/lab/runners/run-load.sh
+#
+# Manual mode builds the URLs from LAB_SERVER_ADDR (benchmarks/lab/.env), the
+# address Albedo's direct port is also published on:
+#   WAF:    http://<LAB_SERVER_ADDR>:<HAPROXY_HTTP_PORT>/
+#   direct: http://<LAB_SERVER_ADDR>:<LAB_FTW_DIRECT_PORT>/
 
 set -Eeuo pipefail
 : "${RUN_ID:=$(date +%Y%m%d-%H%M%S)}"
@@ -44,52 +57,119 @@ THREADS="${LOAD_THREADS:-2}"
 CONNECTIONS="${LOAD_CONNECTIONS:-20}"
 DURATION="${LOAD_DURATION:-30s}"
 
+LOAD_CLIENT="${LOAD_CLIENT:-local}"
+LAB_SERVER_ADDR="$(env_value LAB_SERVER_ADDR 127.0.0.1)"
+
+case "${LOAD_CLIENT}" in
+  manual)
+    LOAD_MODE="manual"
+    if [[ "${LAB_SERVER_ADDR}" == 127.0.0.1 ]]; then
+      echo "LOAD_CLIENT=manual needs LAB_SERVER_ADDR in benchmarks/lab/.env set to the address the client reaches; restart the lab (make lab-up) after changing it." >&2
+      exit 1
+    fi
+    if [[ ! -t 0 ]]; then
+      echo "LOAD_CLIENT=manual needs an interactive terminal to paste wrk output into." >&2
+      exit 1
+    fi
+    WAF_URL="http://${LAB_SERVER_ADDR}:${HAPROXY_HTTP_PORT}/"
+    DIRECT_URL="http://${LAB_SERVER_ADDR}:$(env_value LAB_FTW_DIRECT_PORT 18080)/"
+    ;;
+  local)
+    LOAD_MODE="local"
+    WAF_URL="http://haproxy:80/"
+    DIRECT_URL="http://${DIRECT_HOST}:${DIRECT_PORT}/"
+    ;;
+  *)
+    echo "Unknown LOAD_CLIENT '${LOAD_CLIENT}' (expected local or manual)." >&2
+    exit 1
+    ;;
+esac
+
 write_manifest
 SCENARIO="load-${TARGET_VHOST}"
 OUT_DIR="$(setup_run_dir "${SCENARIO}")"
 
+if [[ "${LOAD_MODE}" == local ]]; then
+  WRK_VERSION="$(docker run --rm "${WRK_IMAGE}" -v 2>&1 | head -n 1 || true)"
+else
+  WRK_VERSION=""  # wrk's run output does not include its version
+fi
+
 echo "=== Load test: WAF vs direct ==="
 echo "Target vhost : ${TARGET_VHOST}"
-echo "Direct host  : ${DIRECT_HOST}:${DIRECT_PORT}"
+echo "Load client  : ${LOAD_MODE}${WRK_VERSION:+, ${WRK_VERSION}}"
+echo "WAF URL      : ${WAF_URL}"
+echo "Direct URL   : ${DIRECT_URL}"
 echo "Load         : ${THREADS} threads, ${CONNECTIONS} connections, ${DURATION}"
 echo "Output dir   : ${OUT_DIR}"
 echo ""
 
+CORAZA_CONTAINER="$(compose_container_id coraza)"
+HAPROXY_CONTAINER="$(compose_container_id haproxy)"
+
+start_resource_sampling() {
+  if [[ -n "${CORAZA_CONTAINER}" ]]; then
+    sample_container_resources "${CORAZA_CONTAINER}" "${DURATION}" "${OUT_DIR}/resources-coraza.json" &
+    SAMPLER_CORAZA_PID=$!
+  fi
+  if [[ -n "${HAPROXY_CONTAINER}" ]]; then
+    sample_container_resources "${HAPROXY_CONTAINER}" "${DURATION}" "${OUT_DIR}/resources-haproxy.json" &
+    SAMPLER_HAPROXY_PID=$!
+  fi
+}
+
+# run_wrk <case_id> <url> <out_file> [sample]
+# With "sample", coraza/haproxy resource sampling covers this run.
 run_wrk() {
-  local case_id="$1" url="$2" out_file="$3"
-  docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
-    --network "${DOCKER_NETWORK}" \
-    -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
-    -e "LOAD_VHOST=${TARGET_VHOST}" \
-    -e "EVAL_RUN_ID=${RUN_ID}" \
-    -e "EVAL_SCENARIO=${SCENARIO}" \
-    -e "EVAL_CASE=${case_id}" \
-    "${WRK_IMAGE}" \
-    -t "${THREADS}" -c "${CONNECTIONS}" -d "${DURATION}" \
-    -s /benign-mix.lua \
-    --latency \
-    "${url}" \
-    > "${out_file}" 2>&1
+  local case_id="$1" url="$2" out_file="$3" sample="${4:-}"
+  if [[ "${LOAD_MODE}" == local ]]; then
+    [[ -z "${sample}" ]] || start_resource_sampling
+    docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
+      --network "${DOCKER_NETWORK}" \
+      -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
+      -e "LOAD_VHOST=${TARGET_VHOST}" \
+      -e "EVAL_RUN_ID=${RUN_ID}" \
+      -e "EVAL_SCENARIO=${SCENARIO}" \
+      -e "EVAL_CASE=${case_id}" \
+      "${WRK_IMAGE}" \
+      -t "${THREADS}" -c "${CONNECTIONS}" -d "${DURATION}" \
+      -s /benign-mix.lua \
+      --latency \
+      "${url}" \
+      > "${out_file}" 2>&1
+    return
+  fi
+
+  # `env VAR=value cmd` works in bash, zsh and fish alike.
+  echo "On the load client, in a checkout of commit $(git -C "${REPO_ROOT}" rev-parse --short HEAD), run:"
+  echo ""
+  printf '  env LOAD_VHOST=%q EVAL_RUN_ID=%q EVAL_SCENARIO=%q EVAL_CASE=%q \\\n' \
+    "${TARGET_VHOST}" "${RUN_ID}" "${SCENARIO}" "${case_id}"
+  printf '    wrk -t %q -c %q -d %q -s benchmarks/lab/scenarios/load/benign-mix.lua --latency %q\n' \
+    "${THREADS}" "${CONNECTIONS}" "${DURATION}" "${url}"
+  echo ""
+  read -r -p "Press Enter here at the same moment you start wrk on the client... " _
+  [[ -z "${sample}" ]] || start_resource_sampling
+  echo "When wrk has finished, paste its complete output here (reading stops at the WRK_SUMMARY line):"
+  local line
+  : > "${out_file}"
+  while IFS= read -r line; do
+    printf '%s\n' "${line}" >> "${out_file}"
+    [[ "${line}" == *WRK_SUMMARY* ]] && return 0
+  done
+  return 1
+}
+
+wrk_failed() {
+  echo "wrk failed or no WRK_SUMMARY line was received; last lines of $1:" >&2
+  tail -n 5 "$1" >&2
+  exit 1
 }
 
 # ── Run 1: through WAF ─────────────────────────────────────────────────────
 
 echo "--- Run 1: through HAProxy+Coraza ---"
-
-CORAZA_CONTAINER="$(compose_container_id coraza)"
-HAPROXY_CONTAINER="$(compose_container_id haproxy)"
-DURATION_S="${DURATION%s}"
-
-if [[ -n "${CORAZA_CONTAINER}" ]]; then
-  sample_container_resources "${CORAZA_CONTAINER}" "${DURATION_S}" "${OUT_DIR}/resources-coraza.json" &
-  SAMPLER_CORAZA_PID=$!
-fi
-if [[ -n "${HAPROXY_CONTAINER}" ]]; then
-  sample_container_resources "${HAPROXY_CONTAINER}" "${DURATION_S}" "${OUT_DIR}/resources-haproxy.json" &
-  SAMPLER_HAPROXY_PID=$!
-fi
-
-run_wrk wrk-waf "http://haproxy:80/" "${OUT_DIR}/waf.txt"
+run_wrk wrk-waf "${WAF_URL}" "${OUT_DIR}/waf.txt" sample || wrk_failed "${OUT_DIR}/waf.txt"
 
 wait "${SAMPLER_CORAZA_PID:-}" 2>/dev/null || true
 wait "${SAMPLER_HAPROXY_PID:-}" 2>/dev/null || true
@@ -98,9 +178,14 @@ copy_audit_log_snapshot "${OUT_DIR}"
 
 # ── Run 2: direct (WAF bypassed) ───────────────────────────────────────────
 
-echo "--- Run 2: direct to ${DIRECT_HOST}:${DIRECT_PORT} ---"
-run_wrk wrk-direct "http://${DIRECT_HOST}:${DIRECT_PORT}/" "${OUT_DIR}/direct.txt"
+echo "--- Run 2: direct to ${DIRECT_URL} ---"
+run_wrk wrk-direct "${DIRECT_URL}" "${OUT_DIR}/direct.txt" || wrk_failed "${OUT_DIR}/direct.txt"
 echo "Direct run complete. Output: ${OUT_DIR}/direct.txt"
+
+if ! grep -q 'WRK_SUMMARY ' "${OUT_DIR}/waf.txt" || ! grep -q 'WRK_SUMMARY ' "${OUT_DIR}/direct.txt"; then
+  echo "wrk produced no parseable summary; see waf.txt / direct.txt." >&2
+  exit 1
+fi
 
 # ── Parse & compute overhead ───────────────────────────────────────────────
 
@@ -108,7 +193,8 @@ echo "Parsing results..."
 
 # Exported rather than interpolated: the heredoc is quoted ('PY') so its regex
 # backslashes stay intact, which also means shell variables are not expanded.
-export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE
+export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE WRK_VERSION LOAD_MODE \
+  WAF_URL DIRECT_URL
 
 python3 - <<'PY'
 import json
@@ -176,7 +262,12 @@ performance = {
         "threads": int(os.environ["THREADS"]),
         "connections": int(os.environ["CONNECTIONS"]),
         "duration": os.environ["DURATION"],
-        "wrk_image": os.environ["WRK_IMAGE"],
+        "mode": os.environ["LOAD_MODE"],
+        # Manual runs use the client's own wrk build, not the pinned image.
+        "wrk_image": os.environ["WRK_IMAGE"] if os.environ["LOAD_MODE"] == "local" else None,
+        "wrk_version": os.environ["WRK_VERSION"] or None,
+        "waf_url": os.environ["WAF_URL"],
+        "direct_url": os.environ["DIRECT_URL"],
     },
 }
 

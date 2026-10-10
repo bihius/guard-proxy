@@ -23,13 +23,6 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   `postgres` images on their next `docker compose pull`; `postgres` moves
   only within the 16 series, so existing data volumes keep working.
 
-### Fixed
-
-- Policy editor fields stay on aligned rows when DDoS protection, automatic
-  IP banning or country filtering are expanded, and the dashboard's empty
-  "Recent blocks" card matches the height of its neighbours.
-
-## [0.1.0-beta.6] - 2026-10-07
 - The evaluation lab runs three tests on two targets: the tagged corpus on
   WordPress (`wp.local`), go-ftw on Albedo (`ftw.local`), and the wrk load test
   on Albedo. Juice Shop, DVWA, OWASP ZAP and Nuclei are removed: the scanners
@@ -39,9 +32,29 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   every attack payload is sent in a query parameter and in a POST body.
 - The load test targets Albedo instead of Juice Shop, adds POST requests to the
   mix, records direct-path latency, and marks a run with errors as invalid.
+- The PL1 and PL2 lab profiles are fixed in `benchmarks/lab/policy-profiles.sh`
+  and differ only in paranoia level: inbound threshold 5, outbound threshold 4,
+  block mode, rate limiting and GeoIP off. `make set-policy` refuses to run when
+  `benchmarks/lab/.env` still sets other `LAB_POLICY_*`/`LAB_PL2_POLICY_*`
+  values or a lab policy has exclusions, overrides or custom rules, and reads
+  every profile field back after applying it. `summary.json` also records the
+  policy's rate limiting, GeoIP mode and tuning counts.
+- The load test can use a separate client started by hand (`LOAD_CLIENT=manual`):
+  for each run the runner prints the `wrk` command, waits for Enter to start
+  resource sampling, and reads the pasted wrk output. One setting,
+  `LAB_SERVER_ADDR` in `benchmarks/lab/.env` (default `127.0.0.1`), publishes
+  Albedo's baseline port (`LAB_FTW_DIRECT_PORT`, 18080) on the server's address
+  and gives the wrk URLs. `performance.json` records the mode and both URLs.
+- `make eval-sweep` stops at the first failing step and passes the `LOAD_*`
+  variables on to the load runner.
+- Resource samples record the achieved sampling interval, the sample count
+  and the sampled window next to the target interval.
 
 ### Fixed
 
+- Policy editor fields stay on aligned rows when DDoS protection, automatic
+  IP banning or country filtering are expanded, and the dashboard's empty
+  "Recent blocks" card matches the height of its neighbours.
 - Coraza parses JSON and XML request bodies with the matching body processor
   and rejects bodies that fail to parse (rules 200000–200002 and 200006 from
   Coraza's recommended configuration). Before, a JSON body was read as one
@@ -51,9 +64,27 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   status passed without a check, so the reported conformance (99.8 %) did not
   depend on the WAF. Tests for rules above the policy's paranoia level and for
   response rules are excluded and counted separately.
+- Container memory reported in GiB by `docker stats` was recorded as MiB in
+  the load test's resource samples.
 - `make lab-up` installs WordPress. The `wp-cli` command was split across
   lines by YAML folding, so WordPress stayed uninstalled and the corpus hit the
   installer redirect.
+
+## [0.1.0-beta.6] - 2026-10-07
+
+### Fixed
+
+- Config apply no longer answers requests with 503 when it introduces a new
+  WAF policy. Coraza loads a policy's application only after HAProxy had
+  already started sending its name, and coraza-spoa fails closed on an
+  unknown application. Apply now waits until Coraza serves every new
+  application before reloading HAProxy; if Coraza does not load them within
+  `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the previous release is
+  restored and `POST /config/apply` returns the new status
+  `coraza_reload_failed` (HTTP 500). Applications a release drops stay
+  loaded until HAProxy has stopped sending them. An apply that introduces a
+  policy now takes a second or two longer.
+- The CRS compliance benchmark renders go-ftw config values before running.
 
 ## [0.1.0-beta.5] - 2026-10-03
 

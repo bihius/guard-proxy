@@ -145,9 +145,9 @@ Authorization: Bearer jwt-token
 Content-Type: application/json
 
 {
-  "domain": "juice.local",
-  "backend_url": "http://juiceshop:3000",
-  "description": "OWASP Juice Shop",
+  "domain": "wp.local",
+  "backend_url": "http://wordpress:80",
+  "description": "WordPress",
   "ssl_enabled": false,
   "is_active": true,
   "policy_id": 1
@@ -440,8 +440,8 @@ pokazac:
 
 - logowanie do panelu,
 - utworzenie polityki WAF,
-- utworzenie vhostow kierujacych na aplikacje Juice Shop, DVWA i WordPress,
-- routing po naglowku `Host` (`juice.local`, `dvwa.local`, `wp.local`),
+- utworzenie vhostow kierujacych na WordPress i Albedo,
+- routing po naglowku `Host` (`wp.local`, `ftw.local`),
 - zastosowanie konfiguracji,
 - poprawne przepuszczenie zwyklego ruchu HTTP,
 - dzialanie HAProxy, Coraza i backendu jako jednego systemu.

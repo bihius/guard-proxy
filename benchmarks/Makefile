@@ -12,12 +12,16 @@ TARGET_VHOST ?=
 DIRECT_HOST  ?= ftw-backend
 DIRECT_PORT  ?= 8080
 
-# POLICY names the settings profile the run uses: pl1 (baseline, default) or pl2
-# (high-paranoia sweep, see benchmarks/lab/.env.example LAB_PL2_POLICY_*). Every
-# lab vhost has its own policy; `make set-policy` writes the profile into it.
+# POLICY names the settings profile the run uses: pl1 (baseline, default) or pl2.
+# The two differ only in paranoia level (see benchmarks/lab/policy-profiles.sh).
+# Every lab vhost has its own policy; `make set-policy` writes the profile into it.
 POLICY       ?= pl1
 # Each policy pass gets its own results directory: run-<RUN_ID>-pl1 / run-<RUN_ID>-pl2.
 EFFECTIVE_RUN_ID := $(RUN_ID)-$(POLICY)
+
+# Load-client settings (see benchmarks/lab/runners/run-load.sh). Exported so
+# that eval-load, eval-all and eval-sweep pass them on to the load runner.
+export LOAD_CLIENT LOAD_THREADS LOAD_CONNECTIONS LOAD_DURATION
 
 .PHONY: lab-up lab-down lab-clean \
         eval-ftw eval-corpus eval-load eval-metrics eval-all \
@@ -90,8 +94,9 @@ set-policy:
 
 ## Run the full eval suite at PL1, then switch to PL2 and run it again, sharing
 ## one base RUN_ID. Produces run-<id>-pl1/ and run-<id>-pl2/ for side-by-side comparison.
+## Stops at the first failing step. LOAD_CLIENT=manual: wrk is started by hand on a separate client.
 eval-sweep:
-	@base_run_id=$(RUN_ID); \
+	@set -e; base_run_id=$(RUN_ID); \
 	echo "==> PL1 pass (run-$${base_run_id}-pl1)"; \
 	$(MAKE) set-policy POLICY=pl1; \
 	$(MAKE) eval-all RUN_ID=$${base_run_id} POLICY=pl1; \
@@ -143,6 +148,9 @@ help:
 	@echo "                      that vhost's policy"
 	@echo "  DIRECT_HOST=<name>  Direct-access Docker service name"
 	@echo "  DIRECT_PORT=<port>  Direct-access port (bypasses HAProxy)"
+	@echo "  LOAD_CLIENT=manual           Start wrk by hand on a separate client, paste its output"
+	@echo "  LOAD_THREADS/LOAD_CONNECTIONS/LOAD_DURATION  wrk settings (default 2/20/30s)"
 	@echo ""
 	@echo "Example (PL1 vs PL2 sweep across all tests):"
 	@echo "  make eval-sweep"
+	@echo "  make eval-sweep LOAD_CLIENT=manual   (LAB_SERVER_ADDR set in benchmarks/lab/.env)"
