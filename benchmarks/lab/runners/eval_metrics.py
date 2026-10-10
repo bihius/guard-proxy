@@ -74,10 +74,13 @@ def is_blocked_event(event: dict[str, Any]) -> bool:
     return bool(txn.get("is_interrupted")) or status == BLOCK_STATUS
 
 
-def count_blocks(events: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
-    """Count blocked audit events by vhost and eval scenario."""
+def count_blocks(events: list[dict[str, Any]], run_id: str) -> dict[str, int]:
+    """Count blocked audit events of one run, by eval scenario.
 
-    by_vhost: dict[str, int] = {}
+    The Coraza audit log is cumulative across runs, so events are matched on
+    the ``X-GP-Eval-Run`` tag; untagged and other runs' events are ignored.
+    """
+
     by_scenario: dict[str, int] = {}
     seen: set[str] = set()
     for event in events:
@@ -85,19 +88,12 @@ def count_blocks(events: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
         if event_id in seen:
             continue
         seen.add(event_id)
-        if not is_blocked_event(event):
+        tags = eval_tags(event)
+        if tags.get(EVAL_HEADER_RUN) != run_id or not is_blocked_event(event):
             continue
-        txn = _as_dict(event.get("transaction"))
-        request = _as_dict(txn.get("request"))
-        headers = request_headers(event)
-        vhost = headers.get("host", "unknown").split(":", 1)[0].lower()
-        by_vhost[vhost] = by_vhost.get(vhost, 0) + 1
-        scenario = headers.get(EVAL_HEADER_SCENARIO)
-        if scenario:
-            by_scenario[scenario] = by_scenario.get(scenario, 0) + 1
-        elif request.get("uri"):
-            by_scenario.setdefault("untagged", 0)
-    return {"by_vhost": by_vhost, "by_scenario": by_scenario}
+        scenario = tags.get(EVAL_HEADER_SCENARIO, "untagged")
+        by_scenario[scenario] = by_scenario.get(scenario, 0) + 1
+    return by_scenario
 
 
 def summarize_tagged_corpus(
@@ -181,152 +177,196 @@ def summarize_tagged_corpus(
 
 
 def parse_go_ftw_result(raw: dict[str, Any]) -> dict[str, Any]:
-    """Normalize supported go-ftw JSON output shapes."""
+    """Normalize go-ftw ``-o json`` output into passed/failed/ignored ID lists."""
 
-    if "success" in raw or "failed" in raw:
-        success = _string_list(raw.get("success"))
-        failed = _string_list(raw.get("failed"))
-        skipped = _string_list(raw.get("skipped"))
-        return {
-            "passed_ids": success,
-            "failed_ids": failed,
-            "skipped_ids": skipped,
-            "run": _coerce_int(raw.get("run")) or len(success) + len(failed),
-            "passed": len(success),
-            "failed": len(failed),
-            "skipped": len(skipped),
-        }
-
-    passed = _coerce_int(raw.get("pass")) or 0
-    failed_count = _coerce_int(raw.get("fail")) or 0
-    skipped = _coerce_int(raw.get("skip")) or 0
-    return {
-        "passed_ids": [],
-        "failed_ids": [],
-        "skipped_ids": [],
-        "run": passed + failed_count,
-        "passed": passed,
-        "failed": failed_count,
-        "skipped": skipped,
-    }
+    passed = _string_list(raw.get("success"))
+    failed = _string_list(raw.get("failed"))
+    ignored = _string_list(raw.get("ignored"))
+    return {"passed_ids": passed, "failed_ids": failed, "ignored_ids": ignored}
 
 
-def classify_ftw_tests(root: str | Path) -> dict[str, dict[str, Any]]:
-    """Classify CRS FTW tests by expected response status from YAML files."""
+def crs_rule_paranoia_levels(rules_dir: str | Path) -> dict[str, int]:
+    """Map every CRS rule ID to the paranoia level at which it is active.
+
+    Each rule carries a ``paranoia-level/N`` tag. Rules without one inherit the
+    level of the ``TX:DETECTION_PARANOIA_LEVEL "@lt N"`` gate above them in
+    their file (the gate skips everything below it until PL N is enabled).
+    """
+
+    levels: dict[str, int] = {}
+    for path in sorted(Path(rules_dir).glob("*.conf")):
+        gate_level = 1
+        for block in _directive_blocks(path):
+            gate = re.search(r'DETECTION_PARANOIA_LEVEL\s+"@lt\s+(\d)"', block)
+            if gate:
+                gate_level = int(gate.group(1))
+                continue
+            rule_id = re.search(r"\bid:(\d+)", block)
+            if not rule_id:
+                continue
+            tag = re.search(r"paranoia-level/(\d)", block)
+            levels[rule_id.group(1)] = int(tag.group(1)) if tag else gate_level
+    return levels
+
+
+def classify_ftw_tests(tests_dir: str | Path) -> dict[str, dict[str, Any]]:
+    """Read every CRS regression test and record what it expects.
+
+    ``expected`` is ``"match"`` when the test expects its rule to fire
+    (``expect_ids``/``log_contains``, or a 403 status), ``"no_match"`` when
+    it expects the rule to stay silent (``no_expect_ids``/``no_log_contains``),
+    and ``"other"`` when it only asserts another HTTP status (typically a 400
+    from the web server for a malformed request).
+    ``phase`` is ``"request"`` or ``"response"`` from the rule file directory.
+    """
 
     classifications: dict[str, dict[str, Any]] = {}
-    base = Path(root)
-    if not base.exists():
-        return classifications
+    base = Path(tests_dir)
     for path in sorted(base.rglob("*.y*ml")):
-        classifications.update(_classify_ftw_yaml(path))
+        phase = "response" if path.parent.name.startswith("RESPONSE-") else "request"
+        for test_id, expected in _classify_ftw_yaml(path).items():
+            classifications[test_id] = {
+                "rule_id": path.stem,
+                "expected": expected,
+                "phase": phase,
+            }
     return classifications
+
+
+def ftw_exclusions(
+    classifications: dict[str, dict[str, Any]],
+    rule_levels: dict[str, int],
+    paranoia: int,
+) -> dict[str, str]:
+    """Return go-ftw ``ignore`` entries (test-ID regex -> reason).
+
+    Two kinds of tests cannot pass in this setup by design, so they are left
+    out instead of counted as failures:
+
+    - rules above the policy's paranoia level are not loaded at all;
+    - response rules never run, because the SPOA only inspects requests
+      (``response_check: false`` in the generated coraza-spoa.yaml).
+    """
+
+    reasons: dict[str, str] = {}
+    for info in classifications.values():
+        rule_id = info["rule_id"]
+        if info["phase"] == "response":
+            reasons[rule_id] = "response rule: Guard Proxy inspects requests only"
+        elif rule_levels.get(rule_id, 1) > paranoia:
+            reasons[rule_id] = (
+                f"rule active from PL{rule_levels[rule_id]}, policy runs PL{paranoia}"
+            )
+    return {f"^{rule_id}-": reason for rule_id, reason in sorted(reasons.items())}
 
 
 def summarize_ftw(
     raw: dict[str, Any],
     classifications: dict[str, dict[str, Any]],
+    exclusions: dict[str, str],
 ) -> dict[str, Any]:
-    """Build a CRS conformance summary without estimating TP/FP ratios."""
+    """Summarize a log-mode go-ftw run: pass rate split by test expectation."""
 
     result = parse_go_ftw_result(raw)
     passed_ids = result["passed_ids"]
     failed_ids = result["failed_ids"]
-    run = result["run"]
-    passed = result["passed"]
-    failed = result["failed"]
+    run = len(passed_ids) + len(failed_ids)
 
-    expected_block = expected_allow = expected_unknown = 0
-    passed_expected_block = failed_expected_block = 0
-    passed_expected_allow = failed_expected_allow = 0
+    by_expected: dict[str, dict[str, int]] = {
+        "match": {"passed": 0, "failed": 0},
+        "no_match": {"passed": 0, "failed": 0},
+        "other": {"passed": 0, "failed": 0},
+    }
+    for outcome, ids in (("passed", passed_ids), ("failed", failed_ids)):
+        for test_id in ids:
+            expected = classifications.get(test_id, {}).get("expected", "other")
+            by_expected[expected][outcome] += 1
 
-    for test_id in [*passed_ids, *failed_ids]:
-        expected = classifications.get(test_id, {}).get("expected", "unknown")
-        is_passed = test_id in passed_ids
-        if expected == "block":
-            expected_block += 1
-            if is_passed:
-                passed_expected_block += 1
-            else:
-                failed_expected_block += 1
-        elif expected == "allow":
-            expected_allow += 1
-            if is_passed:
-                passed_expected_allow += 1
-            else:
-                failed_expected_allow += 1
-        else:
-            expected_unknown += 1
+    excluded_by_reason: dict[str, int] = {}
+    for test_id in result["ignored_ids"]:
+        reason = _exclusion_reason(test_id, exclusions)
+        excluded_by_reason[reason] = excluded_by_reason.get(reason, 0) + 1
 
-    conformance = passed / run if run else None
+    conformance = len(passed_ids) / run if run else None
     return {
         "crs_conformance_rate": round(conformance, 4) if conformance is not None else None,
-        "crs_passed": passed,
-        "crs_failed": failed,
         "crs_run": run,
-        "skipped": result["skipped"],
-        "expected_block_tests": expected_block,
-        "expected_allow_tests": expected_allow,
-        "expected_unknown_tests": expected_unknown,
-        "passed_expected_block": passed_expected_block,
-        "failed_expected_block": failed_expected_block,
-        "passed_expected_allow": passed_expected_allow,
-        "failed_expected_allow": failed_expected_allow,
-        "failed_ids": failed_ids[:50],
+        "crs_passed": len(passed_ids),
+        "crs_failed": len(failed_ids),
+        "crs_excluded": len(result["ignored_ids"]),
+        "excluded_by_reason": dict(sorted(excluded_by_reason.items())),
+        "expect_match_passed": by_expected["match"]["passed"],
+        "expect_match_failed": by_expected["match"]["failed"],
+        "expect_no_match_passed": by_expected["no_match"]["passed"],
+        "expect_no_match_failed": by_expected["no_match"]["failed"],
+        "expect_other_passed": by_expected["other"]["passed"],
+        "expect_other_failed": by_expected["other"]["failed"],
+        "failed_ids": failed_ids,
         "note": (
-            "go-ftw reports CRS regression conformance. Expected block/allow "
-            "classes are derived from CRS YAML output.status; no TPR/FPR is estimated."
+            "go-ftw in log mode: a test passes when the rule IDs it expects fire "
+            "(or stay silent) in the Coraza log, plus any status it asserts. "
+            "No TPR/FPR is estimated."
         ),
     }
 
 
-def _classify_ftw_yaml(path: Path) -> dict[str, dict[str, Any]]:
+def _exclusion_reason(test_id: str, exclusions: dict[str, str]) -> str:
+    for pattern, reason in exclusions.items():
+        if re.match(pattern, test_id):
+            return "response rule" if reason.startswith("response") else "above paranoia level"
+    return "unlisted"
+
+
+def _directive_blocks(path: Path) -> list[str]:
+    """Split a SecLang file into directives, joining backslash continuations."""
+
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if not current and (not stripped or stripped.startswith("#")):
+            continue
+        current.append(stripped.rstrip("\\"))
+        if not stripped.endswith("\\"):
+            blocks.append(" ".join(current))
+            current = []
+    if current:
+        blocks.append(" ".join(current))
+    return blocks
+
+
+def _classify_ftw_yaml(path: Path) -> dict[str, str]:
     rule_id = path.stem
-    cases: dict[str, dict[str, Any]] = {}
+    expectations: dict[str, set[str]] = {}
     current_id: str | None = None
-    implicit_index = 0
-    in_output = False
-    output_indent = 0
 
     for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw_line.split("#", 1)[0].rstrip()
-        if not line.strip():
-            continue
-        indent = len(line) - len(line.lstrip(" "))
-        stripped = line.strip()
-
-        test_id_match = re.match(r"(?:-\s*)?test_id:\s*['\"]?([^'\"\s]+)", stripped)
+        stripped = raw_line.strip()
+        test_id_match = re.match(r"-?\s*test_id:\s*['\"]?(\w+)", stripped)
         if test_id_match:
             current_id = f"{rule_id}-{test_id_match.group(1)}"
-            cases.setdefault(current_id, {"status": None, "expected": "unknown"})
-            in_output = False
+            expectations.setdefault(current_id, set())
             continue
-
-        if current_id is None and re.match(r"(?:-\s*)?test_title:\s*", stripped):
-            implicit_index += 1
-            current_id = f"{rule_id}-{implicit_index}"
-            cases.setdefault(current_id, {"status": None, "expected": "unknown"})
-            in_output = False
+        if current_id is None:
             continue
-
-        if stripped == "output:" and current_id is not None:
-            in_output = True
-            output_indent = indent
+        key = re.match(r"(no_expect_ids|expect_ids|no_log_contains|log_contains|status):\s*(.*)", stripped)
+        if not key:
             continue
+        name, value = key.group(1), key.group(2).strip()
+        if name == "status":
+            if value.strip("'\"").startswith(str(BLOCK_STATUS)):
+                expectations[current_id].add("match")
+        elif value in ("[]", "''", '""'):
+            continue
+        elif name.startswith("no_"):
+            expectations[current_id].add("no_match")
+        else:
+            expectations[current_id].add("match")
 
-        if in_output and indent <= output_indent:
-            in_output = False
-
-        status_match = re.match(r"status:\s*['\"]?(\d{3})", stripped)
-        if in_output and current_id is not None and status_match:
-            status = int(status_match.group(1))
-            cases[current_id] = {
-                "status": status,
-                "expected": "block" if status == BLOCK_STATUS else "allow",
-                "path": str(path),
-            }
-
-    return cases
+    return {
+        test_id: "match" if "match" in found else "no_match" if "no_match" in found else "other"
+        for test_id, found in expectations.items()
+    }
 
 
 def _as_dict(value: Any) -> dict[str, Any]:

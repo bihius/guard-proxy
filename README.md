@@ -16,7 +16,7 @@ Developed as a master's thesis project at Wrocław University DSW.
 - **One-click config deployment** — `POST /config/apply` renders HAProxy/Coraza config from the database, validates it, atomically swaps it in, reloads HAProxy, and rolls back on failure. Deployment status is shown live on the dashboard.
 - **WAF event logs** — a sidecar log shipper ingests Coraza audit events into PostgreSQL; the panel provides filtering, pagination, and event detail views.
 - **Authentication and roles** — JWT-based login with admin/viewer roles and CLI user management.
-- **Evaluation lab** — reproducible benchmark environment (Juice Shop, DVWA, WordPress, go-ftw) for measuring WAF effectiveness and overhead.
+- **Evaluation lab** — reproducible benchmark environment (WordPress, CRS Albedo backend) with three tests: tagged attack/benign corpus, CRS regression suite (go-ftw), and WAF-vs-direct load test.
 
 ## Architecture
 

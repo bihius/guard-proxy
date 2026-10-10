@@ -22,9 +22,11 @@ load_policy_profile() {
       PROFILE_OUTBOUND_THRESHOLD="$(env_value LAB_POLICY_OUTBOUND_THRESHOLD 4)"
       ;;
     pl2)
+      # Same thresholds as pl1: only the paranoia level changes, so a PL1 vs
+      # PL2 difference can be attributed to the paranoia level alone.
       PROFILE_PARANOIA="$(env_value LAB_PL2_POLICY_PARANOIA 2)"
-      PROFILE_INBOUND_THRESHOLD="$(env_value LAB_PL2_POLICY_INBOUND_THRESHOLD 3)"
-      PROFILE_OUTBOUND_THRESHOLD="$(env_value LAB_PL2_POLICY_OUTBOUND_THRESHOLD 3)"
+      PROFILE_INBOUND_THRESHOLD="$(env_value LAB_PL2_POLICY_INBOUND_THRESHOLD 5)"
+      PROFILE_OUTBOUND_THRESHOLD="$(env_value LAB_PL2_POLICY_OUTBOUND_THRESHOLD 4)"
       ;;
     *)
       echo "Unknown POLICY '$1' (expected pl1 or pl2)." >&2

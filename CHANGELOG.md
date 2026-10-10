@@ -7,21 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
-## [0.1.0-beta.6] - 2026-10-07
+## [Unreleased]
+
+### Changed
+
+- The evaluation lab runs three tests on two targets: the tagged corpus on
+  WordPress (`wp.local`), go-ftw on Albedo (`ftw.local`), and the wrk load test
+  on Albedo. Juice Shop, DVWA, OWASP ZAP and Nuclei are removed: the scanners
+  gave no TP/FN/TN/FP denominator, and Juice Shop crashed under load.
+- The benign corpus is a set of real WordPress requests, including POST forms,
+  a JSON body, and legitimate text with SQL words, quotes and a code snippet;
+  every attack payload is sent in a query parameter and in a POST body.
+- The load test targets Albedo instead of Juice Shop, adds POST requests to the
+  mix, records direct-path latency, and marks a run with errors as invalid.
 
 ### Fixed
 
-- Config apply no longer answers requests with 503 when it introduces a new
-  WAF policy. Coraza loads a policy's application only after HAProxy had
-  already started sending its name, and coraza-spoa fails closed on an
-  unknown application. Apply now waits until Coraza serves every new
-  application before reloading HAProxy; if Coraza does not load them within
-  `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the previous release is
-  restored and `POST /config/apply` returns the new status
-  `coraza_reload_failed` (HTTP 500). Applications a release drops stay
-  loaded until HAProxy has stopped sending them. An apply that introduces a
-  policy now takes a second or two longer.
-- The CRS compliance benchmark renders go-ftw config values before running.
+- Coraza parses JSON and XML request bodies with the matching body processor
+  and rejects bodies that fail to parse (rules 200000–200002 and 200006 from
+  Coraza's recommended configuration). Before, a JSON body was read as one
+  URL-encoded argument name, so any JSON request was blocked as SQL injection
+  at PL2 and JSON fields were not inspected one by one.
+- go-ftw runs in log mode. In cloud mode every CRS test that asserts no HTTP
+  status passed without a check, so the reported conformance (99.8 %) did not
+  depend on the WAF. Tests for rules above the policy's paranoia level and for
+  response rules are excluded and counted separately.
+- `make lab-up` installs WordPress. The `wp-cli` command was split across
+  lines by YAML folding, so WordPress stayed uninstalled and the corpus hit the
+  installer redirect.
 
 ## [0.1.0-beta.5] - 2026-10-03
 

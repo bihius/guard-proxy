@@ -32,8 +32,6 @@ env_value() {
 
 HAPROXY_HTTP_PORT="$(env_value HAPROXY_HTTP_PORT 8080)"
 BACKEND_HTTP_PORT="$(env_value BACKEND_HTTP_PORT 8000)"
-LAB_JUICESHOP_DOMAIN="$(env_value LAB_JUICESHOP_DOMAIN juice.local)"
-LAB_DVWA_DOMAIN="$(env_value LAB_DVWA_DOMAIN dvwa.local)"
 LAB_WP_DOMAIN="$(env_value LAB_WP_DOMAIN wp.local)"
 LAB_FTW_DOMAIN="$(env_value LAB_FTW_DOMAIN ftw.local)"
 ATTACKER_CPUSET="$(env_value LAB_ATTACKER_CPUSET '')"
@@ -156,9 +154,7 @@ manifest = {
         "haproxy_http_port": int("${HAPROXY_HTTP_PORT}"),
         "lab_env": "${LAB_ENV}",
         "vhosts": {
-            "juiceshop": "${LAB_JUICESHOP_DOMAIN}",
             "ftw": "${LAB_FTW_DOMAIN}",
-            "dvwa": "${LAB_DVWA_DOMAIN}",
             "wordpress": "${LAB_WP_DOMAIN}"
         }
     }

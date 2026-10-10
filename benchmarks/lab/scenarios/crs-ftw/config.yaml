@@ -1,38 +1,37 @@
-# go-ftw configuration for CRS regression suite against guard-proxy.
+# go-ftw configuration for Test 2 (CRS regression suite) against guard-proxy.
 #
-# The OWASP CRS test corpus lives in configs/coraza/crs/tests/regression/tests/
-# (the CRS git submodule). go-ftw replays each labeled test case against the
-# live HAProxy+Coraza stack and reports pass/fail per rule.
+# run-ftw.sh renders this file before use: it substitutes the {{ env "..." }}
+# values and appends a `testoverride.ignore` map for tests that cannot pass in
+# this setup by design (rules above the policy's paranoia level, response
+# rules). Run it through `make eval-ftw`, not by hand.
 #
-# Usage (from repo root):
-#   docker run --rm \
-#     --network guard-proxy_gp_internal \
-#     -v "$(pwd)/configs/coraza/crs/tests/regression/tests:/tests:ro" \
-#     -v "$(pwd)/benchmarks/lab/scenarios/crs-ftw/config.yaml:/config.yaml:ro" \
-#     ghcr.io/coreruleset/go-ftw:latest \
-#     run --config /config.yaml --dir /tests --output json \
-#     > benchmarks/results/run-<RUN_ID>/crs-ftw/raw.json
+# Log mode, not cloud mode. In cloud mode go-ftw only compares HTTP status
+# codes, and a test that asserts no status (most CRS tests only list the rule
+# IDs that must or must not fire) passes without any check. Log mode reads the
+# Coraza error log and checks the rule IDs of every test.
 
-# Cloud mode bases pass/fail on response status instead of direct log-file
-# access. That fits this lab because Coraza audit logs live in a Docker volume
-# copied by the runner after execution, not inside the go-ftw container.
-mode: cloud
+# Coraza's log of matched rules. The lab overlay tees it into this file on the
+# coraza_audit volume, which run-ftw.sh mounts into the go-ftw container.
+logfile: /var/log/coraza/error.log
 
-# Route every CRS test through HAProxy and the registered FTW vhost. Albedo is
-# the backend for ftw.local; it mirrors the CRS project's own test setup.
+# Marker header matched by rule 999999 in
+# benchmarks/lab/coraza/guard-proxy-exceptions.lab.conf. go-ftw sends one
+# marker request before and one after each test and reads only the log lines
+# between the two markers.
+logmarkerheadername: X-GP-FTW-Marker
+maxmarkerretries: 20
+maxmarkerloglines: 2000
+
+# Route every CRS test through HAProxy to the ftw.local vhost (Albedo, the
+# backend the CRS project itself uses for these tests). virtual_host_mode
+# sends the marker requests to the same vhost, so they reach the same policy.
 testoverride:
   input:
     dest_addr: haproxy
     port: 80
     protocol: http
+    virtual_host_mode: true
     headers:
       Host: '{{ env "TARGET_VHOST" }}'
       X-GP-Eval-Run: '{{ env "RUN_ID" }}'
       X-GP-Eval-Scenario: ftw
-
-# Maximum time to wait for a response per test case.
-timeout: 10s
-
-# Number of consecutive connection errors before aborting the run.
-max_marker_retries: 3
-max_marker_log_lines: 500
