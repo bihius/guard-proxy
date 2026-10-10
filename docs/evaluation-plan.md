@@ -27,12 +27,14 @@ This evaluation assesses guard-proxy as a Web Application Firewall: HAProxy (rev
 
 ## 2. Hardware and Software Environment
 
-The lab uses two hosts connected by a WireGuard VPN. The documentation refers to their VPN addresses through two variables:
+The lab uses two hosts connected by a WireGuard VPN:
 
-| Variable      | Thesis lab value | Role                                                        |
-| ------------- | ---------------- | ----------------------------------------------------------- |
-| `SERVER_ADDR` | `10.99.99.20`    | Lab server: Guard Proxy stack, targets, curl corpus, go-ftw |
-| `CLIENT_ADDR` | `10.99.99.30`    | Load client: native `wrk` only                              |
+| Host        | Thesis lab address | Role                                                        |
+| ----------- | ------------------ | ----------------------------------------------------------- |
+| Lab server  | `10.99.99.20`      | Guard Proxy stack, targets, curl corpus, go-ftw             |
+| Load client | `10.99.99.30`      | native `wrk` only, started by hand                          |
+
+The server's address is the only one the lab needs: set it as `LAB_SERVER_ADDR` in `benchmarks/lab/.env`. Albedo's direct port is published on it, and the load test builds the wrk URLs from it.
 
 ### Lab server
 
@@ -61,7 +63,7 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the r
 ## 3. Test-Bed Architecture
 
 ```
-┌─ Lab server (SERVER_ADDR) ────────────────────────────────────────────────┐
+┌─ Lab server (LAB_SERVER_ADDR, 10.99.99.20) ──────────────────────────────┐
 │                                                                          │
 │  ┌─ Test containers ──────┐   ┌─ guard-proxy stack (gp_internal) ─────┐  │
 │  │  curl (corpus)         ├──►│  HAProxy :80  ──►  Coraza SPOA :9000  │  │
@@ -72,17 +74,17 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the r
 │                               │    wp.local  → WordPress :80          │  │
 │                               │    ftw.local → Albedo :8080           │  │
 │                               └───────────────────────────────────────┘  │
-│  Published ports on SERVER_ADDR:                                         │
+│  Published ports on LAB_SERVER_ADDR:                                     │
 │    HAPROXY_HTTP_PORT → HAProxy (WAF path)                                │
 │    LAB_FTW_DIRECT_PORT (18080) → Albedo (direct path, no WAF)            │
 └──────────────────────────────▲───────────────────────────────────────────┘
                                │ HTTP over the VPN (both paths)
-┌─ Load client (CLIENT_ADDR) ──┴───────────────────────────────────────────┐
+┌─ Load client (10.99.99.30) ──┴───────────────────────────────────────────┐
 │  native wrk + benign-mix.lua, started by hand with the printed command   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-The corpus (curl) and go-ftw containers attach to `gp_internal` and reach HAProxy at `http://haproxy:80` with the target's `Host:` header. Only `wrk` runs on the separate client, and nothing on the server connects to it: for each run, `run-load.sh` prints the exact `wrk` command, the operator starts it on the client, and pastes wrk's output back into the server terminal. The measured HTTP traffic goes from the client to `SERVER_ADDR` directly, for the WAF path and for the direct path alike.
+The corpus (curl) and go-ftw containers attach to `gp_internal` and reach HAProxy at `http://haproxy:80` with the target's `Host:` header. Only `wrk` runs on the separate client, and nothing on the server connects to it: for each run, `run-load.sh` prints the exact `wrk` command, the operator starts it on the client, and pastes wrk's output back into the server terminal. The measured HTTP traffic goes from the client to `LAB_SERVER_ADDR` directly, for the WAF path and for the direct path alike.
 
 Without `LOAD_CLIENT=manual`, `run-load.sh` runs `wrk` in a container on the server instead (single-machine mode, used for smoke runs).
 
@@ -168,8 +170,8 @@ Reported: `passed / run` (CRS conformance), split into tests that expect a rule 
 
 Two runs against Albedo (`ftw.local`), both from the load client over the VPN:
 
-1. **Through HAProxy+Coraza** — `http://SERVER_ADDR:HAPROXY_HTTP_PORT/` (production WAF path)
-2. **Direct to Albedo** — `http://SERVER_ADDR:18080/`, the baseline-only port published when the lab is started with `LAB_FTW_DIRECT_BIND=SERVER_ADDR`
+1. **Through HAProxy+Coraza** — `http://LAB_SERVER_ADDR:HAPROXY_HTTP_PORT/` (production WAF path)
+2. **Direct to Albedo** — `http://LAB_SERVER_ADDR:18080/`, the baseline-only port, published only on `LAB_SERVER_ADDR`
 
 Overhead = WAF_value − direct_value.  
 Config: 2 threads, 20 connections, 30-second duration (`LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION`). The mix has 10 requests: 8 GETs (pages, assets, search, API) and 2 POSTs (a form login and a JSON body), because Coraza also inspects request bodies. Every request carries `Host: ftw.local` and the correlation headers. Albedo answers 200 to all of them, so any non-2xx response through the WAF is a false positive; a run with errors on either path is marked `valid: false` in `performance.json`, because fast 403s would inflate RPS.
@@ -248,13 +250,11 @@ On the load client: install `wrk` (`brew install wrk`) and clone the repository 
 
 ### 8.2 The evaluation (one command)
 
-On the lab server, start the lab with Albedo's baseline port bound to the server's VPN address, then run the sweep:
+On the lab server, set `LAB_SERVER_ADDR=10.99.99.20` in `benchmarks/lab/.env`, then:
 
 ```bash
-SERVER_ADDR=10.99.99.20
-
-LAB_FTW_DIRECT_BIND=$SERVER_ADDR make -C benchmarks lab-up
-make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual LOAD_SERVER_ADDR=$SERVER_ADDR
+make -C benchmarks lab-up
+make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual
 ```
 
 All lab targets live in `benchmarks/Makefile`; run them with `make -C benchmarks …` from the repository root (or plain `make …` inside `benchmarks/`).
@@ -270,14 +270,14 @@ Every runner reads the policy that protects its target vhost back from the API a
 
 Without `LOAD_CLIENT=manual`, `make -C benchmarks eval-sweep RUN_ID=<id>` runs everything on one machine (wrk in a container) without pauses; use that for smoke runs, not for thesis numbers.
 
-After the evaluation, restart the lab without `LAB_FTW_DIRECT_BIND` (default `127.0.0.1`) if the direct port should no longer be reachable over the VPN.
+After the evaluation, set `LAB_SERVER_ADDR` back to `127.0.0.1` and run `make -C benchmarks lab-up` again if the direct port should no longer be reachable over the VPN.
 
 ### 8.3 Manual runs
 
 ```bash
 make -C benchmarks set-policy POLICY=pl2                     # both lab vhosts
 make -C benchmarks eval-corpus RUN_ID=<id> POLICY=pl2        # one test
-make -C benchmarks eval-load RUN_ID=<id> POLICY=pl2 LOAD_CLIENT=manual LOAD_SERVER_ADDR=$SERVER_ADDR
+make -C benchmarks eval-load RUN_ID=<id> POLICY=pl2 LOAD_CLIENT=manual
 make -C benchmarks results RUN_ID=<id> POLICY=pl2
 ```
 

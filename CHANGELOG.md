@@ -36,12 +36,12 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   values or a lab policy has exclusions, overrides or custom rules, and reads
   every profile field back after applying it. `summary.json` also records the
   policy's rate limiting, GeoIP mode and tuning counts.
-- The load test can use a separate client started by hand (`LOAD_CLIENT=manual`,
-  `LOAD_SERVER_ADDR`): for each run the runner prints the `wrk` command, waits
-  for Enter to start resource sampling, and reads the pasted wrk output. The
-  HTTP traffic goes over the network to HAProxy and to Albedo's baseline port
-  (`LAB_FTW_DIRECT_BIND`, `LAB_FTW_DIRECT_PORT`, default `127.0.0.1:18080`).
-  `performance.json` records the mode and both URLs.
+- The load test can use a separate client started by hand (`LOAD_CLIENT=manual`):
+  for each run the runner prints the `wrk` command, waits for Enter to start
+  resource sampling, and reads the pasted wrk output. One setting,
+  `LAB_SERVER_ADDR` in `benchmarks/lab/.env` (default `127.0.0.1`), publishes
+  Albedo's baseline port (`LAB_FTW_DIRECT_PORT`, 18080) on the server's address
+  and gives the wrk URLs. `performance.json` records the mode and both URLs.
 - `make eval-sweep` stops at the first failing step and passes the `LOAD_*`
   variables on to the load runner.
 - Resource samples record the achieved sampling interval, the sample count

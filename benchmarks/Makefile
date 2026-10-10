@@ -21,8 +21,7 @@ EFFECTIVE_RUN_ID := $(RUN_ID)-$(POLICY)
 
 # Load-client settings (see benchmarks/lab/runners/run-load.sh). Exported so
 # that eval-load, eval-all and eval-sweep pass them on to the load runner.
-export LOAD_CLIENT LOAD_SERVER_ADDR \
-       LOAD_WAF_URL LOAD_DIRECT_URL LOAD_THREADS LOAD_CONNECTIONS LOAD_DURATION
+export LOAD_CLIENT LOAD_THREADS LOAD_CONNECTIONS LOAD_DURATION
 
 .PHONY: lab-up lab-down lab-clean \
         eval-ftw eval-corpus eval-load eval-metrics eval-all \
@@ -150,9 +149,8 @@ help:
 	@echo "  DIRECT_HOST=<name>  Direct-access Docker service name"
 	@echo "  DIRECT_PORT=<port>  Direct-access port (bypasses HAProxy)"
 	@echo "  LOAD_CLIENT=manual           Start wrk by hand on a separate client, paste its output"
-	@echo "  LOAD_SERVER_ADDR=<addr>      Server address the client reaches (WAF + Albedo port)"
 	@echo "  LOAD_THREADS/LOAD_CONNECTIONS/LOAD_DURATION  wrk settings (default 2/20/30s)"
 	@echo ""
 	@echo "Example (PL1 vs PL2 sweep across all tests):"
 	@echo "  make eval-sweep"
-	@echo "  make eval-sweep LOAD_CLIENT=manual LOAD_SERVER_ADDR=10.99.99.20"
+	@echo "  make eval-sweep LOAD_CLIENT=manual   (LAB_SERVER_ADDR set in benchmarks/lab/.env)"

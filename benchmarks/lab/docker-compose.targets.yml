@@ -66,7 +66,7 @@ services:
     restart: unless-stopped
     # Expose the baseline only to the selected benchmark interface.
     ports:
-      - "${LAB_FTW_DIRECT_BIND:-127.0.0.1}:${LAB_FTW_DIRECT_PORT:-18080}:8080"
+      - "${LAB_SERVER_ADDR:-127.0.0.1}:${LAB_FTW_DIRECT_PORT:-18080}:8080"
     networks:
       - gp_internal
 

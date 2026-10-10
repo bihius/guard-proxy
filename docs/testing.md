@@ -69,21 +69,21 @@ Albedo backend (`ftw.local`) — and three tests:
 
 Both PL1 and PL2 run in one command; the profiles differ only in paranoia level
 (thresholds 5/4, block mode, no exclusions, rate limiting and GeoIP off). On
-the lab server (`SERVER_ADDR`), with `wrk` started by hand on the load client:
+the lab server, with `wrk` started by hand on the load client:
 
 ```sh
 # Prerequisites
 cp docker/.env.example docker/.env               # must set ADMIN_EMAIL and ADMIN_PASSWORD
-cp benchmarks/lab/.env.example benchmarks/lab/.env
+cp benchmarks/lab/.env.example benchmarks/lab/.env   # set LAB_SERVER_ADDR=10.99.99.20
 git submodule update --init --recursive
 
-LAB_FTW_DIRECT_BIND=$SERVER_ADDR make -C benchmarks lab-up
-make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual LOAD_SERVER_ADDR=$SERVER_ADDR
+make -C benchmarks lab-up
+make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual
 ```
 
 With `LOAD_CLIENT=manual` the sweep pauses at each wrk run, prints the command
 for the client, and waits for its output to be pasted back. Without
-`LOAD_CLIENT=manual` (and `LAB_FTW_DIRECT_BIND`) everything runs on one
+`LOAD_CLIENT=manual` (and with `LAB_SERVER_ADDR=127.0.0.1`) everything runs on one
 machine, which is enough for a smoke run. See
 [commands.md](commands.md#evaluation-lab) for the variables and
 [evaluation-plan.md](evaluation-plan.md) for methodology. Keep demo traffic

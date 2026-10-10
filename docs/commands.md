@@ -109,9 +109,9 @@ zap-cli quick-scan -s all http://localhost:8080        # OWASP ZAP
 ## Evaluation Lab
 
 The lab runs on two hosts connected by a VPN: the lab server
-(`SERVER_ADDR`, thesis lab `10.99.99.20`) runs the stack, both targets, the
-curl corpus and go-ftw; the load client (`CLIENT_ADDR`, thesis lab
-`10.99.99.30`) runs only native `wrk`. See
+(`LAB_SERVER_ADDR` in `benchmarks/lab/.env`, thesis lab `10.99.99.20`) runs
+the stack, both targets, the curl corpus and go-ftw; the load client (thesis
+lab `10.99.99.30`) runs only native `wrk`. See
 [evaluation-plan.md](evaluation-plan.md) for the methodology.
 
 ```bash
@@ -119,11 +119,12 @@ curl corpus and go-ftw; the load client (`CLIENT_ADDR`, thesis lab
 git submodule update --init --recursive          # CRS v4.25.0
 cp docker/.env.example docker/.env
 cp benchmarks/lab/.env.example benchmarks/lab/.env
+# In benchmarks/lab/.env set the server's VPN address:
+#   LAB_SERVER_ADDR=10.99.99.20
 
 # Full evaluation: PL1 then PL2, all three tests each, wrk started by hand on the load client
-SERVER_ADDR=10.99.99.20
-LAB_FTW_DIRECT_BIND=$SERVER_ADDR make -C benchmarks lab-up
-make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual LOAD_SERVER_ADDR=$SERVER_ADDR
+make -C benchmarks lab-up
+make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual
 ```
 
 `eval-sweep` writes results to `benchmarks/results/run-<id>-pl1/` and
@@ -146,8 +147,6 @@ Load-client variables (also accepted by `eval-all` and `eval-sweep`):
 | Variable           | Meaning                                                                 |
 | ------------------ | ----------------------------------------------------------------------- |
 | `LOAD_CLIENT`      | `manual`: wrk is started by hand on a separate client (default `local`: container on the server) |
-| `LOAD_SERVER_ADDR` | Server address the client reaches; WAF URL uses `HAPROXY_HTTP_PORT`, direct URL uses `LAB_FTW_DIRECT_PORT` (18080) |
-| `LOAD_WAF_URL`, `LOAD_DIRECT_URL` | Optional explicit URLs instead of the derived ones       |
 | `LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION` | wrk settings (default 2, 20, 30s)      |
 
 With `LOAD_CLIENT=manual`, every load test pauses twice (WAF run, then direct
@@ -156,9 +155,10 @@ run). For each run the server prints the exact `wrk` command. On the client
 root; press Enter on the server when you start it, so that resource sampling
 covers the WAF run. When wrk finishes, paste its whole output into the server
 terminal; reading stops at the `WRK_SUMMARY` line. Nothing connects to the
-client. The measured HTTP goes from the client to `SERVER_ADDR` over the VPN for
-both paths. Albedo's direct port is published only on `LAB_FTW_DIRECT_BIND`
-(default `127.0.0.1`); restart the lab without it after the evaluation. Do not
+client. The measured HTTP goes from the client to `LAB_SERVER_ADDR` over the
+VPN for both paths: HAProxy on `HAPROXY_HTTP_PORT`, Albedo directly on
+`LAB_FTW_DIRECT_PORT` (18080), which is published only on `LAB_SERVER_ADDR`.
+Set it back to `127.0.0.1` and restart the lab after the evaluation. Do not
 run other load on either host during a measurement.
 
 ## Performance Testing

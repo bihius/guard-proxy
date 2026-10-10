@@ -14,7 +14,7 @@
 # Two ways to run wrk:
 #   - local (default): wrk runs in a container on the lab's Docker network.
 #     Load generator and WAF share the host's CPUs. For smoke runs.
-#   - manual: set LOAD_CLIENT=manual and LOAD_SERVER_ADDR. The script prints
+#   - manual: set LOAD_CLIENT=manual and LAB_SERVER_ADDR in benchmarks/lab/.env. The script prints
 #     the wrk command for each run; you start it by hand on the separate load
 #     client and paste its output back here. The measured HTTP traffic goes
 #     from the client to the server's HAProxy port (WAF) and to Albedo's
@@ -32,15 +32,12 @@
 #
 # Usage:
 #   RUN_ID=... bash benchmarks/lab/runners/run-load.sh
-#   RUN_ID=... LOAD_CLIENT=manual LOAD_SERVER_ADDR=<server-addr> \
-#     bash benchmarks/lab/runners/run-load.sh
+#   RUN_ID=... LOAD_CLIENT=manual bash benchmarks/lab/runners/run-load.sh
 #
-# Manual-client variables:
-#   LOAD_CLIENT       "manual" for a separate client (default: local container)
-#   LOAD_SERVER_ADDR  server address the client reaches (e.g. its VPN address);
-#                     the lab must be started with LAB_FTW_DIRECT_BIND set to it
-#   LOAD_WAF_URL      override; default http://<LOAD_SERVER_ADDR>:<HAPROXY_HTTP_PORT>/
-#   LOAD_DIRECT_URL   override; default http://<LOAD_SERVER_ADDR>:<LAB_FTW_DIRECT_PORT>/
+# Manual mode builds the URLs from LAB_SERVER_ADDR (benchmarks/lab/.env), the
+# address Albedo's direct port is also published on:
+#   WAF:    http://<LAB_SERVER_ADDR>:<HAPROXY_HTTP_PORT>/
+#   direct: http://<LAB_SERVER_ADDR>:<LAB_FTW_DIRECT_PORT>/
 
 set -Eeuo pipefail
 : "${RUN_ID:=$(date +%Y%m%d-%H%M%S)}"
@@ -61,27 +58,21 @@ CONNECTIONS="${LOAD_CONNECTIONS:-20}"
 DURATION="${LOAD_DURATION:-30s}"
 
 LOAD_CLIENT="${LOAD_CLIENT:-local}"
-LOAD_SERVER_ADDR="${LOAD_SERVER_ADDR:-}"
-LOAD_WAF_URL="${LOAD_WAF_URL:-}"
-LOAD_DIRECT_URL="${LOAD_DIRECT_URL:-}"
+LAB_SERVER_ADDR="$(env_value LAB_SERVER_ADDR 127.0.0.1)"
 
 case "${LOAD_CLIENT}" in
   manual)
     LOAD_MODE="manual"
-    if [[ -n "${LOAD_SERVER_ADDR}" ]]; then
-      LOAD_WAF_URL="${LOAD_WAF_URL:-http://${LOAD_SERVER_ADDR}:${HAPROXY_HTTP_PORT}/}"
-      LOAD_DIRECT_URL="${LOAD_DIRECT_URL:-http://${LOAD_SERVER_ADDR}:$(env_value LAB_FTW_DIRECT_PORT 18080)/}"
-    fi
-    if [[ -z "${LOAD_WAF_URL}" || -z "${LOAD_DIRECT_URL}" ]]; then
-      echo "LOAD_CLIENT=manual needs LOAD_SERVER_ADDR (or LOAD_WAF_URL and LOAD_DIRECT_URL)." >&2
+    if [[ "${LAB_SERVER_ADDR}" == 127.0.0.1 ]]; then
+      echo "LOAD_CLIENT=manual needs LAB_SERVER_ADDR in benchmarks/lab/.env set to the address the client reaches; restart the lab (make lab-up) after changing it." >&2
       exit 1
     fi
     if [[ ! -t 0 ]]; then
       echo "LOAD_CLIENT=manual needs an interactive terminal to paste wrk output into." >&2
       exit 1
     fi
-    WAF_URL="${LOAD_WAF_URL}"
-    DIRECT_URL="${LOAD_DIRECT_URL}"
+    WAF_URL="http://${LAB_SERVER_ADDR}:${HAPROXY_HTTP_PORT}/"
+    DIRECT_URL="http://${LAB_SERVER_ADDR}:$(env_value LAB_FTW_DIRECT_PORT 18080)/"
     ;;
   local)
     LOAD_MODE="local"
