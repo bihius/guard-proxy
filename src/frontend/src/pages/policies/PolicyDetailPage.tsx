@@ -421,13 +421,12 @@ export function PolicyDetailPage() {
             descriptionDisplay="tooltip"
             actions={
               isAdmin ? (
-                <button
+                <Button
                   type="button"
                   onClick={() => setOverrideModal({ type: "create", policyId: policy.id })}
-                  className="btn-primary px-4 py-2 text-sm"
                 >
                   Add override
-                </button>
+                </Button>
               ) : undefined
             }
           >
@@ -446,13 +445,12 @@ export function PolicyDetailPage() {
             descriptionDisplay="tooltip"
             actions={
               isAdmin ? (
-                <button
+                <Button
                   type="button"
                   onClick={() => setExclusionModal({ type: "create", policyId: policy.id })}
-                  className="btn-primary px-4 py-2 text-sm"
                 >
                   Add exclusion
-                </button>
+                </Button>
               ) : undefined
             }
           >
@@ -479,13 +477,12 @@ export function PolicyDetailPage() {
             descriptionDisplay="tooltip"
             actions={
               isAdmin ? (
-                <button
+                <Button
                   type="button"
                   onClick={() => setCustomRuleModal({ type: "create", policyId: policy.id })}
-                  className="btn-primary px-4 py-2 text-sm"
                 >
                   Add custom rule
-                </button>
+                </Button>
               ) : undefined
             }
           >
