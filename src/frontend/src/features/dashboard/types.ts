@@ -32,7 +32,7 @@ export type OverviewResponse = WindowBounds & {
   requests: MetricValue;
   blocked: MetricValue;
   monitored: MetricValue;
-  critical: MetricValue;
+  high_severity: MetricValue;
   /** null for viewers and whenever the HAProxy Runtime API is unreachable. */
   banned_ips: number | null;
   protected_vhosts: number;

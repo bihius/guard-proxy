@@ -69,7 +69,7 @@ const mockOverview: OverviewResponse = {
   requests: { current: 4128, previous: 4000, delta_pct: 3.2 },
   blocked: { current: 312, previous: 250, delta_pct: 24.8 },
   monitored: { current: 48, previous: 52, delta_pct: -7.7 },
-  critical: { current: 1, previous: 0, delta_pct: null },
+  high_severity: { current: 1, previous: 0, delta_pct: null },
   banned_ips: 3,
   protected_vhosts: 2,
   total_vhosts: 5,
@@ -124,7 +124,7 @@ const mockLog = {
   rule_message: "SQL injection attack detected",
   anomaly_score: 15,
   paranoia_level: 2,
-  severity: "critical" as const,
+  severity: "high" as const,
   message: null,
   raw_context: null,
   vhost_id: 1,
@@ -184,7 +184,7 @@ describe("DashboardPage", () => {
     expect(await screen.findByText("4,128")).toBeInTheDocument();
     expect(screen.getByText("312")).toBeInTheDocument();
     expect(screen.getByText("48")).toBeInTheDocument();
-    // Critical went 0 -> 1: no percentage baseline exists, so it reads "new".
+    // High severity went 0 -> 1: no percentage baseline exists, so it reads "new".
     expect(screen.getByText("new")).toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: /waf event activity across 2 intervals/i }),

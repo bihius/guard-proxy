@@ -55,7 +55,7 @@ export function filtersFromSearchParams(params: URLSearchParams): LogFilters {
     }
     if (
       key === "severity" &&
-      !["info", "warning", "error", "critical"].includes(value)
+      !["low", "medium", "high"].includes(value)
     ) {
       continue;
     }

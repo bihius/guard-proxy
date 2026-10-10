@@ -16,10 +16,9 @@ type RecentBlocksCardProps = {
 };
 
 const severityTone: Record<LogSeverity, "error" | "warning" | "info" | "neutral"> = {
-  critical: "error",
-  error: "error",
-  warning: "warning",
-  info: "info",
+  high: "error",
+  medium: "warning",
+  low: "info",
 };
 
 /** Live feed of the most recent denied requests, each a jump-off into the logs. */

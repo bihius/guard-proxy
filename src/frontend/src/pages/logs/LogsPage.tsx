@@ -374,7 +374,7 @@ export function LogsPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="filter-action">Action</Label>
-                    <InfoTooltip label="Guard Proxy only logs requests that triggered at least one WAF rule. 'Allowed (flagged)' means a rule matched but the combined score stayed under the policy's anomaly threshold, so the request was let through. Fully clean traffic that never matches a rule is not logged." />
+                    <InfoTooltip label="Guard Proxy only logs requests that triggered at least one WAF rule. 'Allowed (flagged)' means a rule matched but the combined score stayed under the policy's anomaly threshold, so the request was let through. 'Detected' means the score reached the policy's anomaly threshold but the policy is in detect-only mode, so the request was let through. Fully clean traffic that never matches a rule is not logged." />
                   </div>
                   <Select
                     id="filter-action"
@@ -386,7 +386,7 @@ export function LogsPage() {
                     <option value="">All actions</option>
                     <option value="allow">Allowed (flagged)</option>
                     <option value="deny">Deny</option>
-                    <option value="monitor">Monitor</option>
+                    <option value="monitor">Detected</option>
                   </Select>
                 </div>
 
@@ -409,7 +409,10 @@ export function LogsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="filter-severity">Severity</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="filter-severity">Severity</Label>
+                    <InfoTooltip label="Severity is relative to the policy's inbound anomaly threshold. High means the score is at least twice the threshold. Medium means the request was blocked or would have been blocked. Low means rules matched but the score stayed under the threshold." />
+                  </div>
                   <Select
                     id="filter-severity"
                     value={draft.severity}
@@ -418,10 +421,9 @@ export function LogsPage() {
                     }
                   >
                     <option value="">All severities</option>
-                    <option value="info">Info</option>
-                    <option value="warning">Warning</option>
-                    <option value="error">Error</option>
-                    <option value="critical">Critical</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
                   </Select>
                 </div>
 
