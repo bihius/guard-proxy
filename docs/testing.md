@@ -89,10 +89,11 @@ machine, which is enough for a smoke run. See
 [evaluation-plan.md](evaluation-plan.md) for methodology. Keep demo traffic
 generation off during measurements.
 
-Benchmark parser and manifest unit tests, plus the wrk workload test:
-`cd benchmarks && python -m pytest tests`. The workload test runs native `wrk`
-when available, or the pinned Docker image on Linux CI. Other benchmark tests
-stub `docker`; the `benchmarks` CI job runs them on every PR.
+Benchmark parser, manifest and cold-origin warm-up tests, plus the real wrk
+workload test: `cd benchmarks && python -m pytest tests`. The workload test
+runs native `wrk` when available, or the pinned Docker image on Linux CI.
+The warm-up test isolates the runner from Docker; the `benchmarks` CI job runs
+both on every PR.
 
 ## Test Data
 

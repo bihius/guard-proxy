@@ -63,6 +63,7 @@ LUA_SCRIPT="${REPO_ROOT}/benchmarks/lab/scenarios/load/benign-mix.lua"
 THREADS="${LOAD_THREADS:-2}"
 CONNECTIONS="${LOAD_CONNECTIONS:-20}"
 DURATION="${LOAD_DURATION:-30s}"
+WARMUP_DURATION=5s
 
 LOAD_CLIENT="${LOAD_CLIENT:-local}"
 LAB_SERVER_ADDR="$(env_value LAB_SERVER_ADDR 127.0.0.1)"
@@ -125,10 +126,11 @@ start_resource_sampling() {
   fi
 }
 
-# run_wrk <case_id> <url> <out_file> [sample]
-# With "sample", coraza/haproxy resource sampling covers this run.
+# run_wrk <case_id> <url> <out_file> [sample] [duration] [scenario]
+# Only measured runs start coraza/haproxy resource sampling.
 run_wrk() {
   local case_id="$1" url="$2" out_file="$3" sample="${4:-}"
+  local duration="${5:-${DURATION}}" scenario="${6:-${SCENARIO}}"
   if [[ "${LOAD_MODE}" == local ]]; then
     [[ -z "${sample}" ]] || start_resource_sampling
     docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
@@ -137,10 +139,10 @@ run_wrk() {
       -e "LOAD_TARGET=${LOAD_TARGET}" \
       -e "LOAD_VHOST=${TARGET_VHOST}" \
       -e "EVAL_RUN_ID=${RUN_ID}" \
-      -e "EVAL_SCENARIO=${SCENARIO}" \
+      -e "EVAL_SCENARIO=${scenario}" \
       -e "EVAL_CASE=${case_id}" \
       "${WRK_IMAGE}" \
-      -t "${THREADS}" -c "${CONNECTIONS}" -d "${DURATION}" \
+      -t "${THREADS}" -c "${CONNECTIONS}" -d "${duration}" \
       -s /benign-mix.lua \
       --latency \
       "${url}" \
@@ -152,10 +154,14 @@ run_wrk() {
   echo "On the load client, in a checkout of commit $(git -C "${REPO_ROOT}" rev-parse --short HEAD), run:"
   echo ""
   printf '  env LOAD_TARGET=%q LOAD_VHOST=%q EVAL_RUN_ID=%q EVAL_SCENARIO=%q EVAL_CASE=%q \\\n' \
-    "${LOAD_TARGET}" "${TARGET_VHOST}" "${RUN_ID}" "${SCENARIO}" "${case_id}"
+    "${LOAD_TARGET}" "${TARGET_VHOST}" "${RUN_ID}" "${scenario}" "${case_id}"
   printf '    wrk -t %q -c %q -d %q -s benchmarks/lab/scenarios/load/benign-mix.lua --latency %q\n' \
-    "${THREADS}" "${CONNECTIONS}" "${DURATION}" "${url}"
+    "${THREADS}" "${CONNECTIONS}" "${duration}" "${url}"
   echo ""
+  if [[ "${case_id}" == warmup-* ]]; then
+    read -r -p "Run this warm-up on the client; press Enter after it finishes. Do not paste its output... " _
+    return
+  fi
   read -r -p "Press Enter here at the same moment you start wrk on the client... " _
   [[ -z "${sample}" ]] || start_resource_sampling
   echo "When wrk has finished, paste its complete output here (reading stops at the WRK_SUMMARY line):"
@@ -174,7 +180,20 @@ wrk_failed() {
   exit 1
 }
 
+warm_up() {
+  local path="$1" url="$2" out_file="${OUT_DIR}/warmup-$1.txt"
+  echo "--- WordPress warm-up (${path}, discarded from metrics) ---"
+  run_wrk "warmup-${path}" "${url}" "${out_file}" "" "${WARMUP_DURATION}" "warmup-${TARGET_VHOST}" \
+    || wrk_failed "${out_file}"
+  if [[ "${LOAD_MODE}" == local ]] && ! grep -q 'WRK_SUMMARY ' "${out_file}"; then
+    wrk_failed "${out_file}"
+  fi
+}
+
 # ── Run 1: through WAF ─────────────────────────────────────────────────────
+if [[ "${LOAD_TARGET}" == wordpress ]]; then
+  warm_up waf "${WAF_URL}"
+fi
 
 echo "--- Run 1: through HAProxy+Coraza ---"
 run_wrk wrk-waf "${WAF_URL}" "${OUT_DIR}/waf.txt" sample || wrk_failed "${OUT_DIR}/waf.txt"
@@ -185,6 +204,9 @@ echo "WAF run complete. Output: ${OUT_DIR}/waf.txt"
 copy_audit_log_snapshot "${OUT_DIR}"
 
 # ── Run 2: direct (WAF bypassed) ───────────────────────────────────────────
+if [[ "${LOAD_TARGET}" == wordpress ]]; then
+  warm_up direct "${DIRECT_URL}"
+fi
 
 echo "--- Run 2: direct to ${DIRECT_URL} ---"
 run_wrk wrk-direct "${DIRECT_URL}" "${OUT_DIR}/direct.txt" || wrk_failed "${OUT_DIR}/direct.txt"
@@ -201,7 +223,7 @@ echo "Parsing results..."
 
 # Exported rather than interpolated: the heredoc is quoted ('PY') so its regex
 # backslashes stay intact, which also means shell variables are not expanded.
-export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE WRK_VERSION LOAD_MODE \
+export OUT_DIR THREADS CONNECTIONS DURATION WARMUP_DURATION WRK_IMAGE WRK_VERSION LOAD_MODE \
   LOAD_TARGET WAF_URL DIRECT_URL
 
 python3 - <<'PY'
@@ -270,6 +292,7 @@ performance = {
         "connections": int(os.environ["CONNECTIONS"]),
         "duration": os.environ["DURATION"],
         "target": os.environ["LOAD_TARGET"],
+        "warmup_duration": os.environ["WARMUP_DURATION"] if os.environ["LOAD_TARGET"] == "wordpress" else None,
         "mode": os.environ["LOAD_MODE"],
         # Manual runs use the client's own wrk build, not the pinned image.
         "wrk_image": os.environ["WRK_IMAGE"] if os.environ["LOAD_MODE"] == "local" else None,

@@ -7,12 +7,15 @@
 #
 # Log mode, not cloud mode. In cloud mode go-ftw only compares HTTP status
 # codes, and a test that asserts no status (most CRS tests only list the rule
-# IDs that must or must not fire) passes without any check. Log mode reads the
-# Coraza error log and checks the rule IDs of every test.
+# IDs that must or must not fire) passes without any check. Log mode reads one
+# log file and checks the rule IDs of every test.
 
-# Coraza's log of matched rules. The lab overlay tees it into this file on the
-# coraza_audit volume, which run-ftw.sh mounts into the go-ftw container.
-logfile: /var/log/coraza/error.log
+# Coraza's serial JSON audit log is written before the request returns.
+# The previous lab overlay copied stderr through tee. go-ftw could read that
+# copy before tee wrote the marker or while its line was incomplete, causing
+# marker lookup failures or missing rule IDs. The audit log stores both
+# markers and the CRS error messages (including JSON-escaped rule IDs).
+logfile: /var/log/coraza/audit.log
 
 # Marker header matched by rule 999999 in
 # benchmarks/lab/coraza/guard-proxy-exceptions.lab.conf. go-ftw sends one

@@ -150,13 +150,16 @@ Load-client variables (also accepted by `eval-all` and `eval-sweep`):
 | `LOAD_CLIENT`      | `manual`: wrk is started by hand on a separate client (default `local`: container on the server) |
 | `LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION` | wrk settings (default 2, 20, 30s)      |
 
-With `LOAD_CLIENT=manual`, every load test pauses twice (WAF run, then direct
-run). For each run the server prints the exact `wrk` command. On the client
-(a checkout of the same commit, `brew install wrk`), run it from the repository
-root; press Enter on the server when you start it, so that resource sampling
-covers the WAF run. When wrk finishes, paste its whole output into the server
-terminal; reading stops at the `WRK_SUMMARY` line. Nothing connects to the
-client. The measured HTTP goes from the client to `LAB_SERVER_ADDR` over the
+With `LOAD_CLIENT=manual`, each Albedo load test pauses twice (WAF, direct);
+each WordPress load test pauses four times (5-second warm-up and measurement
+on each path). The server prints the exact client command at every pause.
+For WordPress, run the warm-up command first and press Enter **after** it
+finishes; do not paste its output. At the next prompt, start the measured
+command and press Enter on the server at the same time, so resource sampling
+covers the measured WAF run. Paste only the measured wrk output through
+`WRK_SUMMARY`. Use a checkout of the same commit on the client
+(`brew install wrk`); nothing connects to the client.
+Measured HTTP goes from the client to `LAB_SERVER_ADDR` over the
 direct cable for both paths: HAProxy on `HAPROXY_HTTP_PORT`, Albedo directly on
 `LAB_FTW_DIRECT_PORT` (18080), or WordPress on `LAB_WP_DIRECT_PORT` (18081).
 Both direct ports bypass WAF and bind to `LAB_SERVER_ADDR`. Restrict the server

@@ -153,7 +153,7 @@ This is the only source used for TP/FN/TN/FP formulas.
 **Config:** `benchmarks/lab/scenarios/crs-ftw/config.yaml`  
 **Corpus:** `configs/coraza/crs/tests/regression/tests/` (OWASP CRS v4.25.0 git submodule)
 
-Each CRS regression test sends a request and lists the rule IDs that must fire (`expect_ids`) or must stay silent (`no_expect_ids`); a few only assert an HTTP status. go-ftw replays the tests through HAProxy to `ftw.local` and checks the rule IDs in the Coraza log. To find the log lines of one test, go-ftw sends a marker request (header `X-GP-FTW-Marker`) before and after it; lab-only rule 999999 (`benchmarks/lab/coraza/guard-proxy-exceptions.lab.conf`) writes the marker into the log, and the lab overlay tees Coraza's log into `/var/log/coraza/error.log` on the `coraza_audit` volume, which the go-ftw container mounts read-only.
+Each CRS regression test sends a request and lists the rule IDs that must fire (`expect_ids`) or must stay silent (`no_expect_ids`); a few only assert an HTTP status. go-ftw replays them through HAProxy to `ftw.local` and checks rule IDs in Coraza's serial JSON audit log. To bracket each test, go-ftw sends marker requests with `X-GP-FTW-Marker`; lab-only rule 999999 writes them to `/var/log/coraza/audit.log` on the `coraza_audit` volume. Reading stderr through a tee previously raced with marker responses and could produce a missing or incomplete marker.
 
 The suite runs in **log mode**, never in cloud mode. In cloud mode go-ftw only compares HTTP status codes, and a test that asserts no status passes without any check; an earlier version of this lab reported 99.8 % conformance that way, identical at PL1 and PL2, with 4645 of 4674 tests unchecked.
 
@@ -175,6 +175,8 @@ For **each target**, run the same mix twice from the load client over the direct
 2. **Direct to target** — Albedo at `LAB_FTW_DIRECT_PORT` (18080) or WordPress at `LAB_WP_DIRECT_PORT` (18081)
 
 Overhead = WAF_value − direct_value at each percentile. Config: 2 threads, 20 connections, 30-second duration (`LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION`). Albedo uses 8 GETs and 2 POSTs; WordPress uses 8 GETs (pages, assets, search, REST API) and one invalid-login POST to an installed site. The login uses a nonexistent user and makes no persistent changes. Each run carries the target's `Host` and correlation headers. HTTP 4xx/5xx responses or transport errors on either path mark `valid: false` in `performance.json`; `wrk` does **not** count 3xx as errors. Verify that the WordPress requests return 200 (no redirects) before interpreting a run; an uninstalled or reconfigured site can otherwise appear valid while measuring redirects.
+
+WordPress receives a discarded 5-second wrk warm-up on **each** path with the same thread count, connections and mix as the measured run. In manual mode, finish the printed warm-up command on the load client, press Enter on the server without pasting its output, then start the measured command at the next prompt. Warm-up requests use a separate `warmup-<vhost>` scenario tag and do not enter the reported latency, RPS or WAF resource window.
 
 During the WAF run the server samples the `coraza` and `haproxy` containers with `docker stats` (target interval 2 s, `RESOURCE_SAMPLE_INTERVAL_S`). Each `docker stats` call takes about a second itself, so the files record the achieved mean interval (`interval_s_mean`) and the number of samples next to the target interval.
 
@@ -302,7 +304,7 @@ WordPress is tested without CRS application exclusion plugins (not yet implement
 
 ### 9.4 WordPress application load
 
-WordPress response times depend on database state, PHP workers and caches; this scenario measures the installed lab site, not a fixed 100 ms origin. `wrk` uses a closed-loop workload with fixed concurrency, so WAF and direct paths can reach different throughput and queue depths. A difference between their p50/p95/p99 values is not a paired per-request delay. Warm up both paths and repeat measurements on an idle server before comparing them; retain Albedo as the isolated-path reference.
+WordPress response times depend on database state, PHP workers and caches; this scenario measures the installed lab site, not a fixed 100 ms origin. `wrk` uses a closed-loop workload with fixed concurrency, so WAF and direct paths can reach different throughput and queue depths. A difference between their p50/p95/p99 values is not a paired per-request delay. The runner warms each WordPress path separately before measurement; repeat paired runs on an idle server before comparing them, and retain Albedo as the isolated-path reference. A measured run with timeouts remains invalid even after warm-up.
 
 ### 9.5 Small corpus
 

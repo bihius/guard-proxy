@@ -37,17 +37,6 @@ services:
     volumes:
       - ../configs/coraza/guard-proxy-exceptions.conf:/etc/coraza/guard-proxy-exceptions.base.conf:ro
       - ../benchmarks/lab/coraza/guard-proxy-exceptions.lab.conf:/etc/coraza/guard-proxy-exceptions.conf:ro
-    # Lab only: also copy Coraza's log (matched rules, written to stderr) into
-    # /var/log/coraza/error.log on the coraza_audit volume. go-ftw mounts that
-    # volume and reads the rule IDs of each CRS test from this file. tini -g
-    # forwards stop signals to the whole pipeline.
-    entrypoint:
-      - /sbin/tini
-      - -g
-      - --
-      - sh
-      - -c
-      - /usr/local/bin/coraza-supervisor 2>&1 | tee -a /var/log/coraza/error.log
 
   haproxy:
     cpuset: "${LAB_WAF_CPUSET:-}"

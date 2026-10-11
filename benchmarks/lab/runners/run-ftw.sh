@@ -4,7 +4,7 @@
 # The CRS submodule ships labeled regression tests: each one sends a request
 # and lists the rule IDs that must fire (expect_ids) or must stay silent
 # (no_expect_ids). go-ftw replays them through HAProxy+Coraza to the ftw.local
-# vhost and checks the rule IDs in the Coraza error log. The result answers
+# vhost and checks the rule IDs in Coraza's audit log. The result answers
 # one question: does CRS behave in this integration as the CRS project
 # specifies? It is not a detection rate.
 #
@@ -15,7 +15,7 @@
 #
 # Output:
 #   benchmarks/results/run-<RUN_ID>/ftw/raw.json          (go-ftw JSON output)
-#   benchmarks/results/run-<RUN_ID>/ftw/coraza-ftw.log    (Coraza log of the run)
+#   benchmarks/results/run-<RUN_ID>/ftw/coraza-audit.log (audit snapshot)
 #   benchmarks/results/run-<RUN_ID>/ftw/detection.json
 #   benchmarks/results/run-<RUN_ID>/ftw/summary.json
 #
@@ -49,7 +49,6 @@ fi
 write_manifest
 OUT_DIR="$(setup_run_dir ftw)"
 RENDERED_FTW_CONFIG="${OUT_DIR}/config.yaml"
-CORAZA_LOG="${OUT_DIR}/coraza-ftw.log"
 CORAZA_AUDIT_VOLUME="${COMPOSE_PROJECT_NAME:-guard-proxy}_coraza_audit"
 
 # Render the config: go-ftw does not expand {{ env }} templates in its config
@@ -86,10 +85,13 @@ echo "Output dir   : ${OUT_DIR}"
 echo "Image        : ${FTW_IMAGE}"
 echo ""
 
-# The lab overlay tees Coraza's log (matched rules) into error.log on the
-# coraza_audit volume; go-ftw mounts the same volume and reads it directly.
-# Remember where the file ends now, to keep only this run's part afterwards.
-LOG_START="$(docker exec "${CORAZA_CONTAINER}" sh -c 'stat -c %s /var/log/coraza/error.log 2>/dev/null || echo 0')"
+# go-ftw reads the serial audit log on the coraza_audit volume. Unlike
+# stderr's former tee, Coraza writes each audit event before responding.
+FTW_LOG="/var/log/coraza/audit.log"
+if ! docker exec "${CORAZA_CONTAINER}" test -f "${FTW_LOG}"; then
+  echo "Coraza audit log ${FTW_LOG} is missing. Run \`make lab-up\` first." >&2
+  exit 1
+fi
 
 # go-ftw exits non-zero when any test fails; the result is still in raw.json.
 docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
@@ -104,7 +106,6 @@ docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
     -o json \
   > "${OUT_DIR}/raw.json" 2> "${OUT_DIR}/stderr.txt" || true
 
-docker exec "${CORAZA_CONTAINER}" tail -c "+$((LOG_START + 1))" /var/log/coraza/error.log > "${CORAZA_LOG}"
 echo "go-ftw complete. Parsing results..."
 
 copy_audit_log_snapshot "${OUT_DIR}"
