@@ -49,7 +49,7 @@ send_case() {
 
   local status
   status="$(
-    docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" --network "${DOCKER_NETWORK}" curlimages/curl:8.11.1 \
+    docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" --network "${DOCKER_NETWORK}" curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69 \
       --silent --show-error --output /dev/null --write-out '%{http_code}' \
       --max-time 10 \
       -X "${method}" \

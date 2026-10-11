@@ -56,7 +56,7 @@ The server's address is the only one the lab needs: set it as `LAB_SERVER_ADDR` 
 
 ### Software versions (recorded per run)
 
-Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the runner scripts, each pinned to an exact version plus digest, so a target cannot move between runs. The CRS submodule is pinned at v4.25.0. Each run writes the git SHA, host CPU/RAM, load average at start and the WordPress core version it measured (`wp core version`, read with the CLI container) to `manifest.json`; the load test also records the load mode and both URLs in `performance.json`. Record the client's `wrk -v` output in the thesis, because a manual run cannot read it.
+Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the runner scripts, each pinned to an exact version plus digest, so a target cannot move between runs; the `version-pins` CI job fails on an unpinned or diverging lab image. The CRS submodule is pinned at v4.25.0. Each run writes the git SHA, host CPU/RAM, load average at start and the WordPress core version it measured (`wp core version`, read with the CLI container) to `manifest.json`; the load test also records the load mode and both URLs in `performance.json`. Record the client's `wrk -v` output in the thesis, because a manual run cannot read it.
 
 ---
 

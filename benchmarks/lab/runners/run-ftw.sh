@@ -29,7 +29,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 TARGET_VHOST="${TARGET_VHOST:-${LAB_FTW_DOMAIN}}"
 resolve_policy
-FTW_IMAGE="ghcr.io/coreruleset/go-ftw:2.6.0"
+FTW_IMAGE="ghcr.io/coreruleset/go-ftw:2.6.0@sha256:28a87d81b08c244909a0e10d3cb126f23b700392b5c797cb8dfbee131de75ccb"
 CRS_DIR="${REPO_ROOT}/configs/coraza/crs"
 CRS_TESTS="${CRS_DIR}/tests/regression/tests"
 FTW_CONFIG="${REPO_ROOT}/benchmarks/lab/scenarios/crs-ftw/config.yaml"

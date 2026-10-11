@@ -50,7 +50,7 @@ DIRECT_PORT="${DIRECT_PORT:-8080}"          # Target port (no HAProxy)
 # elswork/wrk ships native amd64+arm64 builds of wrk 4.2.0 (williamyeh/wrk is
 # amd64-only and segfaults under emulation on Apple Silicon). Pinned by digest
 # so re-runs use the same binary; the digest is recorded in performance.json.
-WRK_IMAGE="elswork/wrk@sha256:529f8fe35924e549cc270d4128406d5863043e756c31395afd08acccc74ada79"
+WRK_IMAGE="elswork/wrk:4.2.0@sha256:529f8fe35924e549cc270d4128406d5863043e756c31395afd08acccc74ada79"
 LUA_SCRIPT="${REPO_ROOT}/benchmarks/lab/scenarios/load/benign-mix.lua"
 
 THREADS="${LOAD_THREADS:-2}"

@@ -415,10 +415,14 @@ binary before the `haproxy` container loads it, so both must be the same
 HAProxy release; otherwise a config can pass validation and then fail to load,
 or the other way round. The `version-pins` CI job
 (`python3 .github/scripts/check_version_pins.py`) fails when an image in a
-Dockerfile or in the dev/release Compose files is not digest-pinned, when one
-image is pinned differently in two places, or when `HAPROXY_DEB_VERSION` and
-the `haproxy` image tag name different releases. The benchmark lab
-(`benchmarks/`) is not covered.
+Dockerfile, in the dev/release Compose files or in the evaluation lab
+(`benchmarks/lab/docker-compose.targets.yml` and `benchmarks/lab/runners/*.sh`)
+is not digest-pinned, when one image variant is pinned differently in two
+places, or when `HAPROXY_DEB_VERSION` and the `haproxy` image tag name
+different releases. In the runner scripts it reads `*_IMAGE=` assignments and
+the image argument of a `docker run` line. One repository may hold several
+variants with their own pins (the WordPress site image and the WP CLI image);
+the check compares each variant with itself.
 
 Pins do not pick up upstream security fixes on their own; bump them
 deliberately:
