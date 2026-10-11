@@ -141,6 +141,22 @@ setup_run_dir() {
 
 # ── Manifest ───────────────────────────────────────────────────────────────
 
+# Core version of the WordPress image under test, read with the CLI container
+# (`wp core version`). Empty when the lab is not up: the manifest then records
+# null instead of a version nobody measured. Empty also for a run whose lab
+# was not fully started.
+# One quoted argument: the wp-cli entrypoint is `sh -c`, so only the first
+# argument reaches it as the command string ("wp core version" as three
+# arguments would run bare `wp` and print its help text).
+wp_core_version() {
+  docker compose \
+    -f "${REPO_ROOT}/docker/docker-compose.yml" \
+    -f "${LAB_DIR}/docker-compose.targets.yml" \
+    --env-file "${CORE_ENV}" \
+    --env-file "${LAB_ENV}" \
+    run --rm -T --no-deps wp-cli "wp core version" 2>/dev/null | tr -d '\r\n' || true
+}
+
 write_manifest() {
   local manifest="${RUN_DIR}/manifest.json"
   if [[ -f "${manifest}" ]]; then return; fi  # written once per run
@@ -150,6 +166,7 @@ write_manifest() {
   local host_mem_gb; host_mem_gb="$(awk '/^MemTotal:/{printf "%.0f", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo "unknown")"
   local host_load; host_load="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || uptime | awk -F'load averages:' '{print $2}' | xargs || echo "unknown")"
   local timestamp; timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  local wp_version; wp_version="$(wp_core_version)"
 
   python3 - <<PY
 import json, os
@@ -166,6 +183,7 @@ manifest = {
     "config": {
         "haproxy_http_port": int("${HAPROXY_HTTP_PORT}"),
         "lab_env": "${LAB_ENV}",
+        "wordpress_version": "${wp_version}" or None,
         "vhosts": {
             "ftw": "${LAB_FTW_DOMAIN}",
             "wordpress": "${LAB_WP_DOMAIN}"

@@ -49,6 +49,11 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   variables on to the load runner.
 - Resource samples record the achieved sampling interval, the sample count
   and the sampled window next to the target interval.
+- The evaluation lab pins its remaining images to an exact version and digest —
+  WordPress `7.1.3` (`php8.3-apache`), WP CLI `2.12.0-php8.3`, MariaDB
+  `11.4.13` and Albedo `0.2.0` — so two runs of the same commit measure the
+  same targets. Each run also records the WordPress core version it hit in
+  `manifest.json`.
 
 ### Fixed
 

@@ -56,7 +56,7 @@ The server's address is the only one the lab needs: set it as `LAB_SERVER_ADDR` 
 
 ### Software versions (recorded per run)
 
-Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the runner scripts. The CRS submodule is pinned at v4.25.0. Each run writes the git SHA, host CPU/RAM and load average to `manifest.json`; the load test also records the load mode and both URLs in `performance.json`. Record the client's `wrk -v` output in the thesis, because a manual run cannot read it.
+Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the runner scripts, each pinned to an exact version plus digest, so a target cannot move between runs. The CRS submodule is pinned at v4.25.0. Each run writes the git SHA, host CPU/RAM, load average at start and the WordPress core version it measured (`wp core version`, read with the CLI container) to `manifest.json`; the load test also records the load mode and both URLs in `performance.json`. Record the client's `wrk -v` output in the thesis, because a manual run cannot read it.
 
 ---
 
@@ -97,7 +97,7 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 | App                        | Purpose                                                                              | Vhost       |
 | -------------------------- | ------------------------------------------------------------------------------------ | ----------- |
-| **WordPress** (php8.3)     | Real-world CMS — target of the tagged benign/attack corpus (Test 1)                  | `wp.local`  |
+| **WordPress** 7.1.3 (php8.3) | Real-world CMS — target of the tagged benign/attack corpus (Test 1)                  | `wp.local`  |
 | **Albedo** 0.2.0           | CRS go-ftw regression backend (Test 2); answers 200 to everything, so also the load target (Test 3) | `ftw.local` |
 
 WordPress is installed by `make lab-up` (one-shot `wp-cli` container) and runs **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
@@ -266,7 +266,7 @@ All lab targets live in `benchmarks/Makefile`; run them with `make -C benchmarks
 3. writes the **PL2** profile and repeats all three tests into `benchmarks/results/run-<id>-pl2/`;
 4. prints both result tables.
 
-Every runner reads the policy that protects its target vhost back from the API and records it in `summary.json` (paranoia, thresholds, mode, rate limiting, GeoIP mode and the number of exclusions, overrides and custom rules); it warns when those settings do not match the `POLICY` profile. `manifest.json` records the git SHA of the checkout, so commit lab changes before a measured run.
+Every runner reads the policy that protects its target vhost back from the API and records it in `summary.json` (paranoia, thresholds, mode, rate limiting, GeoIP mode and the number of exclusions, overrides and custom rules); it warns when those settings do not match the `POLICY` profile. `manifest.json` records the git SHA of the checkout, so commit lab changes before a measured run, and the WordPress core version the corpus actually hit, so a run stays comparable if the image pin later changes.
 
 Without `LOAD_CLIENT=manual`, `make -C benchmarks eval-sweep RUN_ID=<id>` runs everything on one machine (wrk in a container) without pauses; use that for smoke runs, not for thesis numbers.
 
