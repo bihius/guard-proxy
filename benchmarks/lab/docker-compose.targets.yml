@@ -61,7 +61,7 @@ services:
   # the WAF-vs-direct delta then measures HAProxy+Coraza, not the application.
   # Vhost: ftw.local
   ftw-backend:
-    image: ghcr.io/coreruleset/albedo:0.2.0
+    image: ghcr.io/coreruleset/albedo:0.2.0@sha256:bc9b7e4f83a5268ccd2b4d1d26e926b6324e20ff1d91281c339ad82e55f5bab2
     cpuset: "${LAB_WAF_CPUSET:-}"
     restart: unless-stopped
     # Expose the baseline only to the selected benchmark interface.
@@ -75,7 +75,7 @@ services:
   # exclusion plugins applied — intentional).
   # Vhost: wp.local
   wp-db:
-    image: mariadb:11.4
+    image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
     cpuset: "${LAB_WAF_CPUSET:-}"
     restart: unless-stopped
     environment:
@@ -95,7 +95,8 @@ services:
       - gp_internal
 
   wordpress:
-    image: wordpress:php8.3-apache
+    # WordPress 7.1.3 core; the runner records `wp core version` in manifest.json.
+    image: wordpress:7.1.3-php8.3-apache@sha256:8ecd8d8e374167ea22235acf30f80d1165b82f07ffa5bcef90c1cad8f7be251f
     cpuset: "${LAB_WAF_CPUSET:-}"
     restart: unless-stopped
     environment:
@@ -122,8 +123,10 @@ services:
   # Not started by `up` (profile "setup"); setup-lab.sh runs it with
   # `compose run`, so the corpus always hits an installed site, not the
   # installer redirect.
+  # Tagged by WP-CLI version, not WordPress version: the CLI only drives the
+  # site files in the wp_data volume, so its version does not pin the core.
   wp-cli:
-    image: wordpress:cli-php8.3
+    image: wordpress:cli-2.12.0-php8.3@sha256:36243da432a0f0a3b56dc3240ecee9b159108d71305e7c064d987a20a465bfde
     cpuset: "${LAB_WAF_CPUSET:-}"
     profiles: ["setup"]
     restart: "no"

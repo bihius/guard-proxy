@@ -17,6 +17,26 @@ jobs:
       - name: Check third-party component pins
         run: python3 .github/scripts/check_version_pins.py
 
+  benchmarks:
+    name: benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.6"
+
+      - name: Run evaluation lab unit tests
+        run: uv run --no-project --with pytest==9.0.2 pytest benchmarks/tests
+
   backend:
     name: backend
     runs-on: ubuntu-latest

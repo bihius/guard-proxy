@@ -89,7 +89,9 @@ machine, which is enough for a smoke run. See
 [evaluation-plan.md](evaluation-plan.md) for methodology. Keep demo traffic
 generation off during measurements.
 
-Unit tests for the metric parsers: `cd benchmarks && python -m pytest tests`.
+Unit tests for the metric parsers and the run manifest:
+`cd benchmarks && python -m pytest tests`. They stub `docker`, so they need no
+lab; the `benchmarks` CI job runs them on every pull request.
 
 ## Test Data
 
