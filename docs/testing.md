@@ -65,7 +65,7 @@ Albedo backend (`ftw.local`) — and three tests:
 | ---- | ----------------------------------------------------------- | ----------- | ----------- |
 | 1    | Tagged corpus: 39 benign + 50 attacks × (GET `?s=`, POST comment form) = 139 cases | lab server (curl) | `wp.local` |
 | 2    | CRS regression suite, go-ftw in log mode (rule IDs checked) | lab server  | `ftw.local` |
-| 3    | wrk load, WAF vs direct, 8 GET + 2 POST mix                 | load client | `ftw.local` |
+| 3    | wrk load, WAF vs direct: Albedo 8 GET + 2 POST, WordPress 8 GET + 1 POST | load client | `ftw.local`, `wp.local` |
 
 Both PL1 and PL2 run in one command; the profiles differ only in paranoia level
 (thresholds 5/4, block mode, no exclusions, rate limiting and GeoIP off). On
@@ -89,9 +89,10 @@ machine, which is enough for a smoke run. See
 [evaluation-plan.md](evaluation-plan.md) for methodology. Keep demo traffic
 generation off during measurements.
 
-Unit tests for the metric parsers and the run manifest:
-`cd benchmarks && python -m pytest tests`. They stub `docker`, so they need no
-lab; the `benchmarks` CI job runs them on every pull request.
+Benchmark parser and manifest unit tests, plus the wrk workload test:
+`cd benchmarks && python -m pytest tests`. The workload test runs native `wrk`
+when available, or the pinned Docker image on Linux CI. Other benchmark tests
+stub `docker`; the `benchmarks` CI job runs them on every PR.
 
 ## Test Data
 

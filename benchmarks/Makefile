@@ -20,11 +20,11 @@ POLICY       ?= pl1
 EFFECTIVE_RUN_ID := $(RUN_ID)-$(POLICY)
 
 # Load-client settings (see benchmarks/lab/runners/run-load.sh). Exported so
-# that eval-load, eval-all and eval-sweep pass them on to the load runner.
+# that both load scenarios, eval-all and eval-sweep pass them to the runner.
 export LOAD_CLIENT LOAD_THREADS LOAD_CONNECTIONS LOAD_DURATION
 
 .PHONY: lab-up lab-down lab-clean \
-        eval-ftw eval-corpus eval-load eval-metrics eval-all \
+        eval-ftw eval-corpus eval-load eval-load-wp eval-metrics eval-all \
         set-policy eval-sweep \
         results help
 
@@ -72,18 +72,23 @@ eval-corpus:
 ## Test 3 — latency + RPS (WAF vs direct) on ftw.local (Albedo). Measures overhead.
 eval-load:
 	@mkdir -p $(REPO_ROOT)/benchmarks/results/run-$(EFFECTIVE_RUN_ID)/load-$(if $(TARGET_VHOST),$(TARGET_VHOST),ftw.local)
-	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),ftw.local) \
+	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) LOAD_TARGET=albedo TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),ftw.local) \
 	  DIRECT_HOST=$(DIRECT_HOST) DIRECT_PORT=$(DIRECT_PORT) \
+	  bash $(RUNNERS)/run-load.sh
+
+## Test 3 — latency + RPS (WAF vs direct) on wp.local (WordPress).
+eval-load-wp:
+	RUN_ID=$(EFFECTIVE_RUN_ID) POLICY=$(POLICY) LOAD_TARGET=wordpress TARGET_VHOST=$(if $(TARGET_VHOST),$(TARGET_VHOST),wp.local) \
 	  bash $(RUNNERS)/run-load.sh
 
 ## Aggregate all scenario outputs into results.csv + report.json.
 eval-metrics:
 	RUN_ID=$(EFFECTIVE_RUN_ID) bash $(RUNNERS)/collect-metrics.sh
 
-## Run all three tests (corpus → ftw → load) and aggregate metrics in one pass.
+## Run the corpus, ftw and both load scenarios, then aggregate metrics.
 ## POLICY=pl1 (default) or POLICY=pl2 selects the active WAF policy; results land
 ## in benchmarks/results/run-<RUN_ID>-<POLICY>/.
-eval-all: eval-corpus eval-ftw eval-load eval-metrics
+eval-all: eval-corpus eval-ftw eval-load eval-load-wp eval-metrics
 
 # ── Paranoia level sweep ────────────────────────────────────────────────────
 

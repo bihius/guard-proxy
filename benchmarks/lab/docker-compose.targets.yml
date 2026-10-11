@@ -8,8 +8,8 @@
 #     --env-file benchmarks/lab/.env \
 #     up -d --build
 #
-# Targets remain on gp_internal; Albedo also exposes a baseline-only port
-# bound to localhost by default (override the bind address for remote tests).
+# Targets remain on gp_internal; both expose baseline-only ports bound to
+# localhost by default (override the bind address for remote tests).
 #
 # Pinned image digests ensure reproducible test results across runs.
 # Update pins by running: docker pull <image> && docker inspect --format '{{index .RepoDigests 0}}' <image>
@@ -99,6 +99,8 @@ services:
     image: wordpress:7.1.3-php8.3-apache@sha256:8ecd8d8e374167ea22235acf30f80d1165b82f07ffa5bcef90c1cad8f7be251f
     cpuset: "${LAB_WAF_CPUSET:-}"
     restart: unless-stopped
+    ports:
+      - "${LAB_SERVER_ADDR:-127.0.0.1}:${LAB_WP_DIRECT_PORT:-18081}:80"
     environment:
       WORDPRESS_DB_HOST: wp-db
       WORDPRESS_DB_NAME: wordpress

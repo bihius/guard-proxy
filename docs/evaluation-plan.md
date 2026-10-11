@@ -34,7 +34,7 @@ The lab uses two hosts connected directly by an Ethernet cable (no switch, no VP
 | Lab server  | `192.168.2.5`      | Guard Proxy stack, targets, curl corpus, go-ftw             |
 | Load client | `192.168.2.1`      | native `wrk` only, started by hand                          |
 
-The server's address is the only one the lab needs: set it as `LAB_SERVER_ADDR` in `benchmarks/lab/.env`. Albedo's direct port is published on it, and the load test builds the wrk URLs from it.
+The server's address is the only one the lab needs: set it as `LAB_SERVER_ADDR` in `benchmarks/lab/.env`. Both targets' direct ports are published on it for the two paired wrk workloads.
 
 ### Lab server
 
@@ -76,7 +76,8 @@ Image tags are declared in `benchmarks/lab/docker-compose.targets.yml` and the r
 │                               └───────────────────────────────────────┘  │
 │  Published ports on LAB_SERVER_ADDR:                                     │
 │    HAPROXY_HTTP_PORT → HAProxy (WAF path)                                │
-│    LAB_FTW_DIRECT_PORT (18080) → Albedo (direct path, no WAF)            │
+│    LAB_FTW_DIRECT_PORT (18080) → Albedo (direct, no WAF)                 │
+│    LAB_WP_DIRECT_PORT  (18081) → WordPress (direct, no WAF)              │
 └──────────────────────────────▲───────────────────────────────────────────┘
                                │ HTTP over the direct cable (both paths)
 ┌─ Load client (192.168.2.1) ──┴───────────────────────────────────────────┐
@@ -97,12 +98,12 @@ Compose overlay: `benchmarks/lab/docker-compose.targets.yml`
 
 | App                        | Purpose                                                                              | Vhost       |
 | -------------------------- | ------------------------------------------------------------------------------------ | ----------- |
-| **WordPress** 7.1.3 (php8.3) | Real-world CMS — target of the tagged benign/attack corpus (Test 1)                  | `wp.local`  |
-| **Albedo** 0.2.0           | CRS go-ftw regression backend (Test 2); answers 200 to everything, so also the load target (Test 3) | `ftw.local` |
+| **WordPress** 7.1.3 (php8.3) | Real-world CMS — tagged corpus (Test 1) and application load (Test 3) | `wp.local` |
+| **Albedo** 0.2.0           | CRS go-ftw regression backend (Test 2) and isolated WAF load (Test 3) | `ftw.local` |
 
 WordPress is installed by `make lab-up` (one-shot `wp-cli` container) and runs **without** CRS application exclusion plugins. This is intentional: any false-positive result is reported as an **untuned CRS+WordPress baseline** for the documented policy, not as a universal property of Guard Proxy.
 
-Albedo does no work of its own, so the WAF-vs-direct difference in Test 3 is the cost of HAProxy+Coraza and not of an application.
+Albedo does no work of its own, so its WAF-vs-direct difference isolates HAProxy+Coraza. The WordPress comparison includes application behavior and contention; neither run assumes a 100 ms response time.
 
 Each lab vhost has its **own WAF policy**, named after its domain (`Lab wp.local`, `Lab ftw.local`). `make set-policy POLICY=pl1|pl2` writes one of two fixed profiles into those policies:
 
@@ -123,7 +124,7 @@ Each test answers one question.
 | ---- | ---------------------------------------------------------------- | ------ | ----------- | ----------- |
 | 1    | Does the WAF block attacks and let ordinary traffic through?     | curl   | lab server  | `wp.local`  |
 | 2    | Does CRS behave in this integration as the CRS project specifies? | go-ftw | lab server  | `ftw.local` |
-| 3    | What does the WAF cost in latency, throughput, CPU and memory?   | wrk    | load client | `ftw.local` |
+| 3    | What does WAF cost with a minimal and a real backend?           | wrk    | load client | `ftw.local`, `wp.local` |
 
 ### 5.1 Test 1 — Tagged labeled corpus (FP/FN measurement)
 
@@ -168,13 +169,12 @@ Reported: `passed / run` (CRS conformance), split into tests that expect a rule 
 **Tool:** native `wrk` 4.2.0 on the load client, with `benchmarks/lab/scenarios/load/benign-mix.lua`  
 **Runner:** `benchmarks/lab/runners/run-load.sh` (on the lab server)
 
-Two runs against Albedo (`ftw.local`), both from the load client over the direct cable:
+For **each target**, run the same mix twice from the load client over the direct cable:
 
-1. **Through HAProxy+Coraza** — `http://LAB_SERVER_ADDR:HAPROXY_HTTP_PORT/` (production WAF path)
-2. **Direct to Albedo** — `http://LAB_SERVER_ADDR:18080/`, the baseline-only port, published only on `LAB_SERVER_ADDR`
+1. **Through HAProxy+Coraza** — `http://LAB_SERVER_ADDR:HAPROXY_HTTP_PORT/`
+2. **Direct to target** — Albedo at `LAB_FTW_DIRECT_PORT` (18080) or WordPress at `LAB_WP_DIRECT_PORT` (18081)
 
-Overhead = WAF_value − direct_value.  
-Config: 2 threads, 20 connections, 30-second duration (`LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION`). The mix has 10 requests: 8 GETs (pages, assets, search, API) and 2 POSTs (a form login and a JSON body), because Coraza also inspects request bodies. Every request carries `Host: ftw.local` and the correlation headers. Albedo answers 200 to all of them, so any non-2xx response through the WAF is a false positive; a run with errors on either path is marked `valid: false` in `performance.json`, because fast 403s would inflate RPS.
+Overhead = WAF_value − direct_value at each percentile. Config: 2 threads, 20 connections, 30-second duration (`LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION`). Albedo uses 8 GETs and 2 POSTs; WordPress uses 8 GETs (pages, assets, search, REST API) and one invalid-login POST to an installed site. The login uses a nonexistent user and makes no persistent changes. Each run carries the target's `Host` and correlation headers. HTTP 4xx/5xx responses or transport errors on either path mark `valid: false` in `performance.json`; `wrk` does **not** count 3xx as errors. Verify that the WordPress requests return 200 (no redirects) before interpreting a run; an uninstalled or reconfigured site can otherwise appear valid while measuring redirects.
 
 During the WAF run the server samples the `coraza` and `haproxy` containers with `docker stats` (target interval 2 s, `RESOURCE_SAMPLE_INTERVAL_S`). Each `docker stats` call takes about a second itself, so the files record the achieved mean interval (`interval_s_mean`) and the number of samples next to the target interval.
 
@@ -222,7 +222,7 @@ Security results are descriptive and configuration-specific. The thesis reports 
 | CRS conformance (go-ftw)            | Reported, no hard pass/fail threshold                        | CRS regression corpus           |
 | Latency overhead p50                | Soft guardrail: ≤ 10 ms (non-functional requirement, thesis) | Project engineering target      |
 | Latency overhead p95/p99            | Reported, no hard cap                                        | Informational                   |
-| RPS degradation                     | Reported; upper bound, because Albedo does no work           | Informational                   |
+| RPS degradation                     | Reported separately per target; Albedo exaggerates relative cost of WAF work | Informational |
 | Memory footprint (coraza container) | Reported (no hard cap)                                       | Informational for thesis        |
 
 The run is not declared “successful” or “failed” based on security thresholds. Latency overhead above the guardrail is treated as an engineering finding to investigate, not as a universal product failure. RPS degradation against a backend that answers instantly is close to 100 % by construction: against a real application the same absolute cost per request is a much smaller share of the response time.
@@ -262,15 +262,15 @@ All lab targets live in `benchmarks/Makefile`; run them with `make -C benchmarks
 `eval-sweep` stops at the first failing step. It:
 
 1. writes the **PL1** profile into both lab policies and applies the config;
-2. runs Test 1 (corpus on `wp.local`), Test 2 (go-ftw on `ftw.local`) and Test 3 (wrk from the load client to `ftw.local`), then aggregates `results.csv` into `benchmarks/results/run-<id>-pl1/`. Test 3 pauses twice, once for the WAF run and once for the direct run. Each time, run the printed command on the client, press Enter on the server as you start it (resource sampling starts then), and paste wrk's whole output when it finishes; reading stops at the `WRK_SUMMARY` line;
-3. writes the **PL2** profile and repeats all three tests into `benchmarks/results/run-<id>-pl2/`;
+2. runs Test 1 (`wp.local`), Test 2 (`ftw.local`) and Test 3 (paired wrk runs for **both** targets), then aggregates `results.csv` into `benchmarks/results/run-<id>-pl1/`. Each load scenario pauses twice: WAF, then direct. Run the printed command on the client, press Enter on the server as you start it, and paste wrk's complete output back; reading stops at `WRK_SUMMARY`;
+3. writes the **PL2** profile and repeats all scenarios into `benchmarks/results/run-<id>-pl2/`;
 4. prints both result tables.
 
 Every runner reads the policy that protects its target vhost back from the API and records it in `summary.json` (paranoia, thresholds, mode, rate limiting, GeoIP mode and the number of exclusions, overrides and custom rules); it warns when those settings do not match the `POLICY` profile. `manifest.json` records the git SHA of the checkout, so commit lab changes before a measured run, and the WordPress core version the corpus actually hit, so a run stays comparable if the image pin later changes.
 
 Without `LOAD_CLIENT=manual`, `make -C benchmarks eval-sweep RUN_ID=<id>` runs everything on one machine (wrk in a container) without pauses; use that for smoke runs, not for thesis numbers.
 
-After the evaluation, set `LAB_SERVER_ADDR` back to `127.0.0.1` and run `make -C benchmarks lab-up` again if the direct port should no longer be reachable from the client.
+After the evaluation, set `LAB_SERVER_ADDR` back to `127.0.0.1` and run `make -C benchmarks lab-up` again: both direct ports bypass WAF, and the WordPress port exposes the site's admin and login endpoints on the selected interface. Restrict access to the isolated client link during measurement.
 
 ### 8.3 Manual runs
 
@@ -278,6 +278,7 @@ After the evaluation, set `LAB_SERVER_ADDR` back to `127.0.0.1` and run `make -C
 make -C benchmarks set-policy POLICY=pl2                     # both lab vhosts
 make -C benchmarks eval-corpus RUN_ID=<id> POLICY=pl2        # one test
 make -C benchmarks eval-load RUN_ID=<id> POLICY=pl2 LOAD_CLIENT=manual
+make -C benchmarks eval-load-wp RUN_ID=<id> POLICY=pl2 LOAD_CLIENT=manual
 make -C benchmarks results RUN_ID=<id> POLICY=pl2
 ```
 
@@ -299,15 +300,19 @@ The lab server also runs unrelated services. They can compete for CPU, memory an
 
 WordPress is tested without CRS application exclusion plugins (not yet implemented in the backend). Any false positives are for an **untuned** WAF+CMS combination under a documented policy. They are not generalized to all Guard Proxy deployments.
 
-### 9.4 Small corpus
+### 9.4 WordPress application load
+
+WordPress response times depend on database state, PHP workers and caches; this scenario measures the installed lab site, not a fixed 100 ms origin. `wrk` uses a closed-loop workload with fixed concurrency, so WAF and direct paths can reach different throughput and queue depths. A difference between their p50/p95/p99 values is not a paired per-request delay. Warm up both paths and repeat measurements on an idle server before comparing them; retain Albedo as the isolated-path reference.
+
+### 9.5 Small corpus
 
 The tagged corpus has 39 benign requests and 100 attack requests. TPR and FPR describe this corpus, not attack traffic in general; one benign case changes the FPR by about 2.6 percentage points.
 
-### 9.5 Lab-specific go-ftw deviations
+### 9.6 Lab-specific go-ftw deviations
 
 The lab overrides every CRS test's `Host` header to route it to `ftw.local`, and HAProxy parses and normalizes requests before Coraza sees them. Tests that depend on their own `Host` header or on malformed HTTP that HAProxy rejects or rewrites fail for that reason, not because of a CRS rule. The thesis groups failed test IDs by cause.
 
-### 9.6 Resource sampling resolution
+### 9.7 Resource sampling resolution
 
 `docker stats` gives a handful of samples per 30-second run (see `samples` and `interval_s_mean`). CPU and memory figures are therefore coarse averages and peaks, not continuous measurements.
 
@@ -347,7 +352,7 @@ The lab overrides every CRS test's `Host` header to route it to `ftw.local`, and
     "valid": true,
     "config": {
       "threads": 2, "connections": 20, "duration": "30s",
-      "mode": "manual", "wrk_image": null, "wrk_version": null,
+      "target": "albedo", "mode": "manual", "wrk_image": null, "wrk_version": null,
       "waf_url": "http://192.168.2.5:8081/", "direct_url": "http://192.168.2.5:18080/"
     }
   },

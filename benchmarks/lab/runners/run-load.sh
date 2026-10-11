@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
-# run-load.sh — Test 3: latency and RPS overhead of the WAF (WAF vs direct).
+# run-load.sh — Test 3: latency and RPS overhead (WAF vs direct).
 #
-# Runs the same wrk workload twice against Albedo (ftw.local):
-#   1. Through HAProxy+Coraza  (production path)
-#   2. Directly against the Albedo container (WAF bypassed)
-#
-# Albedo answers every request with 200 and does no work of its own, so the
-# difference between the two runs is the cost of HAProxy+Coraza, not of the
-# application. The workload is benign and every request in it returns 200
-# directly, so any non-2xx response through the WAF is a false positive and
-# makes that run invalid (fast 403s would inflate RPS).
+# Albedo isolates HAProxy+Coraza cost; WordPress measures a real application's
+# end-to-end behavior. Both paths use the same workload and target.
 #
 # Two ways to run wrk:
 #   - local (default): wrk runs in a container on the lab's Docker network.
@@ -17,8 +10,8 @@
 #   - manual: set LOAD_CLIENT=manual and LAB_SERVER_ADDR in benchmarks/lab/.env. The script prints
 #     the wrk command for each run; you start it by hand on the separate load
 #     client and paste its output back here. The measured HTTP traffic goes
-#     from the client to the server's HAProxy port (WAF) and to Albedo's
-#     baseline port (direct). Nothing connects to the client.
+#     from the client to the server's HAProxy port (WAF) and the selected
+#     target's baseline port (direct). Nothing connects to the client.
 #
 # Samples coraza + haproxy container resource usage during the WAF run.
 #
@@ -34,19 +27,33 @@
 #   RUN_ID=... bash benchmarks/lab/runners/run-load.sh
 #   RUN_ID=... LOAD_CLIENT=manual bash benchmarks/lab/runners/run-load.sh
 #
-# Manual mode builds the URLs from LAB_SERVER_ADDR (benchmarks/lab/.env), the
-# address Albedo's direct port is also published on:
-#   WAF:    http://<LAB_SERVER_ADDR>:<HAPROXY_HTTP_PORT>/
-#   direct: http://<LAB_SERVER_ADDR>:<LAB_FTW_DIRECT_PORT>/
+# Manual mode builds URLs from LAB_SERVER_ADDR and the selected target's
+# baseline-only port (LAB_FTW_DIRECT_PORT or LAB_WP_DIRECT_PORT).
 
 set -Eeuo pipefail
 : "${RUN_ID:=$(date +%Y%m%d-%H%M%S)}"
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-TARGET_VHOST="${TARGET_VHOST:-${LAB_FTW_DOMAIN}}"
+LOAD_TARGET="${LOAD_TARGET:-albedo}"
+case "${LOAD_TARGET}" in
+  albedo)
+    TARGET_VHOST="${TARGET_VHOST:-${LAB_FTW_DOMAIN}}"
+    DIRECT_HOST="${DIRECT_HOST:-ftw-backend}"
+    DIRECT_PORT="${DIRECT_PORT:-8080}"
+    DIRECT_PUBLIC_PORT="$(env_value LAB_FTW_DIRECT_PORT 18080)"
+    ;;
+  wordpress)
+    TARGET_VHOST="${TARGET_VHOST:-${LAB_WP_DOMAIN}}"
+    DIRECT_HOST="wordpress"
+    DIRECT_PORT=80
+    DIRECT_PUBLIC_PORT="$(env_value LAB_WP_DIRECT_PORT 18081)"
+    ;;
+  *)
+    echo "Unknown LOAD_TARGET '${LOAD_TARGET}' (expected albedo or wordpress)." >&2
+    exit 1
+    ;;
+esac
 resolve_policy
-DIRECT_HOST="${DIRECT_HOST:-ftw-backend}"   # Docker service name for direct access
-DIRECT_PORT="${DIRECT_PORT:-8080}"          # Target port (no HAProxy)
 # elswork/wrk ships native amd64+arm64 builds of wrk 4.2.0 (williamyeh/wrk is
 # amd64-only and segfaults under emulation on Apple Silicon). Pinned by digest
 # so re-runs use the same binary; the digest is recorded in performance.json.
@@ -72,7 +79,7 @@ case "${LOAD_CLIENT}" in
       exit 1
     fi
     WAF_URL="http://${LAB_SERVER_ADDR}:${HAPROXY_HTTP_PORT}/"
-    DIRECT_URL="http://${LAB_SERVER_ADDR}:$(env_value LAB_FTW_DIRECT_PORT 18080)/"
+    DIRECT_URL="http://${LAB_SERVER_ADDR}:${DIRECT_PUBLIC_PORT}/"
     ;;
   local)
     LOAD_MODE="local"
@@ -127,6 +134,7 @@ run_wrk() {
     docker run --rm --cpuset-cpus="${ATTACKER_CPUSET}" \
       --network "${DOCKER_NETWORK}" \
       -v "${LUA_SCRIPT}:/benign-mix.lua:ro" \
+      -e "LOAD_TARGET=${LOAD_TARGET}" \
       -e "LOAD_VHOST=${TARGET_VHOST}" \
       -e "EVAL_RUN_ID=${RUN_ID}" \
       -e "EVAL_SCENARIO=${SCENARIO}" \
@@ -143,8 +151,8 @@ run_wrk() {
   # `env VAR=value cmd` works in bash, zsh and fish alike.
   echo "On the load client, in a checkout of commit $(git -C "${REPO_ROOT}" rev-parse --short HEAD), run:"
   echo ""
-  printf '  env LOAD_VHOST=%q EVAL_RUN_ID=%q EVAL_SCENARIO=%q EVAL_CASE=%q \\\n' \
-    "${TARGET_VHOST}" "${RUN_ID}" "${SCENARIO}" "${case_id}"
+  printf '  env LOAD_TARGET=%q LOAD_VHOST=%q EVAL_RUN_ID=%q EVAL_SCENARIO=%q EVAL_CASE=%q \\\n' \
+    "${LOAD_TARGET}" "${TARGET_VHOST}" "${RUN_ID}" "${SCENARIO}" "${case_id}"
   printf '    wrk -t %q -c %q -d %q -s benchmarks/lab/scenarios/load/benign-mix.lua --latency %q\n' \
     "${THREADS}" "${CONNECTIONS}" "${DURATION}" "${url}"
   echo ""
@@ -194,7 +202,7 @@ echo "Parsing results..."
 # Exported rather than interpolated: the heredoc is quoted ('PY') so its regex
 # backslashes stay intact, which also means shell variables are not expanded.
 export OUT_DIR THREADS CONNECTIONS DURATION WRK_IMAGE WRK_VERSION LOAD_MODE \
-  WAF_URL DIRECT_URL
+  LOAD_TARGET WAF_URL DIRECT_URL
 
 python3 - <<'PY'
 import json
@@ -255,13 +263,13 @@ performance = {
     "waf_errors": waf.get("errors"),
     "baseline_requests": direct.get("requests"),
     "baseline_errors": direct.get("errors"),
-    # Albedo answers 200 to every request in the mix: errors on either path
-    # mean the run measured failures (or WAF blocks), not overhead.
+    # Failures or blocked requests invalidate the latency/RPS comparison.
     "valid": bool(waf and direct) and waf.get("errors") == 0 and direct.get("errors") == 0,
     "config": {
         "threads": int(os.environ["THREADS"]),
         "connections": int(os.environ["CONNECTIONS"]),
         "duration": os.environ["DURATION"],
+        "target": os.environ["LOAD_TARGET"],
         "mode": os.environ["LOAD_MODE"],
         # Manual runs use the client's own wrk build, not the pinned image.
         "wrk_image": os.environ["WRK_IMAGE"] if os.environ["LOAD_MODE"] == "local" else None,
