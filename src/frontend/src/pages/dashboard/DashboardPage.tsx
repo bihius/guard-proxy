@@ -160,13 +160,12 @@ export function DashboardPage() {
               title={`No WAF events in the last ${windowLabel}`}
               description="The WAF logs a request only when a rule fires on a protected vhost; those events will appear here."
               action={
-                <Link
-                  to={appRoutes.vhosts}
-                  className="flex items-center gap-1 text-sm font-medium text-primary hover:opacity-80"
-                >
-                  Manage vhosts
-                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
-                </Link>
+                <Button asChild variant="outline" size="sm" className="gap-2">
+                  <Link to={appRoutes.vhosts}>
+                    Manage vhosts
+                    <ArrowRight aria-hidden="true" />
+                  </Link>
+                </Button>
               }
             />
           ) : timeseries.data ? (

@@ -146,7 +146,7 @@ function mockHappyPath() {
     items: [mockLog],
     total: 1,
     page: 1,
-    page_size: 8,
+    page_size: 5,
   });
 }
 
@@ -378,7 +378,7 @@ describe("DashboardPage", () => {
     expect(await screen.findByText(/POST \/login/)).toBeInTheDocument();
     expect(logsApi.listLogs).toHaveBeenCalledWith(
       "test-token",
-      expect.objectContaining({ action: "deny", page_size: 8 }),
+      expect.objectContaining({ action: "deny", page_size: 5 }),
       expect.anything(),
     );
   });

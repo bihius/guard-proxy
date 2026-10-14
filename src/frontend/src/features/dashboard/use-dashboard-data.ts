@@ -13,7 +13,7 @@ import type {
 } from "./types";
 
 /** How many recent denied requests the activity feed shows. */
-export const RECENT_BLOCKS_LIMIT = 8;
+export const RECENT_BLOCKS_LIMIT = 5;
 
 /** Background poll interval. Paused while the tab is hidden. */
 const REFRESH_INTERVAL_MS = 30_000;
