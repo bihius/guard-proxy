@@ -313,7 +313,7 @@ def test_generate_one_vhost_with_ddos_protection_enabled() -> None:
 
     assert "backend st_ddos_vhost_5" in generated.haproxy_cfg
     assert (
-        "stick-table type ipv6 size 100k expire 5s store "
+        "stick-table type ipv6 size 100k expire 5s peers gp_stick_tables store "
         "http_req_rate(5s),conn_cur" in generated.haproxy_cfg
     )
     assert (
@@ -355,6 +355,10 @@ def test_generate_one_vhost_with_ddos_protection_disabled_emits_nothing() -> Non
     assert "stick-table" not in generated.haproxy_cfg
     assert "track-sc0" not in generated.haproxy_cfg
     assert "deny_status 429" not in generated.haproxy_cfg
+    # No stick tables means no peers section, so the `localpeer` that names
+    # this process in it is omitted too.
+    assert "peers" not in generated.haproxy_cfg
+    assert "localpeer" not in generated.haproxy_cfg
 
 
 # ---------------------------------------------------------------------------
@@ -536,8 +540,8 @@ def test_generate_one_vhost_with_auto_ban_enabled() -> None:
 
     assert "backend st_ban_vhost_5" in generated.haproxy_cfg
     assert (
-        "stick-table type ipv6 size 100k expire 300s store gpc0"
-        in generated.haproxy_cfg
+        "stick-table type ipv6 size 100k expire 300s "
+        "peers gp_stick_tables store gpc0" in generated.haproxy_cfg
     )
     assert (
         "http-request track-sc1 src table st_ban_vhost_5 "

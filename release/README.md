@@ -9,7 +9,7 @@ rough edges. Generated configs, the GeoIP database and PostgreSQL data all
 live in Docker volumes, but no upgrade-path guarantees are made between beta
 releases yet — back up `pgdata` before upgrading. See
 [What an upgrade does not carry over](#what-an-upgrade-does-not-carry-over)
-for the two pieces of state that deliberately do not persist, then
+for what is kept off the volumes, then
 [Known limitations](#known-limitations) and
 [Reporting feedback](#reporting-feedback) below.
 
@@ -128,15 +128,17 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 Everything you configure in the admin UI survives an upgrade: it lives in
 PostgreSQL and is re-rendered onto the `generated_config` volume (which also
 holds the GeoIP database and the vhost certificates), so vhosts, policies and
-HTTPS keep working. Two pieces of state are deliberately not persisted:
+HTTPS keep working. Two things are stored outside the volumes:
 
 - **Bans and rate-limit counters.** These are HAProxy stick-tables, held in
-  the HAProxy process's memory and never written to disk. Any HAProxy reload
-  or restart starts them empty, so a source IP's ban and its request counters
-  are dropped — including by **Apply configuration**, which reloads HAProxy.
-  A tag-only upgrade does not recreate the pinned `haproxy` container, so the
-  tables do happen to survive one, but do not rely on that. See the DDoS
-  Protection & Auto-Ban section of `docs/architecture.md`.
+  the HAProxy process's memory and never written to disk. The generated config
+  wires them to a `peers` section, so a worker reloaded by **Apply
+  configuration** pulls them from the worker it replaces and a ban is not
+  lifted just because an admin changed something. A tag-only upgrade leaves
+  the pinned `haproxy` container running, so they survive that too — but a
+  restarted or recreated HAProxy container starts empty, and nothing can
+  recover them. See the DDoS Protection & Auto-Ban section of
+  `docs/architecture.md`.
 - **Certbot's ACME account key and renewal configuration.** The built-in
   certificate flow runs certbot inside the `backend` container with its
   configuration under `/tmp`, which is not a volume, so the account is

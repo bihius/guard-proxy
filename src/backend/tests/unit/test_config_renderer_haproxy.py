@@ -304,6 +304,8 @@ def test_haproxy_template_omits_ddos_blocks_when_disabled() -> None:
     assert "stick-table" not in rendered
     assert "track-sc0" not in rendered
     assert "deny_status 429" not in rendered
+    assert "peers" not in rendered
+    assert "localpeer" not in rendered
 
 
 def test_haproxy_template_renders_ddos_blocks_when_enabled() -> None:
@@ -329,7 +331,7 @@ def test_haproxy_template_renders_ddos_blocks_when_enabled() -> None:
     assert (
         "backend st_ddos_vhost_1\n"
         "    stick-table type ipv6 size 100k expire 10s "
-        "store http_req_rate(10s),conn_cur" in rendered
+        "peers gp_stick_tables store http_req_rate(10s),conn_cur" in rendered
     )
     assert (
         "http-request track-sc0 src table st_ddos_vhost_1 "
@@ -344,6 +346,47 @@ def test_haproxy_template_renders_ddos_blocks_when_enabled() -> None:
         "{ sc_conn_cur(0,st_ddos_vhost_1) gt 20 }" in rendered
     )
     assert "timeout http-request 5s" in rendered
+
+
+def test_haproxy_template_wires_every_stick_table_to_a_peers_section() -> None:
+    """Table contents must survive a reload; a peers section is what does it.
+
+    Stick-tables are HAProxy process memory, so without a peers section a
+    reloading worker starts empty and "Apply configuration" drops every ban and
+    rate-limit counter. HAProxy discards a peers section that does not name the
+    local peer, and a stick-table left pointing at a discarded section stops
+    synchronizing without an error — so the `localpeer` global directive and
+    the section have to be emitted together.
+    """
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    ddos=_ddos(
+                        stick_table_name="st_ddos_vhost_1",
+                        auto_ban_enabled=True,
+                        ban_stick_table_name="st_ban_vhost_1",
+                    ),
+                ),
+            ),
+        )
+    )
+
+    assert "\n    localpeer localpeer\n" in rendered
+    assert (
+        "\npeers gp_stick_tables\n"
+        "    peer localpeer 127.0.0.1:10001\n" in rendered
+    )
+    # Both tables (rate limiting and auto-ban) must reference the section, and
+    # the section must be declared before the first table that uses it.
+    assert rendered.count(" peers gp_stick_tables store") == 2
+    assert rendered.index("peers gp_stick_tables") < rendered.index(
+        "backend st_ddos_vhost_1"
+    )
 
 
 def test_haproxy_template_omits_ddos_for_disabled_route_only() -> None:
@@ -417,7 +460,8 @@ def test_haproxy_template_renders_auto_ban_blocks_when_enabled() -> None:
 
     assert (
         "backend st_ban_vhost_1\n"
-        "    stick-table type ipv6 size 100k expire 600s store gpc0" in rendered
+        "    stick-table type ipv6 size 100k expire 600s "
+        "peers gp_stick_tables store gpc0" in rendered
     )
     assert (
         "http-request track-sc1 src table st_ban_vhost_1 "
