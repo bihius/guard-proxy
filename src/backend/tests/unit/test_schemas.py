@@ -576,3 +576,54 @@ def test_log_ingest_request_rejects_invalid_paranoia_level() -> None:
             request_uri="/login",
             paranoia_level=5,
         )
+
+
+# ---------------------------------------------------------------------------
+# Trailing newlines must not pass the SecLang allowlists (issues #351, #352)
+# ---------------------------------------------------------------------------
+
+
+def test_custom_rule_variables_reject_trailing_newline() -> None:
+    """`$` also matches before a trailing newline, which rendered an extra line."""
+    with pytest.raises(ValidationError, match="letters, digits"):
+        CustomRuleCreate(
+            rule_id=9000001,
+            phase=RulePhase.REQUEST_HEADERS,
+            variables="ARGS\n",
+            operator=RuleOperator.RX,
+            operator_argument=".*",
+            actions="deny",
+        )
+
+
+def test_rule_exclusion_target_value_rejects_trailing_newline() -> None:
+    with pytest.raises(ValidationError, match="letters, digits"):
+        RuleExclusionCreate(
+            rule_id=942100,
+            target_type=TargetType.ARGS,
+            target_value="token\n",
+        )
+
+
+@pytest.mark.parametrize(
+    "domain",
+    ["app local", "app\n.local", "app;local", "app,local", "app/../etc", "app\\local"],
+)
+def test_vhost_domain_rejects_values_unsafe_for_haproxy(domain: str) -> None:
+    """A domain is written into the HAProxy host ACL, so validate it at write time."""
+    with pytest.raises(ValidationError, match="unsafe for HAProxy config"):
+        VHostCreate(domain=domain, backend_url="http://localhost:8080")
+
+
+def test_vhost_domain_strips_surrounding_whitespace_before_validating() -> None:
+    """A pasted trailing newline is normalised away, not stored."""
+    vhost = VHostCreate(domain=" app.local\n", backend_url="http://localhost:8080")
+    assert vhost.domain == "app.local"
+
+
+@pytest.mark.parametrize(
+    "domain", ["app.local", "sub.example.com", "localhost", "127.0.0.1", "APP.LOCAL"]
+)
+def test_vhost_domain_accepts_hostnames_the_renderer_accepts(domain: str) -> None:
+    vhost = VHostCreate(domain=domain, backend_url="http://localhost:8080")
+    assert vhost.domain == domain.lower()

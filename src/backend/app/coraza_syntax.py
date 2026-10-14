@@ -8,7 +8,9 @@ two cannot drift apart.
 import re
 
 # SecRule variable lists, e.g. "ARGS|REQUEST_HEADERS:User-Agent".
-VARIABLES_PATTERN = re.compile(r"^[A-Za-z0-9_.:|@-]+$")
+# \Z, not $: `$` also matches just before a trailing newline, so "ARGS\n"
+# passed and rendered an extra, broken line into the generated SecLang.
+VARIABLES_PATTERN = re.compile(r"^[A-Za-z0-9_.:|@-]+\Z")
 
 
 def quoted_value_error(value: str) -> str | None:

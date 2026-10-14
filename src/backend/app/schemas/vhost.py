@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.haproxy_syntax import host_error
 from app.schemas.policy import PolicyResponse
 from app.schemas.policy_binding import PolicyBindingResponse
 
@@ -95,6 +96,12 @@ class VHostCreate(BaseModel):
         v = v.strip().lower()
         if v.startswith(("http://", "https://")):
             raise ValueError("Domain should not include protocol (http:// or https://)")
+        # Same rule the config renderer applies when it writes the host ACL, so a
+        # domain that cannot be rendered is rejected here instead of failing
+        # config generation later (and leaving an unapplyable row behind).
+        error = host_error(v, "Domain")
+        if error is not None:
+            raise ValueError(error)
         return v
 
     @field_validator("backend_url")

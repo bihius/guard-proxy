@@ -84,6 +84,15 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Fixed
 
+- A vhost domain is validated as a hostname when it is saved, using the same
+  rule the config renderer applies when it writes the host ACL. Before, only
+  generation rejected it, so an unusable row could be stored and then blocked
+  every config apply until someone corrected it.
+- Custom-rule variables and rule-exclusion target values reject a trailing
+  newline. The allowlists ended with `$`, which also matches just before a
+  trailing newline, so `"ARGS\n"` passed and rendered an extra, broken line
+  into the generated Coraza rules — a rule change that fails to compile. Both
+  checks are anchored with `\Z` now, at write time and at generation time.
 - WAF events no longer keep credentials. The shipper stores the whole Coraza
   audit event as `raw_context` so an event can be investigated, and that event
   includes the request headers, so cookies, `Authorization` values and API keys

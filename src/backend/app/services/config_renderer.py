@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from app.coraza_syntax import VARIABLES_PATTERN, quoted_value_error
+from app.haproxy_syntax import host_error
 from app.models.custom_rule import RuleOperator, RulePhase
 from app.models.policy import PolicyEnforcementMode
 from app.models.rule_exclusion import TargetType, target_error
@@ -17,10 +18,6 @@ from app.models.rule_override import RuleAction
 # HAProxy identifiers (ACL names, backend names, server names): letters, digits,
 # hyphens, and underscores only.  No whitespace, newlines, or shell-special chars.
 _HAPROXY_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-
-# HAProxy host values used in ACL conditions: bare hostname characters only.
-# The HAProxy template strips the request port before matching.
-_HAPROXY_HOST_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # HAProxy backend address (host:port): same allowlist as host values.
 _HAPROXY_ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
@@ -83,14 +80,10 @@ def _validate_haproxy_identifier(value: str, field: str) -> None:
 
 
 def _validate_haproxy_host(value: str, field: str) -> None:
-    if not value:
-        raise ValueError(f"{field} must not be empty")
-    if not _HAPROXY_HOST_RE.match(value):
-        raise ValueError(
-            f"{field} {value!r} contains characters unsafe for HAProxy config; "
-            "only hostname chars (letters, digits, dots, hyphens, underscores) "
-            "are allowed"
-        )
+    # Shared with the vhost schemas, which reject the same values at write time.
+    error = host_error(value, field)
+    if error is not None:
+        raise ValueError(error)
 
 
 @dataclass(frozen=True)
