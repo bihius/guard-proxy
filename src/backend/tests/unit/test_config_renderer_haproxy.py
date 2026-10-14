@@ -333,14 +333,14 @@ def test_haproxy_template_renders_ddos_blocks_when_enabled() -> None:
     )
     assert (
         "http-request track-sc0 src table st_ddos_vhost_1 "
-        "if host_api !is_health !is_acme" in rendered
+        "if host_api !is_acme" in rendered
     )
     assert (
-        "http-request deny deny_status 429 if host_api !is_health !is_acme "
+        "http-request deny deny_status 429 if host_api !is_acme "
         "{ sc_http_req_rate(0,st_ddos_vhost_1) gt 100 }" in rendered
     )
     assert (
-        "http-request deny deny_status 429 if host_api !is_health !is_acme "
+        "http-request deny deny_status 429 if host_api !is_acme "
         "{ sc_conn_cur(0,st_ddos_vhost_1) gt 20 }" in rendered
     )
     assert "timeout http-request 5s" in rendered
@@ -421,18 +421,18 @@ def test_haproxy_template_renders_auto_ban_blocks_when_enabled() -> None:
     )
     assert (
         "http-request track-sc1 src table st_ban_vhost_1 "
-        "if host_api !is_health !is_acme" in rendered
+        "if host_api !is_acme" in rendered
     )
     assert (
-        "http-request deny deny_status 429 if host_api !is_health !is_acme "
+        "http-request deny deny_status 429 if host_api !is_acme "
         "{ sc_get_gpc0(1) gt 5 }" in rendered
     )
     assert (
-        "http-request sc-inc-gpc0(1) if host_api !is_health !is_acme "
+        "http-request sc-inc-gpc0(1) if host_api !is_acme "
         "{ sc_http_req_rate(0,st_ddos_vhost_1) gt 100 }" in rendered
     )
     assert (
-        "http-request sc-inc-gpc0(1) if host_api !is_health !is_acme "
+        "http-request sc-inc-gpc0(1) if host_api !is_acme "
         "{ sc_conn_cur(0,st_ddos_vhost_1) gt 20 }" in rendered
     )
 
@@ -942,3 +942,110 @@ def test_rendered_haproxy_template_validates_with_haproxy(tmp_path: Path) -> Non
     )
 
     assert result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Request-body buffering and /health scope (issues #344, #345)
+# ---------------------------------------------------------------------------
+
+
+def _ssl_context() -> HaproxyRenderContext:
+    """Reference-style context with an SSL route, so fe_https is rendered."""
+
+    return HaproxyRenderContext(
+        routes=(
+            HaproxyRoute(
+                vhost_acl_name="host_api",
+                vhost_hosts=("api.example.com",),
+                ssl_provider="letsencrypt",
+                backend=_backend("be_api", "api", "api-backend:9000"),
+            ),
+        )
+    )
+
+
+def test_haproxy_template_buffers_request_bodies_for_spoe_in_both_frontends() -> None:
+    """coraza.cfg sends `body=req.body`, which needs a buffered request body.
+
+    Without `option http-buffer-request` HAProxy only has the bytes that
+    arrived together with the headers, so a payload written after the headers
+    reaches the origin uninspected. The buffer size is what limits how much of
+    the body Coraza sees, and coraza-spoa refuses a frame larger than 64 KiB
+    (which would stop the SPOE handshake altogether), hence 65536.
+    """
+
+    rendered = render_haproxy_cfg(_ssl_context())
+
+    assert "frontend fe_https" in rendered, "expected both frontends to render"
+    assert rendered.count("    option http-buffer-request\n") == 2
+    assert "    tune.bufsize 65536\n" in rendered
+
+
+def test_haproxy_template_inspects_health_unless_coraza_is_down() -> None:
+    """/health skips inspection only while Coraza has no usable server.
+
+    A liveness probe must still succeed during a WAF outage, but as long as
+    Coraza is up /health is inspected like any other path instead of reaching
+    the origin unchecked.
+    """
+
+    rendered = render_haproxy_cfg(_ssl_context())
+
+    assert rendered.count("    acl coraza_down nbsrv(coraza-spoa) eq 0\n") == 2
+    assert (
+        rendered.count(
+            "    http-request send-spoe-group coraza coraza-req "
+            "unless is_health coraza_down\n"
+        )
+        == 2
+    )
+    # The degraded 503 still applies to every path except /health.
+    assert (
+        "http-request return status 503 content-type text/plain string "
+        '"WAF inspection unavailable" hdr X-WAF-Status degraded '
+        "hdr X-WAF-Degraded-Reason coraza-unavailable if "
+        "{ var(txn.waf_degraded_reason) -m str coraza-unavailable }" in rendered
+    )
+
+
+def test_haproxy_template_limits_health_like_any_other_path() -> None:
+    """A /health flood must be counted and limited, not exempted."""
+
+    rendered = render_haproxy_cfg(
+        HaproxyRenderContext(
+            routes=(
+                HaproxyRoute(
+                    vhost_acl_name="host_api",
+                    vhost_hosts=("api.example.com",),
+                    ssl_provider="none",
+                    backend=_backend("be_api", "api", "api-backend:9000"),
+                    ddos=_ddos(),
+                ),
+            ),
+        )
+    )
+
+    ddos_lines = [
+        line
+        for line in rendered.splitlines()
+        if "track-sc" in line or "deny_status 429" in line
+    ]
+    assert ddos_lines, "expected DDoS rules"
+    for line in ddos_lines:
+        assert "!is_health" not in line
+        assert "!is_acme" in line
+
+
+def test_release_kit_ships_the_same_seed_configs_as_configs_dir() -> None:
+    """The release kit mounts release/haproxy/*.cfg as its demo seed.
+
+    configs/haproxy/haproxy.cfg is checked against the rendered template
+    above, but the release copy is the one a fresh install can end up running.
+    It had already drifted (missing `timeout http-request 5s`), so keep both
+    copies byte-identical.
+    """
+
+    for name in ("haproxy.cfg", "coraza.cfg"):
+        assert (REPO_ROOT / "release/haproxy" / name).read_bytes() == (
+            REPO_ROOT / "configs/haproxy" / name
+        ).read_bytes(), f"release/haproxy/{name} drifted from configs/haproxy/{name}"

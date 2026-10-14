@@ -290,6 +290,51 @@ wait_for_header() {
   return 1
 }
 
+# Splits a request over two writes, one second apart, and prints the HTTP
+# status code. curl sends a body in a single write (or buffers it), so it
+# cannot reproduce this: without `option http-buffer-request` HAProxy runs the
+# http-request rules once the headers are in, Coraza only sees what arrived
+# with them, and a body payload reaches the origin uninspected (issue #344).
+split_body_status() {
+  local url="$1"
+  local payload="$2"
+  local host_port="${url#http://}"
+  local port="${host_port%%/*}"
+  port="${port##*:}"
+  local uri="/${host_port#*/}"
+  local reply
+
+  reply="$(
+    SPLIT_PORT="${port}" SPLIT_URI="${uri}" SPLIT_HOST="${HOST_HEADER}" SPLIT_BODY="${payload}" \
+      bash -c '
+        exec 3<>/dev/tcp/127.0.0.1/"${SPLIT_PORT}"
+        printf "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %s\r\nConnection: close\r\n\r\n" \
+          "${SPLIT_URI}" "${SPLIT_HOST}" "${#SPLIT_BODY}" >&3
+        sleep 1
+        printf "%s" "${SPLIT_BODY}" >&3
+        head -1 <&3
+      '
+  )"
+
+  awk '{print $2}' <<<"${reply}"
+}
+
+assert_split_body_status() {
+  local description="$1"
+  local expected="$2"
+  local url="$3"
+  local actual
+
+  actual="$(split_body_status "${url}" "id=1%27 OR %271%27=%271")"
+
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "${description}: expected HTTP ${expected}, got ${actual}." >&2
+    return 1
+  fi
+
+  echo "${description}: got HTTP ${actual}."
+}
+
 cd "${REPO_ROOT}"
 
 echo "Starting smoke stack '${SMOKE_PROJECT}' on ${HAPROXY_BASE_URL}..."
@@ -308,6 +353,8 @@ setup_vhost_and_apply_config
 
 assert_status "Benign request through WAF" "200" "${HAPROXY_BASE_URL}/docs"
 wait_for_status "SQL injection request" "403" "${HAPROXY_BASE_URL}/?id=1%27%20OR%20%271%27%3D%271" 30
+assert_status "Health path is inspected while Coraza is running" "403" "${HAPROXY_BASE_URL}/health?id=1%27%20OR%20%271%27%3D%271"
+assert_split_body_status "SQL injection in a body written after the headers" "403" "${HAPROXY_BASE_URL}/"
 
 "${COMPOSE[@]}" stop coraza
 # Wait until HAProxy starts returning the explicit unavailable reason.

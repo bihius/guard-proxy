@@ -68,9 +68,12 @@ machine-readable degraded reason header.
 ### Request Processing
 1. Client sends an HTTP request to HAProxy.
 2. HAProxy rejects unknown hosts with `421` before WAF inspection.
-3. HAProxy sends request-phase metadata to Coraza SPOA through SPOE.
+3. HAProxy sends request-phase metadata to Coraza SPOA through SPOE. Request
+   bodies are buffered first (`option http-buffer-request`) so the SPOE
+   message carries the whole body; the buffer size (`tune.bufsize 65536`) is
+   what limits how much of a body Coraza can inspect.
 4. Coraza evaluates OWASP CRS rules and returns allow/deny metadata.
-5. HAProxy returns `403` for denied traffic, `503` for WAF inspection failures (`coraza-unavailable` or `spoe-processing-error`), or forwards allowed requests to the FastAPI backend.
+5. HAProxy returns `403` for denied traffic, `503` for WAF inspection failures (`coraza-unavailable` or `spoe-processing-error`), or forwards allowed requests to the FastAPI backend. `/health` is inspected like any other path and only skips inspection while Coraza has no usable server, so a liveness probe still answers during a WAF outage.
 
 ### Policy Management
 1. Admin users manage vhosts, policies, and rule overrides through the React UI and FastAPI API.

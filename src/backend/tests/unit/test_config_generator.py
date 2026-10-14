@@ -318,14 +318,14 @@ def test_generate_one_vhost_with_ddos_protection_enabled() -> None:
     )
     assert (
         "http-request track-sc0 src table st_ddos_vhost_5 "
-        "if host_vhost_5 !is_health !is_acme" in generated.haproxy_cfg
+        "if host_vhost_5 !is_acme" in generated.haproxy_cfg
     )
     assert (
-        "http-request deny deny_status 429 if host_vhost_5 !is_health !is_acme "
+        "http-request deny deny_status 429 if host_vhost_5 !is_acme "
         "{ sc_http_req_rate(0,st_ddos_vhost_5) gt 50 }" in generated.haproxy_cfg
     )
     assert (
-        "http-request deny deny_status 429 if host_vhost_5 !is_health !is_acme "
+        "http-request deny deny_status 429 if host_vhost_5 !is_acme "
         "{ sc_conn_cur(0,st_ddos_vhost_5) gt 10 }" in generated.haproxy_cfg
     )
 
@@ -541,18 +541,18 @@ def test_generate_one_vhost_with_auto_ban_enabled() -> None:
     )
     assert (
         "http-request track-sc1 src table st_ban_vhost_5 "
-        "if host_vhost_5 !is_health !is_acme" in generated.haproxy_cfg
+        "if host_vhost_5 !is_acme" in generated.haproxy_cfg
     )
     assert (
-        "http-request deny deny_status 429 if host_vhost_5 !is_health !is_acme "
+        "http-request deny deny_status 429 if host_vhost_5 !is_acme "
         "{ sc_get_gpc0(1) gt 3 }" in generated.haproxy_cfg
     )
     assert (
-        "http-request sc-inc-gpc0(1) if host_vhost_5 !is_health !is_acme "
+        "http-request sc-inc-gpc0(1) if host_vhost_5 !is_acme "
         "{ sc_http_req_rate(0,st_ddos_vhost_5) gt 50 }" in generated.haproxy_cfg
     )
     assert (
-        "http-request sc-inc-gpc0(1) if host_vhost_5 !is_health !is_acme "
+        "http-request sc-inc-gpc0(1) if host_vhost_5 !is_acme "
         "{ sc_conn_cur(0,st_ddos_vhost_5) gt 10 }" in generated.haproxy_cfg
     )
 
