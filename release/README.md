@@ -21,7 +21,7 @@ between beta releases yet — back up `pgdata` before upgrading. See
 
 ## 1. Get the release kit
 
-Download and extract the `guard-proxy-release-v0.1.0-beta.6.tar.gz` asset
+Download and extract the `guard-proxy-release-v0.1.0-beta.7.tar.gz` asset
 from the [GitHub Releases page](https://github.com/bihius/guard-proxy/releases),
 or copy this `release/` directory if you already have the repository
 checked out. You should end up with:
@@ -45,7 +45,7 @@ cp .env.example .env
 Edit `.env` and replace every `change-me` placeholder:
 
 - `GUARD_PROXY_IMAGE_TAG` — pin this to the release you're installing,
-  e.g. `v0.1.0-beta.6`. Do not use a mutable tag like `beta` for anything
+  e.g. `v0.1.0-beta.7`. Do not use a mutable tag like `beta` for anything
   you want to reproduce later.
 - `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `LOG_INGEST_SHARED_SECRET` —
   generate real secrets, e.g. `openssl rand -hex 32`.
@@ -108,6 +108,41 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 3. Update `GUARD_PROXY_IMAGE_TAG` in `.env` to the new version.
 4. `docker compose pull && docker compose up -d`. The backend runs
    `alembic upgrade head` automatically on startup.
+
+### v0.1.0-beta.7
+
+- **Use the new release kit, don't just change the tag.** This release
+  changes `docker-compose.yml` (the frontend container now serves the built
+  UI from nginx on container port 8080, and the `coraza` service gets a
+  writable `coraza_status` volume at
+  `/var/lib/guard-proxy/generated/coraza-status`) and the seed
+  `haproxy/*.cfg`. Extract the new kit, keep your `.env`, and copy your
+  `haproxy/` files only if you edited them by hand. A stack that keeps the
+  old Compose file still runs, but Coraza rule changes then fail **Apply
+  configuration** (the apply waits out `CORAZA_RELOAD_TIMEOUT_SECONDS` and
+  rolls back).
+- **Upgrade `backend` and `coraza` together.** They are published from one
+  tag; pinning them to different versions leaves the backend waiting for a
+  reload status the older Coraza image never writes, so every apply rolls
+  back. Leave `GUARD_PROXY_IMAGE_TAG` as the single knob.
+- **Secrets must be at least 32 characters and must differ.** The backend
+  now refuses to start while `JWT_SECRET_KEY` or
+  `LOG_INGEST_SHARED_SECRET` is shorter than 32 characters, is the
+  placeholder shipped in `.env.example`, or holds the same value as the
+  other one. Generate both with `openssl rand -hex 32` and update `.env`
+  before upgrading.
+- **If the UI is reached over HTTPS, set
+  `AUTH_REFRESH_COOKIE_SECURE=true`.** The backend logs a startup warning
+  while it is false; without it the long-lived refresh cookie travels in
+  clear text.
+- **Audit log size.** `CORAZA_AUDIT_LOG_MAX_BYTES` (default `268435456`,
+  256 MiB) now comes from `.env` as well as the image. The supervisor
+  truncates `audit.log` in place once it passes the cap and keeps one
+  `audit.log.1`, so size the `coraza_audit` volume for both copies.
+- **Fix rows the stricter validation now rejects.** A vhost whose domain is
+  not a valid hostname, or a custom rule or rule exclusion whose value ends
+  with a newline, is rejected when saved and blocks every apply until it is
+  corrected.
 
 ## Known limitations
 
