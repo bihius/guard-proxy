@@ -86,9 +86,7 @@ class TestParseShowTable:
 
 
 class TestRuntimeApiErrorRegex:
-    """Mirrors `_RELOAD_ERROR_RE` coverage in test_config_apply.py.
-
-    The Runtime API reports failures as plain text in the command's own
+    """The Runtime API reports failures as plain text in the command's own
     response rather than as a socket error, so `_send_runtime_command` must
     classify replies itself — a real `show table`/`clear table` data line
     or header must never false-positive as an error.

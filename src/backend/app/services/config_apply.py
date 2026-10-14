@@ -40,13 +40,10 @@ logger = logging.getLogger(__name__)
 # apply can still call the internal reload helper while holding it.
 _apply_lock = threading.RLock()
 
-# Anchored to the start of a line so common benign substrings such as
-# "no error", "failover ready", or "warning: bind ... failed for ipv6,
-# continuing" do not trigger false-positive failure detection.
-_RELOAD_ERROR_RE = re.compile(
-    r"^\s*(error|fail|denied|permission)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
+# The synchronous master CLI `reload` (HAProxy 2.7+) always starts its
+# reply with a `Success=1` / `Success=0` status line; anything else means
+# the outcome is unknown, so only an explicit `Success=1` counts.
+_RELOAD_SUCCESS_RE = re.compile(r"\ASuccess=1$", re.MULTILINE)
 
 
 class ApplyStatus(StrEnum):
@@ -545,12 +542,8 @@ def _reload_haproxy() -> CommandResult:
         return CommandResult(ok=False, output=str(error))
 
     output = b"".join(output_chunks).decode("utf-8", errors="replace").strip()
-    # Use an anchored regex so partial-word matches such as "no error" or
-    # "warning: failed for ipv6, continuing" are not classified as errors.
-    # An empty output (HAProxy 2.7+ returns nothing on success) is treated
-    # as success.
-    is_error = bool(_RELOAD_ERROR_RE.search(output))
-    return CommandResult(ok=not is_error, output=output)
+    ok = _RELOAD_SUCCESS_RE.match(output) is not None
+    return CommandResult(ok=ok, output=output)
 
 
 def _wait_for_coraza_apps(app_names: set[str]) -> CommandResult:

@@ -7,7 +7,7 @@ import pytest
 
 from app.config import settings
 from app.services.config_apply import (
-    _RELOAD_ERROR_RE,
+    _RELOAD_SUCCESS_RE,
     ApplyStatus,
     CommandResult,
     _ensure_default_cert,
@@ -382,40 +382,54 @@ def test_apply_reload_failure_with_no_previous_cleans_up_and_returns_reload_fail
 
 
 # ---------------------------------------------------------------------------
-# MED M1 — reload error regex must not false-positive on benign substrings
+# Reload status parsing — only an explicit Success=1 counts (#313)
 # ---------------------------------------------------------------------------
 
+# Responses from HAProxy's management.txt, as `_reload_haproxy` sees them
+# after `.strip()`.
+_RELOAD_OK_OUTPUT = "\n".join(
+    [
+        "Success=1",
+        "--",
+        "[NOTICE]   (482713) : haproxy version is 2.7-dev7-4827fb-69",
+        "[NOTICE]   (482713) : path to executable is ./haproxy",
+        "[WARNING]  (482713) : config : 'http-request' rules ignored for proxy "
+        "'frt1' as they require HTTP mode.",
+        "[NOTICE]   (482713) : New worker (482720) forked",
+        "[NOTICE]   (482713) : Loading success.",
+    ]
+)
+_RELOAD_FAILED_OUTPUT = "\n".join(
+    [
+        "Success=0",
+        "--",
+        "[NOTICE]   (482886) : haproxy version is 2.7-dev7-4827fb-69",
+        "[NOTICE]   (482886) : path to executable is ./haproxy",
+        "[ALERT]    (482886) : config : parsing [test3.cfg:1]: unknown keyword "
+        "'Aglobal' out of section.",
+        "[ALERT]    (482886) : config : Fatal errors found in configuration.",
+        "[WARNING]  (482886) : Loading failure!",
+    ]
+)
 
-def test_reload_error_regex_does_not_match_benign_strings() -> None:
-    benign_outputs = [
-        # Common HAProxy success responses to the master socket reload command.
-        "[1] (SIGTERM->MASTER)",
-        "Success=1 Failure=0",
-        # Mid-sentence occurrences that are not line-leading error keywords.
-        "no error",
-        "failover ready",
-        # IPv6 warning during bind — often emitted but non-fatal; the "failed"
-        # substring is not at the start of the line.
-        "warning: bind to 0.0.0.0:80 failed for ipv6, continuing",
+
+def test_reload_success_regex_accepts_success_status() -> None:
+    assert _RELOAD_SUCCESS_RE.match(_RELOAD_OK_OUTPUT)
+    assert _RELOAD_SUCCESS_RE.match("Success=1")
+
+
+def test_reload_success_regex_rejects_failure_and_unknown_output() -> None:
+    for output in [
+        _RELOAD_FAILED_OUTPUT,
+        "Success=0",
         "",
-    ]
-    for output in benign_outputs:
-        assert not _RELOAD_ERROR_RE.search(output), (
-            f"Regex incorrectly matched benign output: {output!r}"
-        )
-
-
-def test_reload_error_regex_matches_error_lines() -> None:
-    error_outputs = [
-        "error connecting to backend",
-        "fail to bind",
-        "denied by rule",
-        "permission denied",
-        "  error: something went wrong",
-    ]
-    for output in error_outputs:
-        assert _RELOAD_ERROR_RE.search(output), (
-            f"Regex did not match expected error output: {output!r}"
+        "[1] (SIGTERM->MASTER)",
+        "Success=10",
+        "[NOTICE] Success=1",
+        "--\nSuccess=1",
+    ]:
+        assert _RELOAD_SUCCESS_RE.match(output) is None, (
+            f"Regex wrongly accepted reload output: {output!r}"
         )
 
 
