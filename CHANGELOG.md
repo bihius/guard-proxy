@@ -93,6 +93,15 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   trailing newline, so `"ARGS\n"` passed and rendered an extra, broken line
   into the generated Coraza rules — a rule change that fails to compile. Both
   checks are anchored with `\Z` now, at write time and at generation time.
+- TLS private keys are no longer world-readable. The certificates live in a
+  shared runtime volume that the Coraza container also mounts (read-only), and
+  the PEMs were written with the default file mode, so the component that parses
+  attacker traffic could read every vhost's private key. The key directory is
+  now `0700` and the PEMs `0600`, owned by the backend user, and keys written by
+  an earlier release are tightened on the next apply. HAProxy still serves TLS:
+  it loads the certificates as root and only then drops to the `haproxy` user
+  (`user`/`group` in the generated `global` section), so its workers no longer
+  run as root.
 - WAF events no longer keep credentials. The shipper stores the whole Coraza
   audit event as `raw_context` so an event can be investigated, and that event
   includes the request headers, so cookies, `Authorization` values and API keys

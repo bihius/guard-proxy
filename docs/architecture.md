@@ -378,6 +378,13 @@ The backend container starts as root only long enough to seed a minimal
 single-application CRS stub (used until the backend writes the first real
 release at startup), assign the runtime volume to the non-root `app` user,
 and then drops privileges before running migrations and Uvicorn. HAProxy
+binds its listening sockets as root, loads the TLS certificates, and then
+drops to the `haproxy` user (`user`/`group` in the generated `global`
+section), so the workers are not root. The TLS material in the shared runtime
+volume is readable by the backend's `app` user only (`0700` directory, `0600`
+PEMs), so the Coraza container — which mounts the same volume read-only and
+runs as its own unprivileged user — cannot read any vhost's private key.
+HAProxy
 copies the checked-in reference config into the same seed release when no
 generated `haproxy.cfg` exists yet. While the active release has no
 generated `coraza-spoa.yaml` (the stub, or a release from before per-policy

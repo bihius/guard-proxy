@@ -21,6 +21,12 @@ global
     # backend drops to an unprivileged user via gosu, so a root-owned 660
     # socket would not be readable/writable by the backend.
     stats socket /var/run/haproxy/admin.sock mode 666 level admin
+    # Drop privileges once the listening sockets are bound and the certificates
+    # are loaded (both happen as root): the worker processes run as the
+    # `haproxy` user instead of root, so a data-plane compromise is not root
+    # inside the container.
+    user haproxy
+    group haproxy
 
 defaults
     mode http
