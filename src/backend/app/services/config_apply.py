@@ -542,9 +542,30 @@ def _write_candidate(
     # via its runtime root; HAProxy reaches the same volume directory through
     # the `/etc/haproxy/generated/certs` path referenced in the template.
     certs_dir.mkdir(parents=True, exist_ok=True)
+    _restrict_certs_dir(certs_dir)
     for domain, pem in generated.certs.items():
-        (certs_dir / f"{domain}.pem").write_text(pem, encoding="utf-8")
+        _write_private_pem(certs_dir / f"{domain}.pem", pem)
     _ensure_default_cert(certs_dir)
+
+
+def _restrict_certs_dir(certs_dir: Path) -> None:
+    """Keep the private keys to the backend user only.
+
+    The Coraza container mounts the same volume read-only and has no business
+    reading every vhost's private key, so neither the directory nor the PEMs are
+    readable by anyone but their owner. HAProxy does not need them either: it
+    loads the certificates as root and only then drops to the `haproxy` user
+    (see the `user`/`group` directives in the generated global section).
+    """
+    os.chmod(certs_dir, 0o700)
+    # Covers files written by an earlier release, when they were world-readable.
+    for pem in certs_dir.glob("*.pem"):
+        os.chmod(pem, 0o600)
+
+
+def _write_private_pem(path: Path, pem: str) -> None:
+    path.write_text(pem, encoding="utf-8")
+    os.chmod(path, 0o600)
 
 
 def _ensure_default_cert(certs_dir: Path) -> None:
@@ -585,6 +606,7 @@ def _ensure_default_cert(certs_dir: Path) -> None:
         serialization.NoEncryption(),
     )
     default_pem.write_bytes(pem)
+    os.chmod(default_pem, 0o600)
 
 
 def _validate_haproxy(config_path: Path) -> CommandResult:

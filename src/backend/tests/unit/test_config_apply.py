@@ -1059,3 +1059,58 @@ def test_ensure_geoip_map_file_swallows_oserror(
         _ensure_geoip_map_file()
 
     assert "failed to ensure GeoIP map file exists" in caplog.text
+
+
+def test_write_candidate_restricts_tls_material_to_the_backend_user(
+    tmp_path: Path,
+) -> None:
+    """Only the backend user may read the private keys.
+
+    The Coraza container mounts the same volume read-only, so a world-readable
+    key directory would hand it every vhost's private key. HAProxy does not need
+    them: it loads the certificates as root before dropping privileges.
+    """
+    import stat
+
+    runtime_root = tmp_path / "generated"
+    candidate_dir = runtime_root / "releases" / "abc123"
+    shared_certs = runtime_root / "certs"
+    generated = GeneratedConfig(
+        haproxy_cfg="global\n",
+        coraza_spoa_yaml="applications: []\n",
+        coraza_apps=(),
+        certs={"example.com": "PEMDATA\n"},
+    )
+
+    _write_candidate(candidate_dir, generated, shared_certs)
+
+    assert stat.S_IMODE((shared_certs / "example.com.pem").stat().st_mode) == 0o600
+    assert stat.S_IMODE((shared_certs / "default.pem").stat().st_mode) == 0o600
+    assert stat.S_IMODE(shared_certs.stat().st_mode) == 0o700
+
+
+def test_write_candidate_tightens_certs_written_by_an_earlier_release(
+    tmp_path: Path,
+) -> None:
+    """Keys already on disk from before this change must not stay world-readable."""
+    import stat
+
+    runtime_root = tmp_path / "generated"
+    shared_certs = runtime_root / "certs"
+    shared_certs.mkdir(parents=True)
+    legacy_pem = shared_certs / "old.example.com.pem"
+    legacy_pem.write_text("PEMDATA\n", encoding="utf-8")
+    legacy_pem.chmod(0o644)
+
+    _write_candidate(
+        runtime_root / "releases" / "abc123",
+        GeneratedConfig(
+            haproxy_cfg="global\n",
+            coraza_spoa_yaml="applications: []\n",
+            coraza_apps=(),
+            certs={},
+        ),
+        shared_certs,
+    )
+
+    assert stat.S_IMODE(legacy_pem.stat().st_mode) == 0o600
