@@ -484,7 +484,9 @@ deliberately:
 2. Replace the tag and digest everywhere the image is referenced.
 3. For HAProxy, change the image in both Compose files and
    `HAPROXY_DEB_VERSION` together. The Debian version must exist in
-   `http://haproxy.debian.net/dists/bookworm-backports-<major.minor>/main/binary-amd64/Packages`.
+   `http://haproxy.debian.net/dists/bookworm-backports-<major.minor>/main/binary-<arch>/Packages`
+   for both `amd64` and `arm64`, the architectures the images are published
+   for.
 4. For coraza-spoa, recheck the SPOP readiness probe
    (`src/backend/app/services/coraza_probe.py`) and the version-specific notes
    in `configs/coraza/README.md`. For CRS, follow "Updating CRS" there.
