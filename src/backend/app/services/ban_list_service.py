@@ -30,9 +30,8 @@ _TABLE_ENTRY_RE = re.compile(
 # HAProxy's Runtime API reports failures (unknown table, permission denied,
 # unsupported command, ...) as plain text in the command's own response
 # rather than as a socket-level error, so a successful `recv()` does not
-# mean the command succeeded. Anchored to the start of a line, mirroring
-# `config_apply._RELOAD_ERROR_RE`, so a `key=...` data line or the
-# `# table: ...` header can never false-positive.
+# mean the command succeeded. Anchored to the start of a line so a `key=...`
+# data line or the `# table: ...` header can never false-positive.
 _RUNTIME_API_ERROR_RE = re.compile(
     r"^\s*(unknown|no such|can't find|permission denied|invalid|error)\b",
     re.IGNORECASE | re.MULTILINE,
