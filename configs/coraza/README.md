@@ -107,57 +107,57 @@ data-flow description.
 
 ### Event schema and ingest mapping
 
-The table below maps each `LogIngestRequest` field (defined in
-`src/backend/app/schemas/log.py`) to its source path inside the Coraza JSON
-event. The mapping is implemented in `src/log-shipper/app/mapping.py`.
+The Coraza audit event and the `LogIngestRequest` payload are both JSON, but
+they do not have the same schema. Coraza uses a nested transaction-oriented
+structure, while the backend expects a flat, validated API object. The
+log-shipper translates between them in `src/log-shipper/app/mapping.py`.
 
-Parts `ABIJDEFHZ` produce a top-level structure like:
+The documented audit-log parts `ABIJDEFHZ` describe a structure like:
 
 ```jsonc
 {
   "transaction": {
     "id": "...",
-    "timestamp": "...",
+    "timestamp": "2026/05/31 13:29:17",
     "client_ip": "...",
     "is_interrupted": false,
     "request": {
       "method": "GET",
       "uri": "/path",
-      "headers": { "host": "example.com", ... }
-    },
-    "response": { "status": 200 },
-    "variables": {
-      "tx": {
-        "anomaly_score": "5",
-        "paranoia_level": "1"
-      }
+      "headers": { "host": ["example.com"], ... }
     }
   },
   "messages": [
     {
-      "message": "...",
-      "data": { "id": "941100", "msg": "XSS Attack ...", "severity": "2" }
+      "error_message": "[id \"941100\"] [msg \"XSS Attack Detected\"] [severity \"critical\"]"
     }
   ]
 }
 ```
 
+In the actual `coraza-spoa:0.6.1` output, `messages[].data` is `null`,
+`transaction.variables` is absent, and the timestamp has no timezone. The
+shipper treats this timestamp as UTC, parses rule fields from
+`messages[].error_message`, and keeps compatibility with a future structured
+`messages[].data` object if Coraza starts populating it.
+
 | `LogIngestRequest` field | Coraza source path | Notes |
 |---|---|---|
 | `producer_event_id` | `transaction.id` | Unique per transaction |
-| `event_at` | `transaction.timestamp` | ISO 8601 string |
-| `vhost` | `transaction.request.headers.host` | Lowercase |
-| `source_ip` | `transaction.client_ip` | |
+| `event_at` | `transaction.timestamp` | Parses ISO 8601, Coraza's `YYYY/MM/DD HH:MM:SS`, or Apache-style timestamp; missing timezone means UTC |
+| `vhost` | `transaction.request.headers.host` | First header value; normalized to lowercase and stripped of port; `unknown` if unavailable |
+| `source_ip` | `transaction.client_ip` | Must be a valid IP address; otherwise the event is skipped |
 | `method` | `transaction.request.method` | Uppercase |
 | `request_uri` | `transaction.request.uri` | |
 | `status_code` | `transaction.response.status` | May be absent for blocked requests |
 | `action` | derived | `deny` if `transaction.is_interrupted`; `monitor` if not interrupted but a CRS blocking-evaluation rule (949110, 949111, 959100, 959101) matched, i.e. a DetectionOnly policy reached its threshold; when `is_interrupted` is absent, `deny` if the first rule's severity is emergency/alert/critical; else `allow` |
-| `rule_id` | `messages[0].data.id` | First (or highest-severity) fired rule |
-| `rule_message` | `messages[0].data.msg` | Corresponding rule message |
-| `anomaly_score` | `transaction.variables.tx.anomaly_score` | String → int; absent when no rules fired |
-| `paranoia_level` | `transaction.variables.tx.paranoia_level` | String → int |
+| `rule_id` | first rule-bearing `messages[].data.id` or parsed `messages[].error_message` | One row is stored for one transaction |
+| `rule_message` | first rule-bearing `messages[].data.msg` or parsed `messages[].error_message` | Corresponds to `rule_id` |
+| `anomaly_score` | `transaction.variables.tx.anomaly_score`, otherwise parsed from the CRS blocking message | String → integer; `null` when unavailable |
+| `paranoia_level` | `transaction.variables.tx.paranoia_level` | String → integer; normally unavailable in `coraza-spoa:0.6.1` |
 | `severity` | not sent by the shipper; the backend derives it at ingest | `high` if `anomaly_score` >= 2x the resolved policy's `inbound_anomaly_threshold`; `medium` if the request was denied or monitored, or the score reached the threshold; else `low`. Vhosts without a policy use the default threshold `5` |
-| `raw_context` | full Coraza event JSON | Fallback; stores everything not mapped above |
+| `message` | — | Always `null`; reserved for a future non-Coraza producer |
+| `raw_context` | full Coraza event JSON | Preserves unmapped details, including all matched rules |
 
 ### Known gaps in the mapped fields
 
@@ -168,11 +168,10 @@ Parts `ABIJDEFHZ` produce a top-level structure like:
   `policies`), so `GET /logs` reports the *effective* paranoia level even
   though the shipper itself can't observe it.
 - **`message`** (the `LogIngestRequest.message` field, distinct from
-  `rule_message`) — the shipper never populates it; it always ships as
-  `null`. There is no separate "message" concept in a Coraza event beyond the
-  per-rule `messages[].data.msg` already captured as `rule_message`. Treat
-  `message` as reserved for a future non-Coraza log producer rather than a
-  bug to fix.
+  `rule_message`) — the shipper never populates it; it always ships as `null`.
+  There is no separate event-level message in Coraza beyond the per-rule
+  message already captured as `rule_message`. Treat `message` as reserved for
+  a future non-Coraza log producer rather than a bug to fix.
 - **`status_code`** — absent for requests Coraza interrupts (blocked/denied
   before reaching the upstream), since there is no upstream response to read
   a status from. A blank status code in the log viewer for a `deny` event is
