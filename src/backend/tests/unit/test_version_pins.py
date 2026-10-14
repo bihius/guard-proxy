@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+
 def _repo_root() -> Path:
     for candidate in Path(__file__).resolve().parents:
         if (candidate / ".git").exists():

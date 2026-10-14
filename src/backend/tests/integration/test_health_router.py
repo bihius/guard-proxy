@@ -13,7 +13,6 @@ import app.main as main_module
 from app.database import get_db
 from app.main import app
 
-
 # ---------------------------------------------------------------------------
 # /health — liveness probe
 # ---------------------------------------------------------------------------

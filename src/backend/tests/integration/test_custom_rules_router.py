@@ -120,7 +120,7 @@ def test_create_custom_rule_without_comment_returns_201(
 def test_create_custom_rule_response_phase_returns_422(
     client: TestClient, admin_token: dict[str, str]
 ) -> None:
-    """Response phases are rejected because the SPOA integration inspects requests only."""
+    """Response phases are rejected: the SPOA integration inspects requests only."""
     policy = _create_policy(client, admin_token, name="Response phase rejected")
 
     resp = client.post(

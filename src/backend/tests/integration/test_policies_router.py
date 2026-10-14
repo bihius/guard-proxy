@@ -1,4 +1,4 @@
-"""Testy integracyjne routera policies (CRUD + autoryzacja)."""
+"""Integration tests for the policies router (CRUD + authorization)."""
 
 from typing import Any
 
@@ -19,7 +19,7 @@ def _create_policy(
     outbound_anomaly_threshold: int = 5,
     enforcement_mode: str = "block",
 ) -> dict[str, Any]:
-    """Pomocniczo tworzy politykę i zwraca body JSON."""
+    """Helper: creates a policy and returns the JSON body."""
     resp = client.post(
         "/policies",
         headers=headers,
@@ -44,7 +44,7 @@ def _create_policy(
 def test_create_policy_admin_returns_201(
     client: TestClient, admin_token: dict[str, str], admin_user: User
 ) -> None:
-    """Admin może utworzyć politykę."""
+    """Admin can create a policy."""
     resp = client.post(
         "/policies",
         headers=admin_token,
@@ -74,7 +74,7 @@ def test_create_policy_admin_returns_201(
 def test_create_policy_viewer_forbidden(
     client: TestClient, viewer_token: dict[str, str]
 ) -> None:
-    """Viewer nie może tworzyć polityki."""
+    """Viewer cannot create a policy."""
     resp = client.post(
         "/policies",
         headers=viewer_token,
@@ -291,7 +291,7 @@ def test_list_policies_admin_returns_200(
 def test_list_policies_viewer_returns_200(
     client: TestClient, admin_token: dict[str, str], viewer_token: dict[str, str]
 ) -> None:
-    """Viewer ma dostęp tylko do odczytu listy."""
+    """Viewer has read-only access to the list."""
     _create_policy(client, admin_token, name="Readable")
 
     resp = client.get("/policies", headers=viewer_token)
@@ -346,7 +346,7 @@ def test_get_policy_returns_detail_with_rule_overrides(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Szczegóły policy zawierają pole rule_overrides."""
+    """Policy details include the rule_overrides field."""
     created = _create_policy(client, admin_token, name="Detail")
 
     resp = client.get(f"/policies/{created['id']}", headers=admin_token)
@@ -377,7 +377,7 @@ def test_patch_policy_admin_partial_update(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """PATCH aktualizuje tylko podane pola."""
+    """PATCH updates only the given fields."""
     created = _create_policy(
         client,
         admin_token,
@@ -456,7 +456,7 @@ def test_patch_policy_viewer_forbidden(
     admin_token: dict[str, str],
     viewer_token: dict[str, str],
 ) -> None:
-    """Viewer nie może modyfikować policy."""
+    """Viewer cannot modify a policy."""
     created = _create_policy(client, admin_token, name="No patch")
 
     resp = client.patch(
@@ -471,7 +471,7 @@ def test_patch_policy_viewer_forbidden(
 def test_patch_policy_duplicate_name_returns_409(
     client: TestClient, admin_token: dict[str, str]
 ) -> None:
-    """Zmiana nazwy na istniejącą -> 409."""
+    """Renaming to an existing name -> 409."""
     _create_policy(client, admin_token, name="Alpha")
     p2 = _create_policy(client, admin_token, name="Beta")
 
@@ -487,7 +487,7 @@ def test_patch_policy_duplicate_name_returns_409(
 def test_patch_policy_not_found_returns_404(
     client: TestClient, admin_token: dict[str, str]
 ) -> None:
-    """PATCH nieistniejącej policy -> 404."""
+    """PATCH of a non-existent policy -> 404."""
     resp = client.patch(
         "/policies/99999",
         headers=admin_token,
@@ -501,7 +501,7 @@ def test_patch_policy_name_null_returns_422(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """PATCH z name=null powinien być odrzucony jako 422."""
+    """PATCH with name=null should be rejected as 422."""
     created = _create_policy(client, admin_token, name="Null Name")
 
     resp = client.patch(
@@ -517,7 +517,7 @@ def test_patch_policy_paranoia_level_null_returns_422(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """PATCH z paranoia_level=null powinien być odrzucony jako 422."""
+    """PATCH with paranoia_level=null should be rejected as 422."""
     created = _create_policy(client, admin_token, name="Null Paranoia")
 
     resp = client.patch(
@@ -553,7 +553,7 @@ def test_delete_policy_admin_returns_204(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Admin może usunąć policy."""
+    """Admin can delete a policy."""
     created = _create_policy(client, admin_token, name="Delete me")
 
     resp = client.delete(f"/policies/{created['id']}", headers=admin_token)
@@ -592,7 +592,7 @@ def test_delete_policy_viewer_forbidden(
     admin_token: dict[str, str],
     viewer_token: dict[str, str],
 ) -> None:
-    """Viewer nie może usuwać policy."""
+    """Viewer cannot delete a policy."""
     created = _create_policy(client, admin_token, name="No delete")
 
     resp = client.delete(f"/policies/{created['id']}", headers=viewer_token)
@@ -603,7 +603,7 @@ def test_delete_policy_viewer_forbidden(
 def test_delete_policy_not_found_returns_404(
     client: TestClient, admin_token: dict[str, str]
 ) -> None:
-    """DELETE nieistniejącej policy -> 404."""
+    """DELETE of a non-existent policy -> 404."""
     resp = client.delete("/policies/99999", headers=admin_token)
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Policy not found"

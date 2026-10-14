@@ -1,20 +1,19 @@
-"""Wspólne fixtures pytest dla testów backendu Guard Proxy.
+"""Shared pytest fixtures for the Guard Proxy backend tests.
 
-Architektura:
-- Każdy test dostaje świeżą bazę SQLite w pamięci (brak wycieku stanu między testami).
-- Zależność get_db aplikacji FastAPI jest nadpisana, żeby używać testowej bazy danych.
-- TestClient owija aplikację dla testów integracyjnych (synchroniczny, bez async).
-- Wstępnie utworzeni użytkownicy admin i viewer są dostępni jako fixtures
-  dla testów auth.
+Architecture:
+- Each test gets a fresh in-memory SQLite database (no state leaks between tests).
+- The app's get_db dependency is overridden to use the test database.
+- TestClient wraps the app for integration tests (synchronous, no async).
+- Pre-created admin and viewer users are available as fixtures for auth tests.
 
-Hierarchia fixtures:
-  engine (session-scoped) ← jeden silnik współdzielony przez całą sesję testów
-    └─ db (function-scoped) ← świeża transakcja per test, zawsze rollbackowana po teście
-         └─ client (function-scoped) ← TestClient podpięty do testowej bazy
-   └─ admin_user / viewer_user / inactive_user ← obiekty ORM User
-        w testowej bazie
-        └─ admin_token / viewer_token ← nagłówki Authorization
-             z ważnym tokenem JWT
+Fixture hierarchy:
+  engine (session-scoped) <- one engine shared across the whole test session
+    └─ db (function-scoped) <- fresh transaction per test, always rolled back
+         └─ client (function-scoped) <- TestClient bound to the test database
+   └─ admin_user / viewer_user / inactive_user <- ORM User objects
+        in the test database
+        └─ admin_token / viewer_token <- Authorization headers
+             with a valid JWT token
 """
 
 import os
@@ -25,9 +24,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-# JWT_SECRET_KEY musi być ustawiony zanim jakikolwiek import app.* rozwiąże Settings.
-# Na potrzeby testów zawsze wymuszamy deterministyczną, testową wartość klucza,
-# niezależnie od tego, co jest ustawione w środowisku (hermetyczność testów).
+# JWT_SECRET_KEY must be set before any app.* import resolves Settings.
+# Always force a deterministic test value so the tests stay hermetic,
+# regardless of what the environment provides.
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-pytest-onlyx"
 os.environ["LOG_INGEST_SHARED_SECRET"] = "test-log-ingest-shared-secret-pytest"
 os.environ["DEBUG"] = "false"
@@ -38,21 +37,21 @@ from app.models.user import User, UserRole  # noqa: E402
 from app.services.auth_service import create_access_token, hash_password  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# Silnik bazy danych — jedna baza SQLite w pamięci na całą sesję testów
+# Database engine: one in-memory SQLite database for the whole test session
 # ---------------------------------------------------------------------------
 
-# connect_args utrzymuje to samo połączenie przez wszystkie wątki (pytest używa
-# jednego wątku, ale pula połączeń SQLAlchemy normalnie otworzyłaby nowy plik).
-# StaticPool zapewnia że każde wywołanie sessionmaker reużywa tej samej bazy :memory:.
+# connect_args keeps one connection shared across threads for the in-memory DB.
+# SQLAlchemy's default pool would open a separate, empty database per connection,
+# so StaticPool makes every sessionmaker call reuse the same :memory: database.
 _TEST_DB_URL = "sqlite://"
 
 
 @pytest.fixture(scope="session")
 def engine() -> Iterator[Engine]:
-    """Jeden silnik SQLAlchemy podpięty pod bazę SQLite w pamięci.
+    """One SQLAlchemy engine bound to an in-memory SQLite database.
 
-    Session-scoped: tworzony raz i reużywany przez cały przebieg testów.
-    Wszystkie tabele są tworzone tutaj i usuwane po zakończeniu sesji.
+    Session-scoped: created once and reused for the whole test run.
+    All tables are created here and dropped when the session ends.
     """
     from sqlalchemy.pool import StaticPool
 
@@ -68,24 +67,24 @@ def engine() -> Iterator[Engine]:
 
 
 # ---------------------------------------------------------------------------
-# Sesja bazy danych — świeża transakcja per test, zawsze rollbackowana
+# Database session: a fresh transaction per test, always rolled back
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
 def db(engine: Engine) -> Iterator[Session]:
-    """Izolowana sesja bazy danych dla pojedynczego testu.
+    """Isolated database session for a single test.
 
-    Otwiera połączenie i rozpoczyna transakcję, potem zwraca Session powiązaną
-    z tym połączeniem. Po teście zewnętrzna transakcja jest rollbackowana —
-    żadne dane nie zostają między testami.
+    Opens a connection and starts a transaction, then yields a Session bound
+    to that connection. After the test, the outer transaction is rolled back,
+    so no data survives between tests.
     """
     connection = engine.connect()
     transaction = connection.begin()
     TestSession = sessionmaker(bind=connection, class_=Session, expire_on_commit=False)
     session = TestSession()
 
-    # Wymuszenie kluczy obcych w SQLite (domyślnie wyłączone)
+    # Enforce foreign keys in SQLite (off by default)
     session.execute(__import__("sqlalchemy").text("PRAGMA foreign_keys=ON"))
 
     yield session
@@ -97,17 +96,17 @@ def db(engine: Engine) -> Iterator[Session]:
 
 
 # ---------------------------------------------------------------------------
-# TestClient — aplikacja FastAPI z nadpisaną zależnością get_db
+# TestClient: FastAPI app with the get_db dependency overridden
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
 def client(db: Session) -> Iterator[TestClient]:
-    """TestClient FastAPI podpięty pod testową sesję bazy danych.
+    """TestClient bound to the test database session.
 
-    Nadpisuje zależność get_db, żeby każdy handler requestu dostał tę samą
-    izolowaną sesję co test — zmiany w testach są widoczne dla aplikacji
-    i odwrotnie, wszystko w ramach tej samej rollbackowanej transakcji.
+    Overrides the get_db dependency so every request handler receives the same
+    isolated session as the test. Changes made by the test are visible to the app
+    and vice versa, all within the same rolled-back transaction.
     """
 
     def override_get_db() -> Iterator[Session]:
@@ -120,7 +119,7 @@ def client(db: Session) -> Iterator[TestClient]:
 
 
 # ---------------------------------------------------------------------------
-# Wstępnie utworzeni użytkownicy
+# Pre-created users
 # ---------------------------------------------------------------------------
 
 _ADMIN_PASSWORD = "adminpassword123"
@@ -130,7 +129,7 @@ _INACTIVE_PASSWORD = "inactivepassword123"
 
 @pytest.fixture()
 def admin_user(db: Session) -> User:
-    """Zapisany użytkownik z rolą admin — dostępny dla testów auth."""
+    """Persisted user with the admin role, available for auth tests."""
     user = User(
         email="admin@example.com",
         hashed_password=hash_password(_ADMIN_PASSWORD),
@@ -139,13 +138,13 @@ def admin_user(db: Session) -> User:
         is_active=True,
     )
     db.add(user)
-    db.flush()  # przypisuje user.id bez commita
+    db.flush()  # assigns user.id without committing
     return user
 
 
 @pytest.fixture()
 def viewer_user(db: Session) -> User:
-    """Zapisany użytkownik z rolą viewer — dostępny dla testów auth."""
+    """Persisted user with the viewer role, available for auth tests."""
     user = User(
         email="viewer@example.com",
         hashed_password=hash_password(_VIEWER_PASSWORD),
@@ -160,7 +159,7 @@ def viewer_user(db: Session) -> User:
 
 @pytest.fixture()
 def inactive_user(db: Session) -> User:
-    """Zapisany nieaktywny użytkownik — do testowania ścieżki zablokowanego konta."""
+    """Persisted inactive user, for testing the blocked-account path."""
     user = User(
         email="inactive@example.com",
         hashed_password=hash_password(_INACTIVE_PASSWORD),
@@ -174,26 +173,26 @@ def inactive_user(db: Session) -> User:
 
 
 # ---------------------------------------------------------------------------
-# Nagłówki auth
+# Auth headers
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
 def admin_token(admin_user: User) -> dict[str, str]:
-    """Nagłówek Authorization z ważnym tokenem access admina."""
+    """Authorization header with a valid admin access token."""
     token = create_access_token(admin_user.id, admin_user.role)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture()
 def viewer_token(viewer_user: User) -> dict[str, str]:
-    """Nagłówek Authorization z ważnym tokenem access viewera."""
+    """Authorization header with a valid viewer access token."""
     token = create_access_token(viewer_user.id, viewer_user.role)
     return {"Authorization": f"Bearer {token}"}
 
 
 # ---------------------------------------------------------------------------
-# Eksport haseł w plaintext — testy integracyjne używają ich w POST /auth/login
+# Plaintext password exports: integration tests send them to POST /auth/login
 # ---------------------------------------------------------------------------
 
 ADMIN_PASSWORD = _ADMIN_PASSWORD

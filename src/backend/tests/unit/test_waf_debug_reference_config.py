@@ -216,7 +216,8 @@ def test_reference_haproxy_config_has_coraza_health_parameters() -> None:
     config = (REPO_ROOT / "configs/haproxy/haproxy.cfg").read_text()
 
     assert (
-        "server coraza coraza:9000 check inter 2s fall 3 rise 2 init-addr last,libc,none"
+        "server coraza coraza:9000 check inter 2s fall 3 rise 2 "
+        "init-addr last,libc,none"
         in config
     )
 

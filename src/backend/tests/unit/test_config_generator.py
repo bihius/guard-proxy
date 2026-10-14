@@ -1186,9 +1186,7 @@ def test_render_haproxy_cfg_multi_raises_on_duplicate_acl_name_across_contexts()
         render_haproxy_cfg_multi([ctx_a, ctx_b])
 
 
-def test_render_haproxy_cfg_multi_raises_on_duplicate_backend_name_across_contexts() -> (
-    None
-):  # noqa: E501
+def test_render_haproxy_cfg_multi_raises_on_duplicate_backend_across_contexts() -> None:
     ctx_a = _make_single_route_context("host_a", "be_shared")
     ctx_b = _make_single_route_context("host_b", "be_shared")  # duplicate backend name
 

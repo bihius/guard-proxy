@@ -1,4 +1,4 @@
-"""Testy integracyjne routera vhosts (CRUD + autoryzacja)."""
+"""Integration tests for the vhosts router (CRUD + authorization)."""
 
 from typing import Any
 
@@ -15,7 +15,7 @@ def _create_policy(
     *,
     name: str = "Default Policy",
 ) -> dict[str, Any]:
-    """Pomocniczo tworzy politykę do przypisania vhostowi."""
+    """Helper: creates a policy to bind to a vhost."""
     resp = client.post(
         "/policies",
         headers=headers,
@@ -42,7 +42,7 @@ def _create_vhost(
     is_active: bool = True,
     policy_id: int | None = None,
 ) -> dict[str, Any]:
-    """Pomocniczo tworzy vhost i zwraca body JSON."""
+    """Helper: creates a vhost and returns the JSON body."""
     resp = client.post(
         "/vhosts",
         headers=headers,
@@ -69,7 +69,7 @@ def test_create_vhost_admin_returns_201(
     admin_token: dict[str, str],
     admin_user: User,
 ) -> None:
-    """Admin może utworzyć vhost."""
+    """Admin can create a vhost."""
     policy = _create_policy(client, admin_token, name="Assigned")
 
     resp = client.post(
@@ -195,7 +195,7 @@ def test_create_vhost_viewer_forbidden(
     client: TestClient,
     viewer_token: dict[str, str],
 ) -> None:
-    """Viewer nie może tworzyć vhostów."""
+    """Viewer cannot create vhosts."""
     resp = client.post(
         "/vhosts",
         headers=viewer_token,
@@ -212,7 +212,7 @@ def test_create_vhost_duplicate_domain_returns_409(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Drugi vhost z tą samą domeną -> 409."""
+    """Second vhost with the same domain -> 409."""
     _create_vhost(client, admin_token, domain="dup.example.com")
 
     resp = client.post(
@@ -231,7 +231,7 @@ def test_create_vhost_with_missing_policy_returns_404(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Nie można wskazać policy_id, które nie istnieje."""
+    """Cannot reference a policy_id that does not exist."""
     resp = client.post(
         "/vhosts",
         headers=admin_token,
@@ -276,7 +276,7 @@ def test_list_vhosts_viewer_returns_200(
     admin_token: dict[str, str],
     viewer_token: dict[str, str],
 ) -> None:
-    """Viewer ma dostęp tylko do odczytu listy."""
+    """Viewer has read-only access to the list."""
     _create_vhost(client, admin_token, domain="readable.example.com")
 
     resp = client.get("/vhosts", headers=viewer_token)
@@ -333,7 +333,7 @@ def test_get_vhost_returns_detail_with_policy(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Szczegóły vhosta zawierają zagnieżdżoną politykę."""
+    """vhost details include the nested policy."""
     policy = _create_policy(client, admin_token, name="Nested policy")
     created = _create_vhost(
         client,
@@ -373,7 +373,7 @@ def test_patch_vhost_admin_partial_update(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """PATCH aktualizuje tylko wskazane pola vhosta."""
+    """PATCH updates only the given vhost fields."""
     created = _create_vhost(
         client,
         admin_token,
@@ -471,7 +471,7 @@ def test_patch_vhost_viewer_forbidden(
     admin_token: dict[str, str],
     viewer_token: dict[str, str],
 ) -> None:
-    """Viewer nie może modyfikować vhosta."""
+    """Viewer cannot modify a vhost."""
     created = _create_vhost(client, admin_token, domain="no-patch.example.com")
 
     resp = client.patch(
@@ -487,7 +487,7 @@ def test_patch_vhost_duplicate_domain_returns_409(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Zmiana domeny na istniejącą -> 409."""
+    """Changing domain to an existing one -> 409."""
     _create_vhost(client, admin_token, domain="alpha.example.com")
     second = _create_vhost(client, admin_token, domain="beta.example.com")
 
@@ -504,7 +504,7 @@ def test_patch_vhost_with_missing_policy_returns_404(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """PATCH nie pozwala przypisać nieistniejącej polityki."""
+    """PATCH cannot bind a non-existent policy."""
     created = _create_vhost(client, admin_token, domain="missing-patch.example.com")
 
     resp = client.patch(
@@ -548,7 +548,7 @@ def test_patch_vhost_domain_null_returns_422(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """PATCH z domain=null powinien być odrzucony jako 422."""
+    """PATCH with domain=null should be rejected as 422."""
     created = _create_vhost(client, admin_token, domain="null.example.com")
 
     resp = client.patch(
@@ -564,7 +564,7 @@ def test_patch_vhost_backend_url_without_protocol_returns_422(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """PATCH musi walidować backend_url tak samo jak POST."""
+    """PATCH must validate backend_url the same way as POST."""
     created = _create_vhost(client, admin_token, domain="invalid-url.example.com")
 
     resp = client.patch(
@@ -869,7 +869,7 @@ def test_delete_vhost_admin_returns_204(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """Admin może usunąć vhost."""
+    """Admin can delete a vhost."""
     created = _create_vhost(client, admin_token, domain="delete.example.com")
 
     resp = client.delete(f"/vhosts/{created['id']}", headers=admin_token)
@@ -904,7 +904,7 @@ def test_delete_vhost_viewer_forbidden(
     admin_token: dict[str, str],
     viewer_token: dict[str, str],
 ) -> None:
-    """Viewer nie może usuwać vhosta."""
+    """Viewer cannot delete a vhost."""
     created = _create_vhost(client, admin_token, domain="no-delete.example.com")
 
     resp = client.delete(f"/vhosts/{created['id']}", headers=viewer_token)
@@ -916,7 +916,7 @@ def test_delete_vhost_not_found_returns_404(
     client: TestClient,
     admin_token: dict[str, str],
 ) -> None:
-    """DELETE nieistniejącego vhosta -> 404."""
+    """DELETE of a non-existent vhost -> 404."""
     resp = client.delete("/vhosts/99999", headers=admin_token)
     assert resp.status_code == 404
     assert resp.json()["detail"] == "VHost not found"

@@ -1,4 +1,4 @@
-"""Testy integracyjne routera auth z refresh tokenem w HttpOnly cookie."""
+"""Integration tests for the auth router: refresh token in an HttpOnly cookie."""
 
 from fastapi.testclient import TestClient
 
