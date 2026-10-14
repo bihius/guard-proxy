@@ -405,6 +405,17 @@ def test_ingest_log_event_rejects_invalid_secret(client: TestClient) -> None:
     assert resp.json()["detail"] == "Invalid ingest secret"
 
 
+def test_ingest_log_event_rejects_non_ascii_secret(client: TestClient) -> None:
+    """A non-ASCII header value should be rejected like any wrong secret."""
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(),
+        headers={"X-Guard-Proxy-Ingest-Secret": b"caf\xe9"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Invalid ingest secret"
+
+
 def test_ingest_log_event_rejects_invalid_payload(
     client: TestClient,
     log_ingest_headers: dict[str, str],

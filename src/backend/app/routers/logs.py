@@ -42,8 +42,8 @@ def require_log_ingest_secret(
             detail="Missing ingest secret",
         )
     if not compare_digest(
-        x_guard_proxy_ingest_secret,
-        settings.log_ingest_shared_secret,
+        x_guard_proxy_ingest_secret.encode("utf-8", "surrogateescape"),
+        settings.log_ingest_shared_secret.encode("utf-8", "surrogateescape"),
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
