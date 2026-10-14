@@ -79,11 +79,23 @@ Coraza needs to run request-phase rules:
 | `query`    | `query`          | Raw query string                       |
 | `version`  | `req.ver`        | HTTP version                           |
 | `headers`  | `req.hdrs`       | All request headers, framed for SPOE   |
-| `body`     | `req.body`       | Request body (subject to SPOA limits)  |
+| `body`     | `req.body`       | Request body (needs `option http-buffer-request`; see below) |
 | `exportRuleIDs` | `bool(false)` | Keep rule-id export disabled by default |
 
 Response-phase inspection is deliberately out of scope for M1
 (see ADR-007).
+
+### Request body buffering
+
+Both frontends set `option http-buffer-request`, and `global` sets
+`tune.bufsize 65536`. `req.body` only holds what HAProxy has already read, so
+without buffering a body written after the headers (or past the first buffer)
+reaches the origin with its payload uninspected. The buffer is also the
+largest body Coraza can inspect: coraza-spoa rejects a frame larger than
+64 KiB (`maxFrameSize bigger than maximum allowed size`), which stops the
+SPOE handshake and answers every request with `503`, so `tune.bufsize` must
+stay at or below `65536`. Bodies larger than that are inspected up to the
+buffer and then forwarded.
 
 ## Degraded-mode behaviour
 
@@ -103,9 +115,12 @@ degraded requests return `503 Service Unavailable` before contacting
 level and captures the degraded reason in the access log.
 
 This intentionally trades availability for safety: if inspection is not
-available, protected application traffic is not forwarded. `/health`
-continues to bypass WAF inspection, and backend/dashboard status
-reporting is tracked separately in #69.
+available, protected application traffic is not forwarded. `/health` skips
+inspection only while `nbsrv(coraza-spoa)` is 0, so a liveness probe still
+answers during a WAF outage while the path is inspected normally whenever
+Coraza is running. Per-vhost DDoS limits count `/health` like any other path;
+only ACME challenges are exempt. Backend/dashboard status reporting is
+tracked separately in #69.
 
 ## Troubleshooting SPOE frames
 
@@ -136,7 +151,9 @@ mode uses `info` logging.
 3. Check HAProxy output first:
 
    - the request should pass through `fe_http`;
-   - non-`/health` requests should trigger `send-spoe-group coraza coraza-req`;
+   - requests to a protected vhost, including `/health`, should trigger
+     `send-spoe-group coraza coraza-req` while Coraza is running (`/health`
+     is skipped only while the SPOA has no usable server);
    - denied requests should show a `403` generated before `be_app`.
 
 4. Check Coraza output next:

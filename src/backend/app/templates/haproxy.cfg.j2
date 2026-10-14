@@ -5,6 +5,12 @@
 global
     log stdout format raw local0 info
     maxconn 2000
+    # Request bodies are buffered so the SPOE message in coraza.cfg
+    # (`body=req.body`) carries the whole body: buffer size is the largest
+    # body Coraza can inspect. coraza-spoa refuses a frame larger than 64 KiB
+    # (`maxFrameSize bigger than maximum allowed size`), which stops the SPOE
+    # handshake and answers every request with 503, so this must stay <= 65536.
+    tune.bufsize 65536
     # Operator level avoids exposing administrative Runtime API commands.
     stats socket /tmp/haproxy.sock mode 660 level operator
     # Admin level, reachable only from the backend over the shared runtime
@@ -29,10 +35,20 @@ defaults
 
 frontend fe_http
     bind *:80
+    # Read the whole request body before the http-request rules below, so
+    # `req.body` in the coraza.cfg SPOE message is complete. Without it only
+    # bytes that arrived together with the headers are visible, and a body
+    # written after the headers (or larger than the buffer) reaches the
+    # origin with its payload uninspected (#344).
+    option http-buffer-request
     # Correlate log lines and SPOE frames.
     unique-id-format %[uuid()]
     unique-id-header X-Request-ID
     acl is_health path /health
+    # /health is inspected like any other path while the WAF is usable; it
+    # only skips inspection while Coraza has no usable server, so a liveness
+    # probe still succeeds during a WAF outage (#345).
+    acl coraza_down nbsrv(coraza-spoa) eq 0
     http-request set-log-level silent if is_health
 
     # Let's Encrypt HTTP-01 challenges bypass the unknown-host deny rule.
@@ -100,27 +116,28 @@ frontend fe_http
 {% set has_ddos_http = routes | selectattr("ddos") | list | length > 0 %}
 {% if has_ddos_http %}
     # Per-vhost DDoS protection: request-rate limiting and connection
-    # throttling via a dedicated stick-table per vhost. Health checks and
-    # ACME HTTP-01 challenges are exempt so they can't be starved by traffic
-    # spikes on the same vhost. http_req_rate(<period>) counts requests
-    # observed during the trailing <period>, not a per-second rate, so
-    # rate_limit_requests is directly "requests per rate_limit_window_seconds".
+    # throttling via a dedicated stick-table per vhost. Only ACME HTTP-01
+    # challenges are exempt: /health is counted and limited like any other
+    # path, so it cannot be used to flood a vhost (#345). http_req_rate(<period>)
+    # counts requests observed during the trailing <period>, not a per-second
+    # rate, so rate_limit_requests is directly "requests per
+    # rate_limit_window_seconds".
 {% for route in routes %}
 {% if route.ddos and route.ddos.enabled %}
-    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_acme
 {% if route.ddos.auto_ban_enabled %}
     # Automatic IP banning: repeated rate/conn violations trip a ban that
     # lifts after ban_duration_seconds of inactivity (track-sc1 refreshes
     # the entry's expiry on every request, so a persistent attacker stays
     # banned). Ban tracking/increment must run before the rate/conn deny
     # rules below, since `deny` stops rule evaluation for the request.
-    http-request track-sc1 src table {{ route.ddos.ban_stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_get_gpc0(1) gt {{ route.ddos.ban_threshold }} }
-    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
-    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+    http-request track-sc1 src table {{ route.ddos.ban_stick_table_name }} if {{ route.vhost_acl_name }} !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_acme { sc_get_gpc0(1) gt {{ route.ddos.ban_threshold }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
 {% endfor %}
 {% endif %}
@@ -141,7 +158,7 @@ frontend fe_http
 {% endif %}
 {% endfor %}
     filter spoe engine coraza config /usr/local/etc/haproxy/coraza.cfg
-    http-request send-spoe-group coraza coraza-req unless is_health
+    http-request send-spoe-group coraza coraza-req unless is_health coraza_down
 
     # Fail closed (503) when SPOE processing starts but fails.
     http-request set-var(txn.waf_degraded_reason) str(spoe-processing-error) if { var(txn.coraza.error) -m found }
@@ -161,9 +178,13 @@ frontend fe_http
 {% if has_ssl %}
 frontend fe_https
     bind *:443 ssl crt /etc/haproxy/generated/certs/
+    # See fe_http: bodies are buffered so Coraza can inspect them (#344).
+    option http-buffer-request
     unique-id-format %[uuid()]
     unique-id-header X-Request-ID
     acl is_health path /health
+    # See fe_http: /health is only exempt while Coraza is unusable (#345).
+    acl coraza_down nbsrv(coraza-spoa) eq 0
     http-request set-log-level silent if is_health
 
     acl is_acme path_beg /.well-known/acme-challenge/
@@ -208,15 +229,15 @@ frontend fe_https
     # Per-vhost DDoS protection (see fe_http).
 {% for route in routes %}
 {% if route.ddos and route.ddos.enabled %}
-    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
+    http-request track-sc0 src table {{ route.ddos.stick_table_name }} if {{ route.vhost_acl_name }} !is_acme
 {% if route.ddos.auto_ban_enabled %}
-    http-request track-sc1 src table {{ route.ddos.ban_stick_table_name }} if {{ route.vhost_acl_name }} !is_health !is_acme
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_get_gpc0(1) gt {{ route.ddos.ban_threshold }} }
-    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
-    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+    http-request track-sc1 src table {{ route.ddos.ban_stick_table_name }} if {{ route.vhost_acl_name }} !is_acme
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_acme { sc_get_gpc0(1) gt {{ route.ddos.ban_threshold }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request sc-inc-gpc0(1) if {{ route.vhost_acl_name }} !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
-    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_health !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_acme { sc_http_req_rate(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.rate_limit_requests }} }
+    http-request deny deny_status 429 if {{ route.vhost_acl_name }} !is_acme { sc_conn_cur(0,{{ route.ddos.stick_table_name }}) gt {{ route.ddos.max_connections_per_ip }} }
 {% endif %}
 {% endfor %}
 {% endif %}
@@ -234,7 +255,7 @@ frontend fe_https
 {% endif %}
 {% endfor %}
     filter spoe engine coraza config /usr/local/etc/haproxy/coraza.cfg
-    http-request send-spoe-group coraza coraza-req unless is_health
+    http-request send-spoe-group coraza coraza-req unless is_health coraza_down
 
     http-request set-var(txn.waf_degraded_reason) str(spoe-processing-error) if { var(txn.coraza.error) -m found }
     http-request set-log-level err if { var(txn.waf_degraded_reason) -m found }

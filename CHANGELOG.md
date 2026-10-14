@@ -59,6 +59,20 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Fixed
 
+- Coraza inspects request bodies. HAProxy buffers the request body
+  (`option http-buffer-request`, `tune.bufsize 65536`) before the SPOE message
+  is built, so a payload written after the headers, or past the first buffer,
+  no longer reaches the origin uninspected. The buffer is also the largest
+  body Coraza can inspect: coraza-spoa rejects a frame above 64 KiB and fails
+  the SPOE handshake, which would answer every request with 503, so
+  `tune.bufsize` must stay at or below 65536.
+- `/health` skips WAF inspection only while Coraza has no usable server.
+  While the WAF is running the path is inspected and counted by the per-vhost
+  DDoS limits like any other, so it is no longer an uninspected route to the
+  origin; during a WAF outage it still answers, so liveness probes keep
+  working. The release kit's demo seed also picks up the slow-loris
+  `timeout http-request 5s` it had drifted away from, and a test now keeps
+  `release/haproxy/*.cfg` identical to `configs/haproxy/*.cfg`.
 - The log shipper fsyncs its offset file, remembers the audit file's device
   and inode, and reads a rotated file to the end before following the new
   file from the start. A corrupt offset is logged and the audit log is read
