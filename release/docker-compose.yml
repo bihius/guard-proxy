@@ -83,6 +83,10 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    environment:
+      # Audit log size cap enforced by docker/coraza-supervisor.sh; the file is
+      # truncated in place and the shipper resumes from the start.
+      CORAZA_AUDIT_LOG_MAX_BYTES: ${CORAZA_AUDIT_LOG_MAX_BYTES:-268435456}
     volumes:
       - generated_config:/runtime:ro
       - coraza_status:/runtime/coraza-status

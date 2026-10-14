@@ -11,6 +11,15 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Changed
 
+- `JWT_SECRET_KEY` and `LOG_INGEST_SHARED_SECRET` must now be at least 32
+  characters long and differ from each other. The backend refuses to start
+  otherwise, naming the offending variable. A deployment still running a
+  shorter or shared secret must generate new values with `openssl rand -hex 32`
+  and update its `.env`.
+- The `coraza` service in both Compose files passes
+  `CORAZA_AUDIT_LOG_MAX_BYTES` (default `268435456`, 256 MiB) through to the
+  supervisor, so the audit-log size cap documented in `configs/coraza/README.md`
+  can be set from `.env` instead of only inside the image.
 - GitHub Actions are pinned to commit SHAs instead of mutable tags, and every
   workflow declares a `permissions:` block (CI and the smoke run are read-only;
   publishing keeps `contents: read` and `packages: write`). A tag such as `@v4`
