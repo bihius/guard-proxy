@@ -46,6 +46,7 @@ services:
       - backend_logs:/var/log/guard-proxy
       - ../configs/haproxy/coraza.cfg:/usr/local/etc/haproxy/coraza.cfg:ro
       - generated_config:/var/lib/guard-proxy/generated
+      - coraza_status:/var/lib/guard-proxy/generated/coraza-status
       - haproxy_runtime:/var/run/haproxy
     networks:
       - gp_internal
@@ -90,6 +91,7 @@ services:
       - ../configs/coraza/guard-proxy-exceptions.conf:/etc/coraza/guard-proxy-exceptions.conf:ro
       - ../configs/coraza/crs:/etc/coraza/crs:ro
       - generated_config:/runtime:ro
+      - coraza_status:/runtime/coraza-status
       - coraza_audit:/var/log/coraza
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "9000"]
@@ -171,5 +173,6 @@ volumes:
   haproxy_runtime:
   backend_logs:
   generated_config:
+  coraza_status:
   coraza_audit:
   shipper_state:

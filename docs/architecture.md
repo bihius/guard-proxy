@@ -96,22 +96,25 @@ machine-readable degraded reason header.
    Coraza does not know fails the SPOE call and HAProxy answers `503`
    instead of inspecting the request with another vhost's policy.
 7. Because of that, `POST /config/apply` switches Coraza and HAProxy in an
-   order where HAProxy never sends a name Coraza has not loaded. When a
-   release adds applications, the backend swaps `current`, waits until
-   `coraza-spoa` serves every new application (it asks over SPOP the same way
-   HAProxy does, `app/services/coraza_probe.py`), and only then reloads
-   HAProxy. If the release also drops applications, Coraza first gets a
-   bridge release that still contains them and the final release only after
-   HAProxy has reloaded. If Coraza does not load the new applications within
-   `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the apply fails with
+   order where HAProxy never sends a name Coraza has not loaded. When the
+   Coraza files change, the backend swaps `current` and waits until the
+   Coraza supervisor has compiled that release. The supervisor runs
+   `coraza-spoa -validate` before it sends `SIGHUP` (or restarts the process
+   when the config file itself changes) and writes the result to
+   `/runtime/coraza-status/reload-status`. When a release adds application
+   names, apply also waits until `coraza-spoa` serves every new name (it asks
+   over SPOP the same way HAProxy does, `app/services/coraza_probe.py`), and
+   only then reloads HAProxy. A release that only drops names reloads HAProxy
+   first, so Coraza does not drop a name HAProxy is still sending, and the
+   compile check runs after that reload. If the release both adds and drops
+   names, Coraza first gets a bridge release that still contains the dropped
+   applications. If Coraza rejects the release or does not report status
+   within `CORAZA_RELOAD_TIMEOUT_SECONDS` (default 30), the apply fails with
    `coraza_reload_failed` and the previous release stays active.
 
 **Limitations.** Each application compiles the whole CRS rule set, so Coraza's
 memory grows with the number of distinct policies in use (vhosts sharing a
-policy share its application). Rule changes to applications that already
-exist still reach Coraza about a second after HAProxy reloads (the
-supervisor's poll plus rule compilation); until then they are inspected with
-the previous rules of the same policy. Path-scoped policy bindings
+policy share its application). Path-scoped policy bindings
 (`/vhosts/{id}/policy-bindings`) to a policy other than the vhost's own are
 rejected at generation time: HAProxy selects policies per vhost only, and WAF
 events are attributed to the vhost's policy.
@@ -388,11 +391,16 @@ The earlier inotify-based supervisor looked simpler, but it did not reliably
 observe the backend's atomic `current` symlink replacement through the
 read-only runtime volume mount while Coraza kept using the previous loaded
 rules. Polling the symlink target is intentionally less clever but directly
-tests the state Coraza includes. When the target changes, the supervisor
-sends `SIGHUP` to `coraza-spoa`, which rebuilds its WAF from the new
-`/runtime/current` files and swaps it in while the listener on port 9000 stays
-open. If the new rules fail to load, `coraza-spoa` logs the error and keeps
-serving the previous ones. If the child process exits, the supervisor exits
+tests the state Coraza includes. When the target changes, the supervisor compiles the new config with
+`coraza-spoa -validate`. A compile error is written to
+`/runtime/coraza-status/reload-status` and `coraza-spoa` is left on the
+rules it already loaded. After a successful compile the supervisor sends
+`SIGHUP`, which rebuilds the WAF from the new `/runtime/current` files and
+swaps it in while the listener on port 9000 stays open, then records that
+release as loaded. The status directory is a separate writable volume; the
+rest of `/runtime` stays read-only. An older Coraza image does not write
+this file, so apply waits until `CORAZA_RELOAD_TIMEOUT_SECONDS` and restores
+the previous release. If the child process exits, the supervisor exits
 non-zero so Compose can restart the container.
 An earlier version restarted `coraza-spoa` instead. Port 9000 was then closed
 for a moment on every apply, and HAProxy's fail-closed rules answered every

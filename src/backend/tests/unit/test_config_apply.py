@@ -12,9 +12,11 @@ from app.services.config_apply import (
     CommandResult,
     _ensure_default_cert,
     _read_current_symlink,
+    _wait_for_coraza_reload,
     _write_candidate,
     apply,
     calculate_checksum,
+    parse_coraza_reload_status,
     seed_runtime_config,
 )
 from app.services.config_generator import CorazaAppConfig, GeneratedConfig
@@ -183,11 +185,18 @@ def _record_runtime_steps(monkeypatch, runtime_root: Path, *, coraza_ok: bool = 
         steps.append(("coraza-wait", (set(app_names), _active_app_names(runtime_root))))
         return CommandResult(ok=coraza_ok, output="coraza did not load policy_9")
 
+    def wait_reload(release: str) -> CommandResult:
+        steps.append(("coraza-reload", release))
+        return CommandResult(ok=True, output="coraza accepted the release")
+
     def reload() -> CommandResult:
         steps.append(("haproxy-reload", _active_app_names(runtime_root)))
         return CommandResult(ok=True, output="reloaded")
 
     monkeypatch.setattr("app.services.config_apply._wait_for_coraza_apps", wait)
+    monkeypatch.setattr(
+        "app.services.config_apply._wait_for_coraza_reload", wait_reload
+    )
     monkeypatch.setattr("app.services.config_apply._reload_haproxy", reload)
     return steps
 
@@ -204,10 +213,65 @@ def test_apply_waits_for_coraza_to_load_new_policies_before_haproxy_reload(
     result = apply(_generated_with_apps("default", "policy_9"))
 
     assert result.status == ApplyStatus.success
-    assert steps == [
-        ("coraza-wait", ({"policy_9"}, {"default", "policy_9"})),
-        ("haproxy-reload", {"default", "policy_9"}),
+    assert [step for step, _ in steps] == [
+        "coraza-reload",
+        "coraza-wait",
+        "haproxy-reload",
     ]
+    assert steps[1] == ("coraza-wait", ({"policy_9"}, {"default", "policy_9"}))
+    assert steps[2] == ("haproxy-reload", {"default", "policy_9"})
+
+
+def test_apply_rejects_rule_changes_when_coraza_reports_reload_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A bad rule for an existing policy must not be reported as applied."""
+    runtime_root = tmp_path / "generated"
+    previous = _seed_current_release(
+        runtime_root, generated=_generated_with_apps("default", "policy_7")
+    )
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+    reloaded = {"count": 0}
+
+    def reload() -> CommandResult:
+        reloaded["count"] += 1
+        return CommandResult(ok=True, output="reloaded")
+
+    monkeypatch.setattr("app.services.config_apply._reload_haproxy", reload)
+    monkeypatch.setattr(
+        "app.services.config_apply._wait_for_coraza_reload",
+        lambda release: CommandResult(ok=False, output="invalid regexp (?P<"),
+    )
+
+    result = apply(
+        GeneratedConfig(
+            haproxy_cfg="global\n",
+            coraza_spoa_yaml="applications: []\n",
+            coraza_apps=(
+                CorazaAppConfig(
+                    name="default",
+                    crs_setup_conf="# default\n",
+                    rule_overrides_conf="# no overrides\n",
+                ),
+                CorazaAppConfig(
+                    name="policy_7",
+                    crs_setup_conf="# policy\n",
+                    rule_overrides_conf='SecRule ARGS "@rx (?P<" "id:1,phase:1,deny"\n',
+                ),
+            ),
+            certs={},
+        )
+    )
+
+    assert result.status == ApplyStatus.coraza_reload_failed
+    assert reloaded["count"] == 0
+    assert "invalid regexp" in (result.reload_output or "")
+    assert (runtime_root / "current").resolve() == previous.resolve()
 
 
 def test_apply_reloads_haproxy_without_waiting_when_no_policy_is_new(
@@ -223,7 +287,8 @@ def test_apply_reloads_haproxy_without_waiting_when_no_policy_is_new(
     result = apply(_generated_with_apps("default"))
 
     assert result.status == ApplyStatus.success
-    assert steps == [("haproxy-reload", {"default"})]
+    assert [step for step, _ in steps] == ["haproxy-reload", "coraza-reload"]
+    assert steps[0] == ("haproxy-reload", {"default"})
 
 
 def test_apply_keeps_dropped_policies_in_coraza_until_haproxy_reloads(
@@ -241,10 +306,13 @@ def test_apply_keeps_dropped_policies_in_coraza_until_haproxy_reloads(
 
     assert result.status == ApplyStatus.success
     bridge_apps = {"default", "policy_3", "policy_9"}
-    assert steps == [
-        ("coraza-wait", ({"policy_9"}, bridge_apps)),
-        ("haproxy-reload", bridge_apps),
+    assert [step for step, _ in steps] == [
+        "coraza-reload",
+        "coraza-wait",
+        "haproxy-reload",
     ]
+    assert steps[1] == ("coraza-wait", ({"policy_9"}, bridge_apps))
+    assert steps[2] == ("haproxy-reload", bridge_apps)
     active_dir = (runtime_root / "current").resolve()
     assert active_dir == Path(result.active_path)
     assert _active_app_names(runtime_root) == {"default", "policy_9"}
@@ -265,7 +333,7 @@ def test_apply_restores_previous_release_when_coraza_does_not_load_new_policy(
 
     assert result.status == ApplyStatus.coraza_reload_failed
     assert "policy_9" in (result.reload_output or "")
-    assert [step for step, _ in steps] == ["coraza-wait"]
+    assert [step for step, _ in steps] == ["coraza-reload", "coraza-wait"]
     assert (runtime_root / "current").resolve() == previous.resolve()
     assert sorted(p.name for p in (runtime_root / "releases").iterdir()) == ["previous"]
 
@@ -345,6 +413,105 @@ def test_apply_logs_attempt_with_correlation_id(
     assert start_record is not None
     assert result.correlation_id in start_record.message
 
+
+
+def test_apply_skips_coraza_reload_when_coraza_files_are_unchanged(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    generated = _sample_generated()
+    _seed_current_release(runtime_root, generated=generated)
+    steps = _record_runtime_steps(monkeypatch, runtime_root)
+
+    result = apply(generated)
+
+    assert result.status == ApplyStatus.success
+    assert steps == [("haproxy-reload", {"default", "policy_7"})]
+
+
+def test_apply_waits_for_coraza_before_haproxy_when_only_rules_change(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    _seed_current_release(runtime_root, generated=_sample_generated("# old\n"))
+    steps = _record_runtime_steps(monkeypatch, runtime_root)
+
+    result = apply(_sample_generated("# new\n"))
+
+    assert result.status == ApplyStatus.success
+    assert [step for step, _ in steps] == ["coraza-reload", "haproxy-reload"]
+    assert steps[1][1] == {"default", "policy_7"}
+
+
+def test_parse_coraza_reload_status_requires_three_complete_lines() -> None:
+    assert parse_coraza_reload_status("release=releases/abc\nresult=ok\n") is None
+    assert parse_coraza_reload_status(
+        "release=releases/abc\nresult=error\ndetail=bad regexp\n"
+    ) == ("releases/abc", "error", "bad regexp")
+    assert parse_coraza_reload_status(
+        "release=releases/abc\nresult=ok\ndetail=\n"
+    ) == ("releases/abc", "ok", "")
+    assert parse_coraza_reload_status(
+        "release=\nresult=ok\ndetail=\n"
+    ) is None
+
+
+def test_wait_for_coraza_reload_times_out_when_no_status_file_is_written(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """An older Coraza image never writes reload status."""
+    runtime_root = tmp_path / "generated"
+    runtime_root.mkdir()
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(settings, "coraza_reload_timeout_seconds", 0)
+
+    result = _wait_for_coraza_reload("releases/abc")
+
+    assert not result.ok
+    assert "older Coraza image" in result.output
+
+
+def test_wait_for_coraza_reload_returns_the_compiler_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    status_dir = runtime_root / "coraza-status"
+    status_dir.mkdir(parents=True)
+    (status_dir / "reload-status").write_text(
+        "release=releases/abc\nresult=error\ndetail=invalid regexp (?P<\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(settings, "coraza_reload_timeout_seconds", 1)
+
+    result = _wait_for_coraza_reload("releases/abc")
+
+    assert not result.ok
+    assert "invalid regexp" in result.output
+
+
+def test_wait_for_coraza_reload_ignores_a_different_release(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    status_dir = runtime_root / "coraza-status"
+    status_dir.mkdir(parents=True)
+    (status_dir / "reload-status").write_text(
+        "release=releases/other\nresult=ok\ndetail=\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(settings, "coraza_reload_timeout_seconds", 0)
+
+    result = _wait_for_coraza_reload("releases/abc")
+
+    assert not result.ok
+    assert "releases/abc" in result.output
 
 # ---------------------------------------------------------------------------
 # HIGH #2 — first-apply reload failure must clean up candidate and symlink
