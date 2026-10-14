@@ -967,7 +967,9 @@ def test_apply_skips_rollback_reload_when_previous_no_longer_validates(
         p for p in releases_root.iterdir()
         if p.name != "previous" and p.resolve() == current_resolved
     ]
-    assert candidates, "current should point at the new candidate after rollback skipped"
+    assert candidates, (
+        "current should point at the new candidate after rollback skipped"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
-"""Testy jednostkowe serwisu auth (app.services.auth_service).
+"""Unit tests for the auth service (app.services.auth_service).
 
-Testy są izolowane — bez bazy danych, bez aplikacji FastAPI, bez HTTP.
-Testujemy czyste funkcje: hashowanie haseł, tworzenie tokenów, dekodowanie tokenów.
+Tests are isolated: no database, no FastAPI app, no HTTP.
+Covers pure functions only: password hashing, token creation, token decoding.
 """
 
 import os
@@ -37,8 +37,8 @@ def test_hash_password_not_plaintext() -> None:
 
 
 def test_hash_password_different_salts() -> None:
-    """bcrypt dodaje losową sól, więc zahashowanie tego samego hasła
-    dwa razy daje różne wyniki.
+    """bcrypt adds a random salt, so hashing the same password twice
+    yields different results.
     """
     h1 = hash_password("somesecret")
     h2 = hash_password("somesecret")
@@ -63,8 +63,8 @@ def test_verify_password_wrong() -> None:
 def test_verify_password_corrupt_hash_returns_false(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Uszkodzony hash w bazie powinien zwrócić False i zalogować ostrzeżenie,
-    nie rzucać wyjątkiem (zachowanie fail-closed).
+    """A corrupted hash in the database must return False and log a warning,
+    not raise an exception (fail-closed behaviour).
     """
     import logging
 
@@ -94,8 +94,8 @@ def test_decode_access_token_round_trip() -> None:
 
 
 def test_decode_access_token_has_type_access() -> None:
-    """decode_access_token musi odrzucać tokeny z typem innym niż 'access'."""
-    # Tworzymy refresh token i próbujemy zdekodować go jako access — musi się nie udać.
+    """decode_access_token must reject tokens whose type is not 'access'."""
+    # Create a refresh token and try to decode it as access; this must fail.
     refresh = create_refresh_token(user_id=1)
     with pytest.raises(jwt.InvalidTokenError):
         decode_access_token(refresh)
@@ -164,7 +164,7 @@ def test_decode_refresh_token_round_trip() -> None:
 
 
 def test_decode_refresh_token_rejects_access_token() -> None:
-    """decode_refresh_token musi odrzucać tokeny z typem innym niż 'refresh'."""
+    """decode_refresh_token must reject tokens whose type is not 'refresh'."""
     access = create_access_token(user_id=1, role="admin")
     with pytest.raises(jwt.InvalidTokenError):
         decode_refresh_token(access)
@@ -188,7 +188,7 @@ def test_decode_refresh_token_expired() -> None:
 
 
 def test_refresh_token_has_no_role() -> None:
-    """Refresh tokeny celowo nie zawierają pola 'role' — weryfikujemy payload."""
+    """Refresh tokens deliberately omit the 'role' field; verify the payload."""
     from app.config import settings
 
     token = create_refresh_token(user_id=3)

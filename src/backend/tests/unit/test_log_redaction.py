@@ -15,7 +15,9 @@ class TestRedactRawContext:
             "X-Request-Id": ["tx-1"],
         }
 
-        redacted = redact_raw_context({"transaction": {"request": {"headers": headers}}})
+        redacted = redact_raw_context(
+            {"transaction": {"request": {"headers": headers}}}
+        )
 
         result = redacted["transaction"]["request"]["headers"]
         assert result["Host"] == ["app.example.com"]

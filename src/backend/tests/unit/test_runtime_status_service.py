@@ -62,7 +62,7 @@ def test_deployment_state_is_deployed_when_latest_reload_succeeded(db: Session) 
 def test_deployment_state_is_failed_with_only_failed_reloads_and_no_prior_success(
     db: Session,
 ) -> None:
-    """A failed reload with no prior successful reload is 'failed', not 'never_deployed'.
+    """A failed reload with no prior success is 'failed', not 'never_deployed'.
     The API was called and a reload was attempted; that attempt failed."""
     _add_operation(
         db,
