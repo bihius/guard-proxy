@@ -28,6 +28,27 @@ def test_default_coraza_spoa_config_uses_info_logging() -> None:
     assert "log_file: /dev/stderr" in config
 
 
+def test_fallback_coraza_spoa_configs_fail_closed_on_unknown_applications() -> None:
+    """The image fallback must not accept application names it does not define.
+
+    With a `default_application`, coraza-spoa inspects any name HAProxy sends
+    with the single baked-in application (paranoia level 1, detect-only), so a
+    request meant for a per-policy application silently loses its policy.
+    """
+    for name in (
+        "configs/coraza/coraza-spoa.yaml",
+        "configs/coraza/coraza-spoa.debug.yaml",
+    ):
+        config = (REPO_ROOT / name).read_text()
+
+        # Only the YAML key matters; the header comments name it on purpose.
+        assert not [
+            line for line in config.splitlines()
+            if line.startswith("default_application:")
+        ], name
+        assert "  - name: default\n" in config, name
+
+
 def test_default_docker_compose_does_not_use_debug_flag() -> None:
     compose = (REPO_ROOT / "docker/docker-compose.yml").read_text()
 

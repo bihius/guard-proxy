@@ -70,7 +70,8 @@ export function SystemStatusCard({ status, overview }: SystemStatusCardProps) {
   }
 
   const data = status.data!;
-  const { deployment_state, generated_config, latest_reload } = data;
+  const { active_config, deployment_state, generated_config, latest_reload } =
+    data;
   // A failed reload is rolled back but still records the rejected candidate's
   // checksum, so only a successful reload says what HAProxy is running.
   const lastReloadSucceeded = latest_reload?.status === "success";
@@ -94,6 +95,10 @@ export function SystemStatusCard({ status, overview }: SystemStatusCardProps) {
             Configuration changes have not been applied yet — the running proxy is
             still on an older config.
           </Alert>
+        ) : null}
+
+        {active_config.degraded && active_config.warning ? (
+          <Alert variant="warning">{active_config.warning}</Alert>
         ) : null}
 
         {generated_config.error ? (

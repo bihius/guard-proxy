@@ -8,8 +8,6 @@ log_level: debug
 log_file: /dev/stdout
 log_format: console
 
-default_application: default
-
 applications:
   - name: default
     directives: |

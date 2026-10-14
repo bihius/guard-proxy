@@ -33,6 +33,12 @@ function makeRuntimeData(
       generated_at: "2026-05-01T12:00:00Z",
       error: null,
     },
+    active_config: {
+      haproxy_source: "generated",
+      coraza_source: "generated",
+      degraded: false,
+      warning: null,
+    },
     latest_validation: null,
     latest_reload: null,
     ...overrides,
@@ -106,6 +112,35 @@ describe("RuntimeStatusCard", () => {
     expect(
       screen.getByText(/HAProxy failed to reload/),
     ).toBeInTheDocument();
+  });
+
+  it("warns when HAProxy or Coraza is not running the generated config", () => {
+    render(
+      <RuntimeStatusCard
+        status={makeStatus({
+          data: makeRuntimeData({
+            active_config: {
+              haproxy_source: "seed",
+              coraza_source: "fallback",
+              degraded: true,
+              warning: "HAProxy is serving the demo seed configuration.",
+            },
+          }),
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText("HAProxy is serving the demo seed configuration."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no warning when the generated config is live", () => {
+    render(
+      <RuntimeStatusCard status={makeStatus({ data: makeRuntimeData() })} />,
+    );
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows dash when no latest_reload", () => {

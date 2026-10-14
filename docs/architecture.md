@@ -379,7 +379,11 @@ generated `haproxy.cfg` exists yet. While the active release has no
 generated `coraza-spoa.yaml` (the stub, or a release from before per-policy
 applications), Coraza uses the single-application config baked into its
 image; the supervisor restarts `coraza-spoa` once when it switches between
-the two files.
+the two files. That fallback declares no `default_application` either, so a
+name it does not define fails the SPOE call and HAProxy answers `503`.
+`GET /runtime/status` reports both cases (`active_config`: `seed`/`fallback`)
+so a stack serving the demo config or the Coraza fallback is visible rather
+than silent.
 
 The Coraza container image is built on `alpine:3.19` with `tini` as PID 1. A
 shell supervisor (`coraza-supervisor.sh`) drops to the non-root `coraza` user,

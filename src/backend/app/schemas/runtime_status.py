@@ -11,6 +11,8 @@ from app.models.runtime_operation import (
 )
 
 DeploymentState = Literal["never_deployed", "deployed", "failed"]
+HaproxyConfigSource = Literal["generated", "seed", "missing"]
+CorazaConfigSource = Literal["generated", "fallback"]
 
 
 class RuntimeGeneratedConfigStatus(BaseModel):
@@ -24,6 +26,21 @@ class RuntimeGeneratedConfigStatus(BaseModel):
     # served using the default CRS context. Listed here as a visibility aid
     # so operators know which vhosts are running without an explicit policy.
     unbound_vhost_domains: list[str] | None = None
+
+
+class ActiveRuntimeConfig(BaseModel):
+    """What HAProxy and Coraza are actually running from right now (issue #315).
+
+    A `seed` or `missing` HAProxy source means the reference/demo config is
+    serving traffic; a `fallback` Coraza source means the single application
+    baked into the Coraza image inspects every request at paranoia level 1 in
+    detect-only mode and the per-policy settings are ignored.
+    """
+
+    haproxy_source: HaproxyConfigSource
+    coraza_source: CorazaConfigSource
+    degraded: bool
+    warning: str | None = None
 
 
 class RuntimeOperationSnapshot(BaseModel):
@@ -44,5 +61,6 @@ class RuntimeStatusResponse(BaseModel):
     frontend_contract_version: str
     deployment_state: DeploymentState
     generated_config: RuntimeGeneratedConfigStatus
+    active_config: ActiveRuntimeConfig
     latest_validation: RuntimeOperationSnapshot | None = None
     latest_reload: RuntimeOperationSnapshot | None = None

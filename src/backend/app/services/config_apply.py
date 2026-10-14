@@ -36,6 +36,9 @@ CORAZA_APPS_DIR = "coraza"
 # Written by docker/coraza-supervisor.sh after it validates a release.
 CORAZA_STATUS_DIR = "coraza-status"
 CORAZA_STATUS_FILE = "reload-status"
+# Placeholder release the container entrypoint (and HAProxy, copying its
+# checked-in demo config) creates when nothing has been generated yet.
+SEED_RELEASE_NAME = "seed"
 
 logger = logging.getLogger(__name__)
 
@@ -408,9 +411,12 @@ def seed_runtime_config(generated: GeneratedConfig) -> str | None:
     `<runtime_root>/current` on startup. Until the first admin "Apply
     config" runs, that symlink does not exist, so Coraza's includes under
     `/runtime/current` resolve to nothing and CRS fails to load. Called on
-    every backend startup to seed `current` from
-    the database state, without reloading anything (no service has started
-    yet, so there is nothing to reload).
+    every backend startup to seed `current` from the database state.
+
+    Normally this runs before any service starts, so nothing is reloaded.
+    When HAProxy is already up and serving the demo seed (the backend was
+    healthy while an earlier seeding failed), the seed is replaced and
+    HAProxy is reloaded onto the new release.
 
     Returns the checksum of whatever release is active in `current` once
     this returns (freshly written or pre-existing), or `None` if there is
@@ -429,9 +435,14 @@ def seed_runtime_config(generated: GeneratedConfig) -> str | None:
 
     # A real release always contains haproxy.cfg. The container entrypoint
     # seeds a minimal CRS stub (without haproxy.cfg) so Coraza can start
-    # before the backend; that stub must be replaced with the full rendered
-    # config here, so only skip seeding when a real release is active.
-    if (current_link / "haproxy.cfg").exists():
+    # before the backend, and HAProxy copies its checked-in demo config into
+    # that same `releases/seed` directory when no generated config exists
+    # yet. Neither is a deployment, so both are replaced here. A release an
+    # admin actually applied is left alone even when it predates per-policy
+    # applications (no coraza-spoa.yaml): replacing it would silently deploy
+    # unapplied database changes.
+    seed_active = _active_release_is_seed(current_link)
+    if (current_link / "haproxy.cfg").exists() and not seed_active:
         return _read_active_checksum(current_link)
 
     correlation_id = uuid.uuid4().hex
@@ -457,6 +468,18 @@ def seed_runtime_config(generated: GeneratedConfig) -> str | None:
         )
         shutil.rmtree(candidate_dir, ignore_errors=True)
         return None
+
+    if seed_active and Path(settings.haproxy_master_socket_path).exists():
+        # HAProxy is already running the demo seed; move it onto the release
+        # that was just activated. Without this the running process and
+        # `current` disagree until the next apply.
+        reload_result = _reload_haproxy()
+        if not reload_result.ok:
+            logger.error(
+                "config-seed reload failed correlation_id=%s output=%s",
+                correlation_id,
+                reload_result.output,
+            )
 
     logger.info(
         "config-seed wrote initial runtime config correlation_id=%s",
@@ -787,9 +810,9 @@ def _wait_for_coraza_apps(app_names: set[str]) -> CommandResult:
 def _release_app_names(release_dir: Path | None) -> set[str]:
     """Coraza applications of a release (empty for none or a pre-#305 release).
 
-    A release without per-policy applications runs on the image's fallback
-    config, whose default_application accepts any name, so it has nothing
-    HAProxy could lose.
+    A release without per-policy applications sends every vhost to the
+    `default` application, which the image's fallback config also serves, so
+    it has nothing HAProxy could lose.
     """
     if release_dir is None:
         return set()
@@ -824,6 +847,15 @@ def _swap_current_link(current_link: Path, target: Path, runtime_root: Path) -> 
     temp_link = runtime_root / f".current-{uuid.uuid4().hex}.tmp"
     temp_link.symlink_to(relative_target)
     os.replace(temp_link, current_link)
+
+
+def _active_release_is_seed(current_link: Path) -> bool:
+    """True when `current` points at the placeholder seed release."""
+    try:
+        target = current_link.resolve(strict=True)
+    except OSError:
+        return False
+    return target.name == SEED_RELEASE_NAME and target.parent.name == "releases"
 
 
 def _read_current_symlink(current_link: Path) -> Path | None:
