@@ -715,6 +715,112 @@ def test_seed_runtime_config_is_noop_when_current_already_exists(
     assert returned_checksum != calculate_checksum(_sample_generated())
 
 
+def test_seed_runtime_config_replaces_the_haproxy_demo_seed_release(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """HAProxy copies its checked-in demo config into releases/seed when no
+    generated config exists. Serving it is not a deployment, so a later
+    backend start replaces it instead of treating haproxy.cfg as applied."""
+    runtime_root = tmp_path / "generated"
+    seed_dir = runtime_root / "releases" / "seed"
+    seed_dir.mkdir(parents=True)
+    (seed_dir / "haproxy.cfg").write_text("global\n", encoding="utf-8")
+    (seed_dir / "crs-setup.conf").write_text("SecRuleEngine On\n", encoding="utf-8")
+    (seed_dir / "rule-overrides.conf").write_text("# stub\n", encoding="utf-8")
+    (runtime_root / "current").symlink_to("releases/seed")
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+
+    returned_checksum = seed_runtime_config(_sample_generated())
+
+    current = runtime_root / "current"
+    assert current.resolve() != seed_dir.resolve()
+    assert (current / "coraza-spoa.yaml").exists()
+    assert returned_checksum == calculate_checksum(_sample_generated())
+
+
+def test_seed_runtime_config_reloads_haproxy_already_serving_the_demo_seed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The backend can start after HAProxy has already loaded the demo seed
+    (it was healthy while seeding failed). Replacing the seed must also move
+    the running process onto the new release."""
+    runtime_root = tmp_path / "generated"
+    seed_dir = runtime_root / "releases" / "seed"
+    seed_dir.mkdir(parents=True)
+    (seed_dir / "haproxy.cfg").write_text("global\n", encoding="utf-8")
+    (runtime_root / "current").symlink_to("releases/seed")
+    socket_path = tmp_path / "master.sock"
+    socket_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(settings, "haproxy_master_socket_path", str(socket_path))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+    reloads: list[int] = []
+    monkeypatch.setattr(
+        "app.services.config_apply._reload_haproxy",
+        lambda: reloads.append(1) or CommandResult(ok=True, output="reloaded"),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    assert reloads == [1]
+
+
+def test_seed_runtime_config_does_not_reload_when_haproxy_is_not_running(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """First boot: HAProxy starts after the backend, so there is no socket and
+    nothing to reload."""
+    runtime_root = tmp_path / "generated"
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        settings, "haproxy_master_socket_path", str(tmp_path / "absent.sock")
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: CommandResult(ok=True, output="valid"),
+    )
+    reloads: list[int] = []
+    monkeypatch.setattr(
+        "app.services.config_apply._reload_haproxy",
+        lambda: reloads.append(1) or CommandResult(ok=True, output="reloaded"),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    assert reloads == []
+
+
+def test_seed_runtime_config_should_not_replace_an_applied_release(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """An applied release is left alone even without coraza-spoa.yaml."""
+    runtime_root = tmp_path / "generated"
+    old_release = runtime_root / "releases" / "previous"
+    old_release.mkdir(parents=True)
+    (old_release / "haproxy.cfg").write_text("global\n", encoding="utf-8")
+    (runtime_root / "current").symlink_to("releases/previous")
+    monkeypatch.setattr(settings, "runtime_generated_config_root", str(runtime_root))
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy",
+        lambda _: (_ for _ in ()).throw(AssertionError("should not validate")),
+    )
+
+    seed_runtime_config(_sample_generated())
+
+    assert (runtime_root / "current").resolve() == old_release.resolve()
+
+
 def test_seed_runtime_config_keeps_a_release_from_before_per_policy_apps(
     tmp_path: Path,
     monkeypatch,

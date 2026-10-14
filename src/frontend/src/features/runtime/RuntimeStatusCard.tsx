@@ -58,7 +58,8 @@ export function RuntimeStatusCard({ status }: RuntimeStatusCardProps) {
     );
   }
 
-  const { deployment_state, generated_config, latest_reload } = status.data;
+  const { active_config, deployment_state, generated_config, latest_reload } =
+    status.data;
   const tone = deploymentToneMap[deployment_state];
   const label = deploymentLabelMap[deployment_state];
 
@@ -69,6 +70,9 @@ export function RuntimeStatusCard({ status }: RuntimeStatusCardProps) {
       actions={<StatusBadge label={label} tone={tone} />}
     >
       <div className="space-y-3">
+        {active_config.degraded && active_config.warning ? (
+          <Alert variant="warning">{active_config.warning}</Alert>
+        ) : null}
         <StatusRow
           label="Generated checksum"
           value={truncateChecksum(generated_config.checksum)}

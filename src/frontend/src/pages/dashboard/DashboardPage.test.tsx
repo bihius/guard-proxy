@@ -24,6 +24,12 @@ vi.mock("@/features/runtime/use-runtime-status", () => ({
     data: {
       frontend_contract_version: "1",
       deployment_state: "deployed",
+      active_config: {
+        haproxy_source: "generated",
+        coraza_source: "generated",
+        degraded: false,
+        warning: null,
+      },
       generated_config: {
         can_generate: true,
         checksum: "abc123def456789",

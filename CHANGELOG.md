@@ -79,6 +79,20 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   `/runtime/coraza-status` (the rest of `/runtime` stays read-only). A stack
   that keeps an older Compose file still runs, but rule changes fail apply
   until that volume is mounted.
+- The image fallback Coraza config no longer declares a
+  `default_application`, so an application name it does not define fails the
+  SPOE call and HAProxy answers `503` instead of inspecting the request with
+  the single baked-in application (paranoia level 1, detect-only). The
+  `releases/seed` placeholder — the entrypoint stub, and the demo
+  `haproxy.cfg` HAProxy copies into it when nothing has been generated — is no
+  longer mistaken for an applied release on a backend restart: it is replaced
+  with a rendered release, and a HAProxy that is already running the demo
+  config is reloaded onto it. `GET /runtime/status` reports the new
+  `active_config` block (`haproxy_source`, `coraza_source`, `degraded`,
+  `warning`) and the dashboard shows a warning while the demo seed or the
+  Coraza fallback is serving traffic. A release from before per-policy
+  applications keeps running on the fallback and is reported as degraded
+  until it is applied again.
 - Policy editor fields stay on aligned rows when DDoS protection, automatic
   IP banning or country filtering are expanded, and the dashboard's empty
   "Recent blocks" card matches the height of its neighbours.

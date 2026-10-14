@@ -2,15 +2,16 @@
 #
 # The supervisor uses it only while the active runtime release has no
 # generated coraza-spoa.yaml: the entrypoint stub on a fresh volume, or a
-# release written before per-policy Coraza applications existed. Requests
-# then reach the single application below whatever `app` HAProxy sends.
+# release written before per-policy Coraza applications existed (those send
+# every vhost to `default`). Like the generated config, it declares no
+# default_application, so an application name Coraza does not know fails the
+# SPOE call (HAProxy answers 503) instead of being inspected with another
+# policy.
 
 bind: 0.0.0.0:9000
 log_level: info
 log_file: /dev/stderr
 log_format: console
-
-default_application: default
 
 applications:
   - name: default

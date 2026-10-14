@@ -15,6 +15,12 @@ function renderCard(reloadStatus: "success" | "failed") {
       generated_at: "2026-07-29T10:00:00Z",
       error: null,
     },
+  active_config: {
+    haproxy_source: "generated",
+    coraza_source: "generated",
+    degraded: false,
+    warning: null,
+  },
     latest_validation: null,
     // A failed reload is rolled back but still stores the candidate's checksum,
     // so generated and "reloaded" checksums match in both cases.
@@ -24,6 +30,42 @@ function renderCard(reloadStatus: "success" | "failed") {
       status: reloadStatus,
       config_checksum: "abc123def456789",
       message: reloadStatus === "failed" ? "reload rejected" : null,
+      created_at: "2026-07-29T10:00:00Z",
+    },
+  } as RuntimeStatusResponse;
+
+  render(
+    <SystemStatusCard
+      status={{ data, isLoading: false, error: null, refresh: vi.fn() }}
+      overview={null}
+    />,
+  );
+}
+
+function renderDegradedCard() {
+  const data = {
+    frontend_contract_version: "1",
+    deployment_state: "deployed",
+    generated_config: {
+      can_generate: true,
+      checksum: "abc123def456789",
+      generated_at: "2026-07-29T10:00:00Z",
+      error: null,
+    },
+    active_config: {
+      haproxy_source: "generated",
+      coraza_source: "fallback",
+      degraded: true,
+      warning:
+        "Coraza is running the single application baked into its image.",
+    },
+    latest_validation: null,
+    latest_reload: {
+      id: 1,
+      operation_type: "reload",
+      status: "success",
+      config_checksum: "abc123def456789",
+      message: null,
       created_at: "2026-07-29T10:00:00Z",
     },
   } as RuntimeStatusResponse;
@@ -50,5 +92,23 @@ describe("SystemStatusCard", () => {
 
     expect(screen.queryByText(/have not been applied yet/i)).not.toBeInTheDocument();
     expect(screen.getByText("Running config")).toBeInTheDocument();
+  });
+});
+
+describe("SystemStatusCard degraded configuration warning", () => {
+  it("warns when the running configuration is not the generated one", () => {
+    renderDegradedCard();
+
+    expect(
+      screen.getByText(/Coraza is running the single application baked into its image/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no degraded warning for a fully generated configuration", () => {
+    renderCard("success");
+
+    expect(
+      screen.queryByText(/baked into its image/),
+    ).not.toBeInTheDocument();
   });
 });

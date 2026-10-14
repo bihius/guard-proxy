@@ -45,6 +45,12 @@ const pendingStatus: RuntimeStatusResponse = {
     generated_at: "2026-01-01T00:00:00Z",
     error: null,
   },
+  active_config: {
+    haproxy_source: "generated",
+    coraza_source: "generated",
+    degraded: false,
+    warning: null,
+  },
   latest_validation: null,
   latest_reload: {
     id: 1,
