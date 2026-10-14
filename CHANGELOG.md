@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
-## [Unreleased]
+## [0.1.0-beta.9] - 2026-10-14
+
+### Added
+
+- `ACME_SERVER_URL` points the built-in certificate flow at another ACME
+  directory — Let's Encrypt staging, or a local server such as Pebble — and is
+  passed to certbot as `--server`. Unset keeps certbot's own default, Let's
+  Encrypt production. A private certificate authority is trusted through
+  certbot's standard `REQUESTS_CA_BUNDLE` environment variable, which needs no
+  Guard Proxy setting. Documented in `docs/architecture.md`.
 
 ### Changed
 
@@ -21,6 +30,16 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 - `publish.yml` can be started by hand (`workflow_dispatch`) as a build-only
   dry run: it builds every image for both architectures without pushing a tag
   or creating a release.
+
+### Fixed
+
+- Applying a configuration change no longer drops bans and rate-limit counters.
+  The generated config declares an HAProxy `peers` section and names it on
+  every DDoS stick-table, so the worker that replaces the running one
+  synchronizes their contents from it. Two cases still start empty: a restarted
+  or recreated HAProxy container, and the first apply after this upgrade, whose
+  outgoing worker was started from a config without that section. Documented in
+  `docs/architecture.md` and `release/README.md`.
 
 ## [0.1.0-beta.8] - 2026-10-14
 
@@ -440,7 +459,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
-[Unreleased]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.8...HEAD
+[0.1.0-beta.9]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.8...v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.7...v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.6...v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...v0.1.0-beta.6
