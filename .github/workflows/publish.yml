@@ -92,6 +92,9 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.IMAGE }}
+          # The action adds :latest on its own for version tags; the release
+          # channel decides instead, so rc/alpha tags do not move :latest.
+          flavor: latest=false
           tags: |
             type=ref,event=tag
             type=raw,value=beta,enable=${{ contains(github.ref, '-beta.') }}
@@ -172,6 +175,9 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.IMAGE }}
+          # The action adds :latest on its own for version tags; the release
+          # channel decides instead, so rc/alpha tags do not move :latest.
+          flavor: latest=false
           tags: |
             type=ref,event=tag
             type=raw,value=beta,enable=${{ contains(github.ref, '-beta.') }}
