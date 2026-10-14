@@ -397,6 +397,50 @@ class TestUnban:
                 BanListService(db).unban("not-an-ip")
         send.assert_not_called()
 
+    @pytest.mark.parametrize(
+        "ip",
+        [
+            "fe80::1%eth0",
+            "::1%a\nshutdown frontend fe_http",
+            "2001:db8::1%evil cmd",
+        ],
+    )
+    def test_rejects_scoped_ipv6_without_calling_socket(
+        self, db: Session, ip: str
+    ) -> None:
+        """A scope id is not part of the address and would reach the socket verbatim."""
+        policy = _sample_policy()
+        vhost = _sample_vhost(policy)
+        db.add_all([policy, vhost])
+        db.flush()
+
+        send = Mock()
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(ban_list_service, "_send_runtime_command", send)
+            with pytest.raises(InvalidIpError):
+                BanListService(db).unban(ip)
+        send.assert_not_called()
+
+    def test_sends_the_normalised_address(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        policy = _sample_policy()
+        vhost = _sample_vhost(policy)
+        db.add_all([policy, vhost])
+        db.flush()
+
+        sent_commands: list[str] = []
+        monkeypatch.setattr(
+            ban_list_service, "_send_runtime_command", sent_commands.append
+        )
+
+        result = BanListService(db).unban("2001:0DB8:0000::0001")
+
+        assert sent_commands == [
+            f"clear table st_ban_vhost_{vhost.id} key 2001:db8::1"
+        ]
+        assert result.ip == "2001:db8::1"
+
     def test_partial_table_failure_still_counts_successes(
         self, db: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:

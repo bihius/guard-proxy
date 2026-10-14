@@ -229,16 +229,24 @@ class BanListService:
         a failure.
         """
         try:
-            ipaddress.ip_address(ip)
+            address = ipaddress.ip_address(ip)
         except ValueError as error:
             raise InvalidIpError(ip) from error
+
+        # An IPv6 scope id ("fe80::1%eth0") parses but is not part of the
+        # address, and it travels to the Runtime API inside the command string:
+        # a scope carrying whitespace would append a second command. Only the
+        # normalised address is ever interpolated below.
+        if "%" in ip:
+            raise InvalidIpError(ip)
+        key = str(address)
 
         tables = self._active_ban_tables()
         cleared = 0
         failures = 0
         for _vhost, table_name, _threshold in tables:
             try:
-                _send_runtime_command(f"clear table {table_name} key {ip}")
+                _send_runtime_command(f"clear table {table_name} key {key}")
                 cleared += 1
             except RuntimeTableNotProvisionedError:
                 logger.info(
@@ -247,14 +255,14 @@ class BanListService:
                 )
             except RuntimeApiError:
                 logger.exception(
-                    "ban-list failed to clear key %s in table %s", ip, table_name
+                    "ban-list failed to clear key %s in table %s", key, table_name
                 )
                 failures += 1
 
         if tables and failures == len(tables):
             raise RuntimeApiError("Failed to reach HAProxy Runtime API")
 
-        return UnbanResponse(ip=ip, cleared=cleared)
+        return UnbanResponse(ip=key, cleared=cleared)
 
     def _active_ban_tables(self) -> list[tuple[VHost, str, int]]:
         vhosts = (

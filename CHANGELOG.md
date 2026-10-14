@@ -79,6 +79,14 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   data error answers `422` (dead-lettered) instead of `500`. HTTP methods
   longer than 16 characters, which the client chooses, and scoped IPv6 client
   addresses no longer make an event unmappable either.
+- Unbanning an IP now clears the normalised address and rejects IPv6 scope
+  ids (`fe80::1%eth0`). The submitted address was validated but then
+  interpolated into the HAProxy Runtime API command as typed, and `ipaddress`
+  accepts a scope id containing whitespace or a newline. HAProxy's Runtime API
+  executes a single command per connection, so a scope cannot append a second
+  command — verified against the pinned HAProxy 3.0.29 — but a scoped or
+  non-normalised address produced a confusing Runtime API failure instead of a
+  clear `422`.
 - Coraza inspects request bodies. HAProxy buffers the request body
   (`option http-buffer-request`, `tune.bufsize 65536`) before the SPOE message
   is built, so a payload written after the headers, or past the first buffer,
