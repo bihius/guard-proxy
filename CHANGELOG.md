@@ -59,6 +59,14 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Fixed
 
+- The log shipper fsyncs its offset file, remembers the audit file's device
+  and inode, and reads a rotated file to the end before following the new
+  file from the start. A corrupt offset is logged and the audit log is read
+  again from the start, which is safe because ingest deduplicates retries.
+  Lines that cannot be delivered are appended to a dead-letter file next to
+  the offset, a Host longer than 255 characters is shortened so ingest does
+  not reject it, and a read timeout no longer crashes the shipper. CI runs
+  the log-shipper tests.
 - Policy editor fields stay on aligned rows when DDoS protection, automatic
   IP banning or country filtering are expanded, and the dashboard's empty
   "Recent blocks" card matches the height of its neighbours.

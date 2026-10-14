@@ -100,6 +100,46 @@ jobs:
             exit "$status"
           fi
 
+  log-shipper:
+    name: log-shipper
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/log-shipper
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.6"
+
+      - name: Cache uv packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-log-shipper-${{ hashFiles('src/log-shipper/pyproject.toml', 'src/log-shipper/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-log-shipper-
+
+      - name: Install log-shipper dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Run log-shipper tests with coverage
+        run: uv run pytest --cov=app
+
+      - name: Run mypy
+        run: uv run mypy app/
+
+      - name: Run ruff
+        run: uv run ruff check app/
+
   frontend:
     name: frontend
     runs-on: ubuntu-latest

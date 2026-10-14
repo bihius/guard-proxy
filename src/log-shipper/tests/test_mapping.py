@@ -204,6 +204,39 @@ def test_vhost_string_value_no_port() -> None:
     assert p["vhost"] == "api.example.com"
 
 
+def test_vhost_truncates_to_schema_max_length() -> None:
+    event = _base_event()
+    event["transaction"]["request"]["headers"] = {"Host": ["h" * 300]}
+    payload = coraza_event_to_ingest(event)
+    assert payload is not None
+    assert payload["vhost"] == "h" * 255
+
+
+def test_vhost_strips_port_before_truncating() -> None:
+    event = _base_event()
+    event["transaction"]["request"]["headers"] = {"host": [("a" * 300) + ":443"]}
+    payload = coraza_event_to_ingest(event)
+    assert payload is not None
+    assert payload["vhost"] == "a" * 255
+
+
+def test_vhost_keeps_255_character_host() -> None:
+    host = "b" * 255
+    event = _base_event()
+    event["transaction"]["request"]["headers"] = {"host": [host]}
+    payload = coraza_event_to_ingest(event)
+    assert payload is not None
+    assert payload["vhost"] == host
+
+
+def test_vhost_empty_after_port_strip_is_unknown() -> None:
+    event = _base_event()
+    event["transaction"]["request"]["headers"] = {"host": [":443"]}
+    payload = coraza_event_to_ingest(event)
+    assert payload is not None
+    assert payload["vhost"] == "unknown"
+
+
 # ---------------------------------------------------------------------------
 # Tests: action derivation
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ coraza-spoa populates ``data``.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from ipaddress import ip_address
 from typing import Any
 
@@ -49,6 +49,10 @@ _DENY_SEVERITY_STRINGS = frozenset({"emergency", "alert", "critical"})
 # transaction that was not interrupted means a DetectionOnly policy let
 # through a request it would otherwise have blocked.
 _ANOMALY_EVALUATION_RULE_IDS = frozenset({949110, 949111, 959100, 959101})
+
+# LogIngestRequest.vhost max_length. Kept here so the shipper does not import
+# the backend schema.
+_VHOST_MAX_LENGTH = 255
 
 # Timestamp formats Coraza may emit in addition to ISO 8601.
 _CORAZA_TS_FORMATS = (
@@ -119,7 +123,9 @@ class _RuleData:
 
     __slots__ = ("id", "msg", "severity_str")
 
-    def __init__(self, id: str | None, msg: str | None, severity_str: str | None) -> None:
+    def __init__(
+        self, id: str | None, msg: str | None, severity_str: str | None
+    ) -> None:
         self.id = id
         self.msg = msg
         self.severity_str = severity_str
@@ -130,7 +136,7 @@ def _primary_rule_data(messages: list[Any]) -> _RuleData | None:
     for raw in messages:
         msg = _as_dict(raw)
 
-        # 1. Prefer structured data dict (future coraza-spoa versions may populate this).
+        # Prefer structured data (future coraza-spoa versions may populate this).
         data = _as_dict(msg.get("data"))
         if data:
             return _RuleData(
@@ -215,11 +221,11 @@ def _event_at(value: Any) -> str:
                 dt = datetime.strptime(text, fmt)
                 # Formats without timezone info are treated as UTC.
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 return dt.isoformat()
             except ValueError:
                 continue
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _vhost(headers: Any) -> str:
@@ -230,8 +236,12 @@ def _vhost(headers: Any) -> str:
             value = raw[0] if isinstance(raw, list) and raw else raw
             host = _clean_str(value)
             if host:
-                # Strip port if present: "localhost:8080" → "localhost"
-                return host.lower().split(":")[0]
+                # Strip a port ("localhost:8080" → "localhost"), then fit the
+                # ingest schema. An empty result cannot be stored.
+                host = host.lower().split(":")[0]
+                if not host:
+                    return "unknown"
+                return host[:_VHOST_MAX_LENGTH]
     return "unknown"
 
 
