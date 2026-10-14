@@ -21,6 +21,21 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   the example with generated secrets. Documentation and the smoke workflow use
   `make env` instead of a bare copy. Existing installs must set the two
   variables; nothing else changes, and no data or API is affected.
+- The published frontend image serves the built admin UI from nginx instead of
+  running the Vite dev server. The UI and the API now share an origin (nginx
+  proxies `/api/v1` to the backend and appends the client address to
+  `X-Forwarded-For`, which the login rate limit keys on), the container runs as
+  an unprivileged user, and every response carries a Content-Security-Policy
+  plus nosniff/frame/referrer headers. The host port (`FRONTEND_PORT`, 3000 by
+  default) is unchanged; `VITE_DEV_SERVER_PROXY_TARGET` and `VITE_API_BASE_URL`
+  are no longer read by the container — run `pnpm dev` in `src/frontend` for
+  hot-reload development. **Upgrade note:** the container port moved from 5173
+  to 8080, so a Compose file that sets the port mapping itself must use 8080.
+- `AUTH_REFRESH_COOKIE_SECURE` keeps its default (false), because the UI is
+  served over plain HTTP unless you put it behind TLS, but the backend now logs
+  a startup warning while it is false and `release/.env.example` documents
+  enabling it once the UI is reached over HTTPS. Without it the long-lived
+  refresh cookie travels in clear text.
 - The policy editor uses a wider responsive layout with grouped settings and a
   scrollable body; policy actions use the shared green primary button style.
 - Third-party images are pinned to an exact version and digest instead of

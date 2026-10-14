@@ -342,7 +342,7 @@ services:
   coraza:       # internal port 9000 (SPOE)
   log-shipper:  # tails coraza_audit volume, ships to backend
   backend:      # internal port 8000 (FastAPI)
-  frontend:     # host port 3000 -> Vite port 5173
+  frontend:     # host port 3000 -> nginx port 8080 (built SPA + /api/v1 proxy)
   postgres:     # internal port 5432
 ```
 

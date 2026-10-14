@@ -99,6 +99,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan — startup and shutdown events."""
     # Startup
     validate_runtime_settings(settings)
+    if not settings.auth_refresh_cookie_secure:
+        logger.warning(
+            "AUTH_REFRESH_COOKIE_SECURE is false: the refresh-token cookie is "
+            "sent over plain HTTP. Enable it once the admin UI is served over "
+            "HTTPS."
+        )
     _seed_runtime_config()
     start_scheduler()
     yield

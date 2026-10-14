@@ -85,6 +85,13 @@ startup, so leaving them there only leaves a plaintext password at rest.
 Log in to the admin UI at `http://<host>:${FRONTEND_PORT:-3000}` (or
 through HAProxy on port 80/443, once you've added a vhost — see below).
 
+The UI container serves the built app from nginx and forwards `/api/v1` to
+the backend, so the panel and the API share an origin. That port is plain
+HTTP: put it behind TLS (your own reverse proxy, or a Guard Proxy vhost)
+before exposing it outside a trusted network, and set
+`AUTH_REFRESH_COOKIE_SECURE=true` in `.env` once you do, so the refresh
+cookie is only sent over HTTPS.
+
 ## 4. Configure your first vhost
 
 In the admin UI: add a vhost pointing at your real origin server, set up
