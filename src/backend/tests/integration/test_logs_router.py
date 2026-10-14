@@ -453,6 +453,42 @@ def test_ingest_log_event_rejects_anomaly_score_too_large_for_the_column(
     ]
 
 
+def test_ingest_log_event_strips_credentials_from_raw_context(
+    client: TestClient,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """The stored audit event keeps the investigation value, not the secrets."""
+    error_message = '[id "942100"] [msg "SQL Injection Attack Detected"]'
+    raw_context = {
+        "transaction": {
+            "request": {
+                "headers": {
+                    "Host": ["app.example.com"],
+                    "Cookie": ["session=abc123"],
+                    "Authorization": ["Bearer eyJhbGciOi"],
+                    "X-Api-Key": ["key-123"],
+                }
+            }
+        },
+        "messages": [{"error_message": error_message}],
+    }
+
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(producer_event_id=None, raw_context=raw_context),
+        headers=log_ingest_headers,
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    headers = body["raw_context"]["transaction"]["request"]["headers"]
+    assert headers["Host"] == ["app.example.com"]
+    assert headers["Cookie"] == "[redacted]"
+    assert headers["Authorization"] == "[redacted]"
+    assert headers["X-Api-Key"] == "[redacted]"
+    assert body["raw_context"]["messages"][0]["error_message"] == error_message
+
+
 def test_ingest_log_event_translates_a_store_data_error_into_422(
     client: TestClient,
     db: Session,
