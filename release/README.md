@@ -4,7 +4,7 @@ This release kit runs Guard Proxy from prebuilt images published to GHCR.
 It does not require cloning the source repository or building anything
 locally.
 
-**Beta status.** This is a pre-release build for early testers. Expect
+**Beta status.** This is a beta build for early testers. Expect
 rough edges. Ban/rate-limit state, generated configs, and the database are
 all persisted in Docker volumes, but no upgrade-path guarantees are made
 between beta releases yet — back up `pgdata` before upgrading. See
