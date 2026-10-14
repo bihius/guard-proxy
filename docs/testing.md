@@ -28,7 +28,7 @@ blocked by Coraza, and then tears the stack down.
 Prerequisites:
 
 - Docker with Docker Compose
-- `docker/.env` created from `docker/.env.example`
+- `docker/.env` created with `make env` (generates the backend secrets)
 - The CRS submodule initialised with `git submodule update --init --recursive`
 
 Run locally:
@@ -73,7 +73,7 @@ the lab server, with `wrk` started by hand on the load client:
 
 ```sh
 # Prerequisites
-cp docker/.env.example docker/.env               # must set ADMIN_EMAIL and ADMIN_PASSWORD
+make env                                          # then set ADMIN_EMAIL and ADMIN_PASSWORD
 cp benchmarks/lab/.env.example benchmarks/lab/.env   # set LAB_SERVER_ADDR=192.168.2.5
 git submodule update --init --recursive
 

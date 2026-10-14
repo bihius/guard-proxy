@@ -11,15 +11,33 @@ _PLACEHOLDER_SECRET_VALUES = {
     "changeme",
 }
 
+# Fragments that mark a value as documentation rather than a secret. Both
+# .env.example files ship values containing one of these, so copying an example
+# file and starting the stack cannot silently leave a published secret in use.
+_PLACEHOLDER_SECRET_MARKERS = (
+    "change-me",
+    "please-change",
+    "replace-me",
+    "replace-this",
+    "openssl-rand",
+)
+
 
 def _validate_secret(value: str, field_name: str) -> str:
     """Reject empty or template placeholder secrets."""
     normalized = value.strip()
     if not normalized:
         raise ValueError(f"{field_name} must not be empty.")
-    if normalized.lower() in _PLACEHOLDER_SECRET_VALUES:
+    lowered = normalized.lower()
+    is_placeholder = lowered in _PLACEHOLDER_SECRET_VALUES or any(
+        marker in lowered for marker in _PLACEHOLDER_SECRET_MARKERS
+    )
+    if is_placeholder:
         raise ValueError(
-            f"{field_name} must be replaced with a real secret before startup."
+            f"{field_name} must be replaced with a real secret before startup: "
+            "the value still looks like the placeholder from .env.example. "
+            "Generate one with `openssl rand -hex 32` (or `make env` when "
+            "setting up docker/.env)."
         )
     return normalized
 

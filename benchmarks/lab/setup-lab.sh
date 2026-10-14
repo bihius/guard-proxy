@@ -33,7 +33,7 @@ done
 
 for f in "${CORE_ENV}" "${LAB_ENV}"; do
   if [[ ! -f "${f}" ]]; then
-    echo "Missing ${f}. Copy the matching .env.example first." >&2
+    echo "Missing ${f}. Run 'make env' at the repository root for docker/.env, and copy the matching .env.example for the lab file." >&2
     exit 1
   fi
 done

@@ -132,7 +132,7 @@ help:
 	@echo "Guard Proxy Evaluation Lab"
 	@echo ""
 	@echo "Setup:"
-	@echo "  cp docker/.env.example docker/.env"
+	@echo "  make env"
 	@echo "  cp benchmarks/lab/.env.example benchmarks/lab/.env"
 	@echo "  git submodule update --init --recursive"
 	@echo ""

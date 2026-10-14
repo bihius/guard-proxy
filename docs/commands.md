@@ -50,7 +50,7 @@ docker-compose -f docker/docker-compose.yml --env-file docker/.env exec haproxy 
 ## Docker
 
 ```bash
-cp docker/.env.example docker/.env                     # Create env file for compose
+make env                                               # Create docker/.env + generate its secrets
 docker-compose -f docker/docker-compose.yml --env-file docker/.env config
 make run                                                             # Start all services (normal mode)
 make dev                                                             # Start all services with HAProxy -d flag and Coraza debug logging
@@ -117,7 +117,7 @@ runs the stack, both targets, the curl corpus and go-ftw; the load client
 ```bash
 # On the lab server, once:
 git submodule update --init --recursive          # CRS v4.25.0
-cp docker/.env.example docker/.env
+make env                                              # docker/.env with generated secrets
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 # In benchmarks/lab/.env set the server's address on the client link:
 #   LAB_SERVER_ADDR=192.168.2.5

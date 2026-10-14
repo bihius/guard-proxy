@@ -11,6 +11,16 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Changed
 
+- **Breaking:** the example secrets are now rejected at startup. The values
+  shipped in `docker/.env.example` and `release/.env.example` were accepted, so
+  an install that copied an example file and never replaced `JWT_SECRET_KEY` or
+  `LOG_INGEST_SHARED_SECRET` ran with a publicly known secret, and anyone could
+  mint an admin token. Both files now ship obvious placeholders, the backend
+  refuses to start while they are still in place and names the variable to
+  replace (`openssl rand -hex 32`), and `make env` creates `docker/.env` from
+  the example with generated secrets. Documentation and the smoke workflow use
+  `make env` instead of a bare copy. Existing installs must set the two
+  variables; nothing else changes, and no data or API is affected.
 - The policy editor uses a wider responsive layout with grouped settings and a
   scrollable body; policy actions use the shared green primary button style.
 - Third-party images are pinned to an exact version and digest instead of
