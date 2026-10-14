@@ -59,6 +59,15 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Fixed
 
+- Login rate limiting can no longer be bypassed by spoofing
+  `X-Forwarded-For`. The limiter keyed on the left-most entry of the header,
+  but the proxy in front of the backend appends the address it observed instead
+  of replacing the header (HAProxy replaces it; the Vite dev server, which is
+  also how the release kit publishes the UI, appends), so a client could
+  prepend a fresh value to every attempt and never reach the login limit. The
+  key is now the right-most entry, the address the closest proxy added, which
+  is the same value HAProxy writes; the dev server proxy appends the client
+  address (`xfwd`) so the header is never purely client-supplied.
 - A WAF payload can no longer forge its own anomaly score. The shipper took the
   first `(Total Score: N)` it found in any audit message, but the request data
   it matched appears inside the message of the rule that matched, so a payload

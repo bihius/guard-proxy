@@ -15,6 +15,11 @@ export default defineConfig({
       "/api/v1": {
         target: process.env.VITE_DEV_SERVER_PROXY_TARGET || "http://127.0.0.1:8000",
         changeOrigin: true,
+        // Append the client address to X-Forwarded-For. Without it the backend
+        // sees no header (dev) or a client-supplied one (whenever this dev
+        // server is exposed directly, which is how the release kit publishes
+        // the UI), and the login rate limit keys on whatever the caller sent.
+        xfwd: true,
         rewrite: (path) => path.replace(/^\/api\/v1/, ""),
       },
     },

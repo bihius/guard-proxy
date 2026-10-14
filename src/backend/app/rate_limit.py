@@ -8,8 +8,10 @@ IP resolution
 -------------
 HAProxy sits in front of the backend and stamps ``X-Forwarded-For`` with the
 real source IP (``http-request set-header X-Forwarded-For %[src]`` in
-haproxy.cfg), overwriting any value the client may have injected.  We therefore
-trust the first entry of the XFF header when it is present and fall back to the
+haproxy.cfg), replacing any value the client may have injected.  The UI proxy
+in front of the backend appends what it received instead (Vite ``xfwd``, nginx
+``$proxy_add_x_forwarded_for``), so the right-most entry is the address the
+nearest proxy observed.  That entry is used when the header is present, and the
 socket peer address otherwise (direct connections in dev / tests).
 """
 
@@ -23,14 +25,19 @@ from slowapi.util import get_remote_address
 def client_ip(request: Request) -> str:
     """Return the real client IP to use as the rate-limit key.
 
-    HAProxy sets ``X-Forwarded-For: <real-src-ip>`` before forwarding to
-    uvicorn, so the first (and only) entry is the canonical client address.
-    If the header is absent (direct connection in dev or tests) we fall back
-    to the socket peer returned by slowapi's built-in helper.
+    Each proxy appends the address it received the connection from, so the
+    right-most entry of ``X-Forwarded-For`` is the one the closest proxy added:
+    HAProxy replaces the header with the real source IP, and the UI proxy
+    appends its peer.  Trusting the left-most entry instead gave every request a
+    fresh bucket whenever a proxy appends rather than replaces, because the
+    client can prepend arbitrary values.  If the header is absent (direct
+    connection in dev or tests) the socket peer is used.
     """
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        entry = xff.split(",")[-1].strip()
+        if entry:
+            return entry
     return get_remote_address(request)
 
 
