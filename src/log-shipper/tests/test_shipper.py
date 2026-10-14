@@ -524,3 +524,71 @@ def test_overlong_line_waits_until_its_newline(
         Path(settings.state_file + ".deadletter").read_text(encoding="utf-8")
     )
     assert record["reason"] == "line_too_long"
+
+
+def test_copytruncate_regrow_fragment_is_dead_lettered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _settings(tmp_path)
+    audit = Path(settings.audit_log_path)
+    content = b"0123456789" + b"   \n"
+    audit.write_bytes(content)
+    stat_result = audit.stat()
+    # After a truncate-and-regrow the saved offset can land inside the file.
+    # Seeking there yields whitespace that is not an empty line.
+    Path(settings.state_file).write_text(
+        json.dumps(
+            {
+                "offset": 12,
+                "st_ino": stat_result.st_ino,
+                "st_dev": stat_result.st_dev,
+            }
+        ),
+        encoding="utf-8",
+    )
+    posted = _capture_posts(monkeypatch, [])
+    _patch_sleep(monkeypatch, lambda _n: setattr(shipper, "_running", False))
+    shipper.run(settings)
+    assert posted == []
+    record = json.loads(
+        Path(settings.state_file + ".deadletter").read_text(encoding="utf-8")
+    )
+    assert record["reason"] == "blank_fragment"
+    assert record["line"] == " \n"
+    assert shipper._load_state(settings.state_file).offset == len(content)
+
+
+def test_state_write_failure_does_not_crash_or_advance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = _settings(tmp_path)
+    Path(settings.audit_log_path).write_bytes(_audit_line("a"))
+
+    def fail(_path: str, _state: shipper._ShipperState) -> None:
+        raise PermissionError("read-only state directory")
+
+    monkeypatch.setattr(shipper, "_persist_state", fail)
+    _capture_posts(monkeypatch, [200])
+    _patch_sleep(monkeypatch, lambda _n: setattr(shipper, "_running", False))
+    with caplog.at_level(logging.ERROR):
+        shipper.run(settings)
+    assert "shipper poll failed" in caplog.text
+    assert shipper._load_state(settings.state_file).offset == 0
+    assert not Path(settings.state_file + ".deadletter").exists()
+
+
+def test_audit_path_that_cannot_be_opened_is_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = _settings(tmp_path)
+    Path(settings.audit_log_path).mkdir()
+    _capture_posts(monkeypatch, [])
+    _patch_sleep(monkeypatch, lambda _n: setattr(shipper, "_running", False))
+    with caplog.at_level(logging.ERROR):
+        shipper.run(settings)
+    assert "shipper poll failed" in caplog.text
+    assert shipper._load_state(settings.state_file).offset == 0

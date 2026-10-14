@@ -260,12 +260,21 @@ def _post_event(settings: Settings, payload: dict[str, object]) -> int:
 def _ship_line(settings: Settings, line: bytes) -> _ShipResult:
     """Block until ``line`` is shipped, dropped, or the process is shutting down.
 
-    A blank line is dropped without a dead-letter record. Every other permanent
-    failure is dead-lettered before the caller advances the offset.
+    A genuine blank line is dropped without a dead-letter record. Every other
+    permanent failure, including whitespace that is not an empty line, is
+    dead-lettered before the caller advances the offset.
     """
 
     text = line.decode("utf-8", errors="replace").strip()
     if not text:
+        if not line.strip(b"\r\n"):
+            # An empty line between events. It is not an event, so nothing to
+            # record and nothing to ship.
+            return _ShipResult.DROPPED
+        # Whitespace that is not an empty line: a fragment read after seeking
+        # into the middle of a line. Leave a trace before the offset moves.
+        logger.warning("dropping blank fragment from the audit log")
+        _note_drop(settings.state_file, "blank_fragment", line)
         return _ShipResult.DROPPED
 
     try:
@@ -464,50 +473,74 @@ def run(settings: Settings) -> None:
             except FileNotFoundError:
                 _interruptible_sleep(settings.poll_interval_seconds)
                 continue
-
-            if handle is None:
-                state = _state_for_opened_file(settings, state, path_stat)
-                handle = open(settings.audit_log_path, "rb")
-            else:
-                open_stat = os.fstat(handle.fileno())
-                rotated = (
-                    path_stat.st_ino != open_stat.st_ino
-                    or path_stat.st_dev != open_stat.st_dev
+            except OSError as error:
+                logger.error(
+                    "cannot stat audit log path=%s error=%s",
+                    settings.audit_log_path,
+                    error,
                 )
-                if rotated:
-                    logger.warning(
-                        "audit log rotated; draining the previous file "
-                        "ino=%s dev=%s",
-                        open_stat.st_ino,
-                        open_stat.st_dev,
-                    )
-                    outcome = _ship_available(settings, handle, state, drain=True)
-                    handle.close()
-                    handle = None
-                    if outcome is _Poll.ABORTED:
-                        logger.error(
-                            "stopping during rotation drain; bytes left in the "
-                            "rotated file will not be retried because it is no "
-                            "longer at the audit log path"
-                        )
-                        break
-                    state = _ShipperState(
-                        offset=0,
-                        st_ino=path_stat.st_ino,
-                        st_dev=path_stat.st_dev,
-                    )
-                    _persist_state(settings.state_file, state)
-                    continue
-                if path_stat.st_size < state.offset:
-                    logger.warning("audit log truncated; resetting offset to 0")
-                    state = _ShipperState(
-                        offset=0,
-                        st_ino=open_stat.st_ino,
-                        st_dev=open_stat.st_dev,
-                    )
-                    _persist_state(settings.state_file, state)
+                _interruptible_sleep(settings.poll_interval_seconds)
+                continue
 
-            outcome = _ship_available(settings, handle, state, drain=False)
+            try:
+                if handle is None:
+                    state = _state_for_opened_file(settings, state, path_stat)
+                    handle = open(settings.audit_log_path, "rb")
+                else:
+                    open_stat = os.fstat(handle.fileno())
+                    rotated = (
+                        path_stat.st_ino != open_stat.st_ino
+                        or path_stat.st_dev != open_stat.st_dev
+                    )
+                    if rotated:
+                        logger.warning(
+                            "audit log rotated; draining the previous file "
+                            "ino=%s dev=%s",
+                            open_stat.st_ino,
+                            open_stat.st_dev,
+                        )
+                        outcome = _ship_available(
+                            settings, handle, state, drain=True
+                        )
+                        handle.close()
+                        handle = None
+                        if outcome is _Poll.ABORTED:
+                            logger.error(
+                                "stopping during rotation drain; bytes left in "
+                                "the rotated file will not be retried because it "
+                                "is no longer at the audit log path"
+                            )
+                            break
+                        state = _ShipperState(
+                            offset=0,
+                            st_ino=path_stat.st_ino,
+                            st_dev=path_stat.st_dev,
+                        )
+                        _persist_state(settings.state_file, state)
+                        continue
+                    if path_stat.st_size < state.offset:
+                        logger.warning("audit log truncated; resetting offset to 0")
+                        state = _ShipperState(
+                            offset=0,
+                            st_ino=open_stat.st_ino,
+                            st_dev=open_stat.st_dev,
+                        )
+                        _persist_state(settings.state_file, state)
+
+                outcome = _ship_available(settings, handle, state, drain=False)
+            except OSError as error:
+                logger.error(
+                    "shipper poll failed path=%s error=%s; retrying",
+                    settings.audit_log_path,
+                    error,
+                )
+                # The state file is the durable offset. A failed read or write
+                # means the durable offset did not move, so reload it rather than
+                # keeping a newer value in memory.
+                state = _load_state(settings.state_file)
+                _interruptible_sleep(settings.poll_interval_seconds)
+                continue
+
             if outcome is _Poll.ABORTED:
                 break
             if outcome is _Poll.IDLE:
