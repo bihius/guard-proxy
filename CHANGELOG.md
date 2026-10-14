@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [0.1.0-beta.8] - 2026-10-14
+
+### Added
+
+- Benchmark harness measures WAF overhead on a WordPress target (`benchmarks/`).
+  Development tooling only; no runtime change.
+
+### Changed
+
+- Backend test docstrings are in English and the test suite passes lint.
+  No runtime change.
+- The `release/` install guide documents that the published images are
+  `linux/amd64` only, and warns that an old Compose file breaks the admin UI
+  after upgrading to the nginx-served frontend.
+- The Coraza audit-log mapping for coraza-spoa 0.6.1 is documented in
+  `configs/coraza/README.md`. Documentation only.
+
+### Fixed
+
+- The dashboard activity feed shows the five most recent events.
+
 ## [0.1.0-beta.7] - 2026-10-14
 
 ### Changed
@@ -404,6 +425,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[0.1.0-beta.8]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.7...v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.6...v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.4...v0.1.0-beta.5

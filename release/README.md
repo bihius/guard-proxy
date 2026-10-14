@@ -27,7 +27,7 @@ between beta releases yet — back up `pgdata` before upgrading. See
 
 ## 1. Get the release kit
 
-Download and extract the `guard-proxy-release-v0.1.0-beta.7.tar.gz` asset
+Download and extract the `guard-proxy-release-v0.1.0-beta.8.tar.gz` asset
 from the [GitHub Releases page](https://github.com/bihius/guard-proxy/releases),
 or copy this `release/` directory if you already have the repository
 checked out. You should end up with:
@@ -51,7 +51,7 @@ cp .env.example .env
 Edit `.env` and replace every `change-me` placeholder:
 
 - `GUARD_PROXY_IMAGE_TAG` — pin this to the release you're installing,
-  e.g. `v0.1.0-beta.7`. Do not use a mutable tag like `beta` for anything
+  e.g. `v0.1.0-beta.8`. Do not use a mutable tag like `beta` for anything
   you want to reproduce later.
 - `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `LOG_INGEST_SHARED_SECRET` —
   generate real secrets, e.g. `openssl rand -hex 32`.
@@ -114,6 +114,15 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 3. Update `GUARD_PROXY_IMAGE_TAG` in `.env` to the new version.
 4. `docker compose pull && docker compose up -d`. The backend runs
    `alembic upgrade head` automatically on startup.
+
+### v0.1.0-beta.8
+
+- **No new configuration.** `.env` needs no new variables, and
+  `docker-compose.yml`, `haproxy/*.cfg` and the `coraza` setup are unchanged
+  from v0.1.0-beta.7. Changing `GUARD_PROXY_IMAGE_TAG` and running the steps
+  above is enough.
+- **Database migrations:** none added since v0.1.0-beta.7. Back up `pgdata`
+  first anyway, as in the steps above.
 
 ### v0.1.0-beta.7
 
