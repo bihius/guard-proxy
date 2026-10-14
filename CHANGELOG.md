@@ -84,6 +84,14 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Fixed
 
+- The Coraza audit log is capped instead of growing without limit. Coraza
+  appends every matching transaction to one file on a named volume and never
+  rotates it, so a stack whose ingest is stuck — or whose backend is down —
+  eventually filled the disk. The supervisor now truncates the file in place
+  once it passes `CORAZA_AUDIT_LOG_MAX_BYTES` (default 256 MiB), keeping one
+  `audit.log.1` backup. Truncation rather than a rename, because Coraza holds
+  the file open; the shipper detects the truncation and reads the file from the
+  start again, so events keep flowing. The database remains the archive.
 - A vhost domain is validated as a hostname when it is saved, using the same
   rule the config renderer applies when it writes the host ACL. Before, only
   generation rejected it, so an unusable row could be stored and then blocked

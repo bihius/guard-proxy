@@ -97,8 +97,13 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env \
 ```
 
 The log-shipper sidecar (`src/log-shipper/`) tails this file and ships each
-event to `POST /logs/ingest` on the backend. See `docs/architecture.md` for
-the full data-flow description.
+event to `POST /logs/ingest` on the backend. The supervisor truncates the file
+in place once it grows past `CORAZA_AUDIT_LOG_MAX_BYTES` (default 256 MiB,
+`audit.log.1` keeps one backup): Coraza holds the file open, so a rename would
+leave it writing to the renamed file while the new one stays empty, and the
+database — not this file — is the archive. The shipper notices the truncation
+and reads the file from the start again. See `docs/architecture.md` for the full
+data-flow description.
 
 ### Event schema and ingest mapping
 

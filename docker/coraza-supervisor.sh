@@ -17,6 +17,13 @@ STATUS_FILE="$STATUS_DIR/reload-status"
 POLL_INTERVAL_SECONDS=1
 SPOA_PID=""
 SPOA_CONFIG=""
+# Coraza appends to one audit file and never rotates it. This cap keeps a stack
+# whose ingest is stuck (or whose backend is down) from filling the volume: the
+# file is truncated in place, which keeps Coraza's open file descriptor valid
+# and lets the shipper notice the truncation and read from the start again. The
+# database is the archive; rotated content is only kept as one backup.
+AUDIT_LOG=/var/log/coraza/audit.log
+AUDIT_LOG_MAX_BYTES="${CORAZA_AUDIT_LOG_MAX_BYTES:-268435456}"
 
 if [ "$(id -u)" = "0" ]; then
     # An older Compose file has no writable status volume. Keep serving
@@ -105,6 +112,20 @@ on_term() {
     exit 143
 }
 
+rotate_audit_log() {
+    [ -f "$AUDIT_LOG" ] || return 0
+    size=$(wc -c < "$AUDIT_LOG" 2>/dev/null | tr -d ' ')
+    case "$size" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+    [ "$size" -gt "$AUDIT_LOG_MAX_BYTES" ] || return 0
+    echo "[supervisor] audit log reached $size bytes — rotating" >&2
+    cp "$AUDIT_LOG" "${AUDIT_LOG}.1" 2>/dev/null || true
+    # Truncate in place: a rename would leave Coraza writing to the renamed
+    # file while the new one stays empty.
+    : > "$AUDIT_LOG"
+}
+
 trap on_term TERM INT
 
 LAST_RELEASE="$(current_release)"
@@ -125,6 +146,7 @@ while true; do
     fi
 
     CURRENT_RELEASE="$(current_release)"
+    rotate_audit_log
     [ "$CURRENT_RELEASE" != "$LAST_RELEASE" ] || continue
 
     # coraza-spoa installs its SIGHUP handler only once it has loaded the rules
