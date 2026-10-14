@@ -56,18 +56,16 @@ services:
       context: ../src/frontend
       dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      # Explicit base URL is optional. If unset, frontend uses relative paths
-      # and the dev server proxies /api/v1 to the proxy target below.
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
-      VITE_DEV_SERVER_PROXY_TARGET: "http://backend:8000"
+    # The image serves the built SPA from nginx and proxies /api/v1 to the
+    # backend, so the UI and the API share an origin. For frontend development
+    # with hot reload, run `pnpm dev` in src/frontend instead.
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - "${FRONTEND_PORT:-3000}:5173"
+      - "${FRONTEND_PORT:-3000}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:5173 >/dev/null"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080 >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 10
