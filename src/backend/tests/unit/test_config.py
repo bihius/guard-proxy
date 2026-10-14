@@ -359,3 +359,48 @@ def test_geoip_database_url_empty_raises() -> None:
             LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             GEOIP_DATABASE_URL="   ",
         )
+
+
+# ---------------------------------------------------------------------------
+# acme_server_url
+# ---------------------------------------------------------------------------
+
+
+def test_acme_server_url_unset_by_default() -> None:
+    """Unset means certbot's own default, Let's Encrypt production."""
+    s = _make_settings(
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+    )
+    assert getattr(s, "acme_server_url") is None
+
+
+def test_acme_server_url_accepted() -> None:
+    s = _make_settings(
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+        ACME_SERVER_URL="https://localhost:14000/dir",
+    )
+    assert getattr(s, "acme_server_url") == "https://localhost:14000/dir"
+
+
+def test_acme_server_url_blank_is_treated_as_unset() -> None:
+    """A commented-out or emptied .env entry must not reach certbot."""
+    s = _make_settings(
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+        ACME_SERVER_URL="   ",
+    )
+    assert getattr(s, "acme_server_url") is None
+
+
+def test_acme_server_url_without_scheme_raises() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="ACME_SERVER_URL must be an http:// or https:// directory URL",
+    ):
+        _make_settings(
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+            ACME_SERVER_URL="acme-staging-v02.api.letsencrypt.org/directory",
+        )

@@ -455,6 +455,33 @@ An earlier version restarted `coraza-spoa` instead. Port 9000 was then closed
 for a moment on every apply, and HAProxy's fail-closed rules answered every
 request in that window with 503 (#303).
 
+### Certificates and ACME
+
+The built-in certificate flow provisions vhost certificates with certbot's
+standalone plugin, running inside the `backend` container on port 8888. HAProxy
+routes `/.well-known/acme-challenge/` to the `backend_acme` backend and exempts
+that path from the unknown-host deny, the rate limits, the bans and the GeoIP
+rules, so a challenge can always reach certbot — including for a domain whose
+vhost row is not committed yet (certbot runs before the vhost is written). The
+issued chain and key are stored on the `VHost` row and rendered to
+`<runtime_root>/certs/<domain>.pem` on the shared runtime volume, which is what
+HAProxy binds as the `ssl` certificate.
+
+The `letsencrypt` scheduler job renews daily, for vhosts whose
+`ssl_expires_at` is missing or less than 30 days away. It always runs
+`certbot certonly` again rather than `certbot renew`: certbot's configuration
+directory (`/tmp/certbot`) is container-local and not on a volume, so the ACME
+account and the renewal lineage are recreated by the first renewal after a
+container replacement. That costs one account registration per upgrade and
+nothing else, since each request re-issues the certificate from scratch anyway.
+
+`ACME_SERVER_URL` overrides the ACME directory (certbot's default is Let's
+Encrypt production) and is passed through as `--server`; it is what makes the
+staging directory or a local ACME server usable for testing without consuming
+production rate limits. Trusting the CA of such a server needs no Guard Proxy
+setting: certbot reads the standard `REQUESTS_CA_BUNDLE` environment variable,
+and the subprocess inherits the container's environment.
+
 ### Pinned component versions
 
 Every third-party image the stack builds from or runs is pinned to an exact

@@ -124,6 +124,14 @@ class Settings(EnvFileSettings):
     geoip_refresh_interval_days: int = 1
     geoip_fail_open: bool = True
 
+    # ACME directory used by the built-in certificate flow. Unset means
+    # Let's Encrypt production, which is what certbot defaults to; point it at
+    # a staging directory or a local ACME server (e.g. Pebble) to exercise the
+    # flow without spending production rate limits. Trusting a private CA for
+    # that server is not a Guard Proxy setting: certbot reads the standard
+    # REQUESTS_CA_BUNDLE environment variable, so exporting it is enough.
+    acme_server_url: str | None = None
+
     @field_validator("database_url")
     @classmethod
     def database_url_must_not_be_empty(cls, value: str) -> str:
@@ -172,6 +180,18 @@ class Settings(EnvFileSettings):
         if not value.strip():
             raise ValueError("GEOIP_DATABASE_URL must not be empty.")
         return value
+
+    @field_validator("acme_server_url")
+    @classmethod
+    def acme_server_url_must_be_http(cls, value: str | None) -> str | None:
+        """Normalize an empty value to unset; reject anything certbot cannot use."""
+        if value is None or not value.strip():
+            return None
+        if not value.strip().startswith(("http://", "https://")):
+            raise ValueError(
+                "ACME_SERVER_URL must be an http:// or https:// directory URL."
+            )
+        return value.strip()
 
     # JWT
     jwt_secret_key: str
