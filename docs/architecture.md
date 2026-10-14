@@ -265,15 +265,27 @@ counter: each rate or connection violation increments it, and once it passes
 inactivity. ACME HTTP-01 challenge paths are exempt from both, so a flood of
 challenges cannot lock a vhost's own certificate renewal out.
 
-**The state is volatile.** Stick-tables live in the HAProxy worker's memory;
-nothing writes them to a file or to PostgreSQL. A fresh worker — `Apply
-configuration`, which reloads through the master socket, or a
-restarted/recreated HAProxy container — starts with empty tables, so every
-ban and every rate counter is dropped. `GET /security/banned-ips` reads them
-back through the HAProxy admin Runtime API rather than the database, and
-therefore also reports an empty list after a reload; the dashboard's banned-IP
-count is the one overview metric that can fail independently of PostgreSQL.
-A source that was banned before the reload starts from zero afterwards.
+**Surviving a reload.** Stick-tables live in the HAProxy worker's memory;
+nothing writes them to a file or to PostgreSQL. The generated config therefore
+declares a `peers` section (`gp_stick_tables`, one local peer) and names it on
+every stick-table, together with a `localpeer localpeer` global directive that
+marks which entry in that section is this process. On a master-worker reload —
+`Apply configuration` reloads through the master socket — the outgoing worker
+is still running while the new one starts, so the new worker pulls the table
+contents from it and bans and rate counters carry over instead of resetting.
+HAProxy silently discards a peers section that does not name the local peer,
+and a stick-table whose peers section was discarded stops synchronizing without
+reporting an error, which is why the two have to be emitted together. The
+outgoing worker is the one that serves the synchronization, so the *first*
+reload that introduces the peers section — the Apply that follows an upgrade
+from a version that did not generate it — still starts empty; every reload
+after that carries the tables over.
+
+A **restarted or recreated HAProxy container still starts empty**: there is no
+predecessor left to synchronize from. `GET /security/banned-ips` reads the
+tables back through the HAProxy admin Runtime API rather than the database, so
+the dashboard's banned-IP count is the one overview metric that can fail
+independently of PostgreSQL.
 
 ## Authentication & Rate Limiting
 

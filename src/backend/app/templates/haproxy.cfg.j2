@@ -2,9 +2,16 @@
 # Generated from the policy database; manual edits are overwritten on the
 # next config apply.
 
+{% set has_ddos_stick_tables = routes | selectattr("ddos") | list | length > 0 %}
 global
     log stdout format raw local0 info
     maxconn 2000
+{% if has_ddos_stick_tables %}
+    # Names this process as the local peer of the `peers` section further down.
+    # HAProxy drops a peers section that does not contain the local peer, and a
+    # stick-table that lost its peers section is not synchronized on reload.
+    localpeer localpeer
+{% endif %}
     # Request bodies are buffered so the SPOE message in coraza.cfg
     # (`body=req.body`) carries the whole body: buffer size is the largest
     # body Coraza can inspect. coraza-spoa refuses a frame larger than 64 KiB
@@ -277,17 +284,25 @@ frontend fe_https
 
 {% endif %}
 
-{% set has_ddos_backends = routes | selectattr("ddos") | list | length > 0 %}
-{% if has_ddos_backends %}
+{% if has_ddos_stick_tables %}
 # --- DDoS protection stick-tables ---------------------------------
+# Stick-tables are HAProxy process memory. Without a peers section a reloading
+# worker starts with empty ones and silently drops every ban and rate counter,
+# which includes every "Apply configuration". Listing them below makes the new
+# worker pull their contents from the outgoing one during the master-worker
+# handover (config_apply._reload_haproxy reloads through the master socket).
+# A restarted or recreated container still starts empty: there is no
+# predecessor left to synchronize from.
+peers gp_stick_tables
+    peer localpeer 127.0.0.1:10001
 {% for route in routes %}
 {% if route.ddos and route.ddos.enabled %}
 backend {{ route.ddos.stick_table_name }}
-    stick-table type ipv6 size 100k expire {{ route.ddos.rate_limit_window_seconds }}s store http_req_rate({{ route.ddos.rate_limit_window_seconds }}s),conn_cur
+    stick-table type ipv6 size 100k expire {{ route.ddos.rate_limit_window_seconds }}s peers gp_stick_tables store http_req_rate({{ route.ddos.rate_limit_window_seconds }}s),conn_cur
 
 {% if route.ddos.auto_ban_enabled %}
 backend {{ route.ddos.ban_stick_table_name }}
-    stick-table type ipv6 size 100k expire {{ route.ddos.ban_duration_seconds }}s store gpc0
+    stick-table type ipv6 size 100k expire {{ route.ddos.ban_duration_seconds }}s peers gp_stick_tables store gpc0
 
 {% endif %}
 {% endif %}
