@@ -1,19 +1,9 @@
--- benign-mix.lua — wrk Lua script for the benign load test (Test 3).
+-- benign-mix.lua — wrk workloads for Albedo and WordPress.
 --
--- Cycles through a fixed mix of ordinary HTTP requests against Albedo
--- (ftw.local). Used twice by run-load.sh: through HAProxy+Coraza and directly
--- against Albedo; the difference between the runs is the WAF overhead.
---
--- Usage:
---   wrk -t2 -c20 -d30s -s benchmarks/lab/scenarios/load/benign-mix.lua \
---       --latency http://<host>:<port>/
---
--- Albedo answers 200 to every request, so every entry below returns 2xx
--- directly and any non-2xx through the WAF is a false positive. The mix
--- includes POST bodies (form and JSON) because Coraza inspects request bodies:
--- a GET-only mix would understate the cost of the WAF.
-
-local vhost = os.getenv("LOAD_VHOST") or "ftw.local"
+-- LOAD_TARGET=wordpress selects installed WordPress endpoints; default Albedo
+-- workload stays unchanged. Both paths of each comparison use the same mix.
+local target = os.getenv("LOAD_TARGET") or "albedo"
+local vhost = os.getenv("LOAD_VHOST") or (target == "wordpress" and "wp.local" or "ftw.local")
 local eval_run = os.getenv("EVAL_RUN_ID") or "manual"
 local eval_scenario = os.getenv("EVAL_SCENARIO") or "load"
 local eval_case = os.getenv("EVAL_CASE") or "wrk"
@@ -34,6 +24,21 @@ local requests = {
     content_type = "application/json",
     body = '{"product_id":42,"quantity":2,"note":"gift wrap please"}' },
 }
+if target == "wordpress" then
+  requests = {
+    { method = "GET", path = "/" },
+    { method = "GET", path = "/?p=1" },
+    { method = "GET", path = "/?s=wordpress+tutorial" },
+    { method = "GET", path = "/wp-includes/css/dist/block-library/style.min.css" },
+    { method = "GET", path = "/wp-includes/js/jquery/jquery.min.js" },
+    { method = "GET", path = "/wp-json/" },
+    { method = "GET", path = "/wp-json/wp/v2/posts/" },
+    { method = "GET", path = "/wp-login.php" },
+    { method = "POST", path = "/wp-login.php",
+      content_type = "application/x-www-form-urlencoded",
+      body = "log=wrk-eval-nonexistent&pwd=not-a-valid-password&wp-submit=Log+In" },
+  }
+end
 
 local idx = 0
 

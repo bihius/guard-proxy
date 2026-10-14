@@ -122,7 +122,7 @@ cp benchmarks/lab/.env.example benchmarks/lab/.env
 # In benchmarks/lab/.env set the server's address on the client link:
 #   LAB_SERVER_ADDR=192.168.2.5
 
-# Full evaluation: PL1 then PL2, all three tests each, wrk started by hand on the load client
+# Full evaluation: PL1 then PL2, all three tests each (two load targets), wrk started on the load client
 make -C benchmarks lab-up
 make -C benchmarks eval-sweep RUN_ID=<id> LOAD_CLIENT=manual
 ```
@@ -137,8 +137,9 @@ Single steps (`POLICY=pl1|pl2`, default `pl1`):
 make -C benchmarks set-policy POLICY=pl2  # write the profile into both lab policies
 make -C benchmarks eval-corpus            # Test 1: 139-case corpus on wp.local (TP/FN/TN/FP)
 make -C benchmarks eval-ftw               # Test 2: CRS regression suite (go-ftw, log mode) on ftw.local
-make -C benchmarks eval-load              # Test 3: wrk RPS/latency overhead on ftw.local (WAF vs direct)
-make -C benchmarks eval-all               # corpus → ftw → load → metrics
+make -C benchmarks eval-load              # Test 3a: wrk WAF vs direct Albedo
+make -C benchmarks eval-load-wp           # Test 3b: wrk WAF vs direct WordPress
+make -C benchmarks eval-all               # corpus → ftw → both load targets → metrics
 make -C benchmarks results RUN_ID=<id> POLICY=pl2
 ```
 
@@ -149,21 +150,26 @@ Load-client variables (also accepted by `eval-all` and `eval-sweep`):
 | `LOAD_CLIENT`      | `manual`: wrk is started by hand on a separate client (default `local`: container on the server) |
 | `LOAD_THREADS`, `LOAD_CONNECTIONS`, `LOAD_DURATION` | wrk settings (default 2, 20, 30s)      |
 
-With `LOAD_CLIENT=manual`, every load test pauses twice (WAF run, then direct
-run). For each run the server prints the exact `wrk` command. On the client
-(a checkout of the same commit, `brew install wrk`), run it from the repository
-root; press Enter on the server when you start it, so that resource sampling
-covers the WAF run. When wrk finishes, paste its whole output into the server
-terminal; reading stops at the `WRK_SUMMARY` line. Nothing connects to the
-client. The measured HTTP goes from the client to `LAB_SERVER_ADDR` over the
+With `LOAD_CLIENT=manual`, each Albedo load test pauses twice (WAF, direct);
+each WordPress load test pauses four times (5-second warm-up and measurement
+on each path). The server prints the exact client command at every pause.
+For WordPress, run the warm-up command first and press Enter **after** it
+finishes; do not paste its output. At the next prompt, start the measured
+command and press Enter on the server at the same time, so resource sampling
+covers the measured WAF run. Paste only the measured wrk output through
+`WRK_SUMMARY`. Use a checkout of the same commit on the client
+(`brew install wrk`); nothing connects to the client.
+Measured HTTP goes from the client to `LAB_SERVER_ADDR` over the
 direct cable for both paths: HAProxy on `HAPROXY_HTTP_PORT`, Albedo directly on
-`LAB_FTW_DIRECT_PORT` (18080), which is published only on `LAB_SERVER_ADDR`.
-Set it back to `127.0.0.1` and restart the lab after the evaluation. Do not
-run other load on either host during a measurement.
+`LAB_FTW_DIRECT_PORT` (18080), or WordPress on `LAB_WP_DIRECT_PORT` (18081).
+Both direct ports bypass WAF and bind to `LAB_SERVER_ADDR`. Restrict the server
+interface to the isolated load client. Set `LAB_SERVER_ADDR` back to `127.0.0.1`
+and restart the lab after evaluation. Run no other load during measurement.
 
 ## Performance Testing
 
 ```bash
 wrk -t4 -c100 -d30s --latency http://localhost:8080/test  # HTTP benchmark
-make -C benchmarks eval-load                               # RPS/latency overhead vs. direct backend
+make -C benchmarks eval-load                               # Albedo vs. direct Albedo
+make -C benchmarks eval-load-wp                            # WordPress vs. direct WordPress
 ```

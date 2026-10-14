@@ -8,8 +8,8 @@
 #     --env-file benchmarks/lab/.env \
 #     up -d --build
 #
-# Targets remain on gp_internal; Albedo also exposes a baseline-only port
-# bound to localhost by default (override the bind address for remote tests).
+# Targets remain on gp_internal; both expose baseline-only ports bound to
+# localhost by default (override the bind address for remote tests).
 #
 # Pinned image digests ensure reproducible test results across runs.
 # Update pins by running: docker pull <image> && docker inspect --format '{{index .RepoDigests 0}}' <image>
@@ -37,17 +37,6 @@ services:
     volumes:
       - ../configs/coraza/guard-proxy-exceptions.conf:/etc/coraza/guard-proxy-exceptions.base.conf:ro
       - ../benchmarks/lab/coraza/guard-proxy-exceptions.lab.conf:/etc/coraza/guard-proxy-exceptions.conf:ro
-    # Lab only: also copy Coraza's log (matched rules, written to stderr) into
-    # /var/log/coraza/error.log on the coraza_audit volume. go-ftw mounts that
-    # volume and reads the rule IDs of each CRS test from this file. tini -g
-    # forwards stop signals to the whole pipeline.
-    entrypoint:
-      - /sbin/tini
-      - -g
-      - --
-      - sh
-      - -c
-      - /usr/local/bin/coraza-supervisor 2>&1 | tee -a /var/log/coraza/error.log
 
   haproxy:
     cpuset: "${LAB_WAF_CPUSET:-}"
@@ -99,6 +88,8 @@ services:
     image: wordpress:7.1.3-php8.3-apache@sha256:8ecd8d8e374167ea22235acf30f80d1165b82f07ffa5bcef90c1cad8f7be251f
     cpuset: "${LAB_WAF_CPUSET:-}"
     restart: unless-stopped
+    ports:
+      - "${LAB_SERVER_ADDR:-127.0.0.1}:${LAB_WP_DIRECT_PORT:-18081}:80"
     environment:
       WORDPRESS_DB_HOST: wp-db
       WORDPRESS_DB_NAME: wordpress
