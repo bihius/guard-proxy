@@ -10,11 +10,20 @@ RUNTIME_DIR=/runtime
 # baked into the image.
 RUNTIME_CONFIG="$RUNTIME_DIR/current/coraza-spoa.yaml"
 FALLBACK_CONFIG=/etc/coraza-spoa/coraza-spoa.yaml
+# Writable volume, mounted over the read-only /runtime tree. Apply reads
+# this file to learn whether the release compiled.
+STATUS_DIR="$RUNTIME_DIR/coraza-status"
+STATUS_FILE="$STATUS_DIR/reload-status"
 POLL_INTERVAL_SECONDS=1
 SPOA_PID=""
 SPOA_CONFIG=""
 
 if [ "$(id -u)" = "0" ]; then
+    # An older Compose file has no writable status volume. Keep serving
+    # traffic; apply then times out waiting for a status file that never
+    # appears and restores the previous release.
+    mkdir -p "$STATUS_DIR" 2>/dev/null || true
+    chown coraza:coraza "$STATUS_DIR" 2>/dev/null || true
     exec su-exec coraza "$0" "$@"
 fi
 
@@ -42,6 +51,53 @@ stop_spoa() {
     wait "$SPOA_PID" 2>/dev/null || true
 }
 
+# Three lines, so a reader can ignore a torn write. Detail is one line and
+# capped: the apply response stores it.
+write_status() {
+    release=$1
+    result=$2
+    detail=$3
+    if [ ! -d "$STATUS_DIR" ] || [ ! -w "$STATUS_DIR" ]; then
+        echo "[supervisor] reload status directory is not writable" >&2
+        return 0
+    fi
+    detail=$(printf '%s' "$detail" | tr '\n\r' '  ' | cut -c 1-400)
+    tmp="$STATUS_DIR/reload-status.tmp"
+    {
+        printf 'release=%s\n' "$release"
+        printf 'result=%s\n' "$result"
+        printf 'detail=%s\n' "$detail"
+    } > "$tmp"
+    mv "$tmp" "$STATUS_FILE"
+}
+
+# Compile the selected config before touching the running process. On
+# failure coraza-spoa keeps the rules it already loaded.
+accept_release() {
+    release=$1
+    config=$(selected_config)
+    errfile=$(mktemp)
+    if ! "$SPOA_BIN" -config "$config" -validate >"$errfile" 2>&1; then
+        echo "[supervisor] coraza-spoa rejected $release" >&2
+        write_status "$release" error "$(cat "$errfile")"
+        rm -f "$errfile"
+        return 1
+    fi
+    rm -f "$errfile"
+    if [ "$config" != "$SPOA_CONFIG" ]; then
+        # SIGHUP re-reads the same file, and coraza-spoa keeps the
+        # default_application it started with, so switching between the
+        # fallback and the generated config needs a fresh process.
+        echo "[supervisor] coraza-spoa config file changed — restarting coraza-spoa" >&2
+        stop_spoa
+        start_spoa
+    else
+        echo "[supervisor] current release changed — reloading coraza-spoa" >&2
+        kill -HUP "$SPOA_PID"
+    fi
+    write_status "$release" ok ""
+}
+
 on_term() {
     if [ -n "$SPOA_PID" ]; then
         stop_spoa
@@ -54,13 +110,11 @@ trap on_term TERM INT
 LAST_RELEASE="$(current_release)"
 start_spoa
 
-# A new release is picked up with SIGHUP, which makes coraza-spoa re-read
-# $SPOA_CONFIG, rebuild every application (re-reading /runtime/current/*) and
-# swap them in while the listener stays open. Restarting the process instead
-# closed port 9000 on every config apply, and HAProxy's fail-closed rules
-# answered every request in that window with 503 (#303). If the new rules
-# fail to load, coraza-spoa logs the error and keeps serving the previous
-# ones.
+# A new release is picked up after coraza-spoa -validate succeeds. SIGHUP
+# makes coraza-spoa rebuild every application and swap them in while the
+# listener stays open. Restarting the process instead closed port 9000 on
+# every config apply, and HAProxy's fail-closed rules answered every request
+# in that window with 503 (#303).
 while true; do
     sleep "$POLL_INTERVAL_SECONDS"
 
@@ -79,17 +133,11 @@ while true; do
     # makes this reload redundant but harmless.
     nc -z 127.0.0.1 "$SPOA_PORT" 2>/dev/null || continue
 
-    if [ "$(selected_config)" != "$SPOA_CONFIG" ]; then
-        # SIGHUP re-reads the same file, and coraza-spoa keeps the
-        # default_application it started with, so switching between the
-        # fallback and the generated config needs a fresh process. This
-        # happens once, on the first apply after an upgrade.
-        echo "[supervisor] coraza-spoa config file changed — restarting coraza-spoa" >&2
-        stop_spoa
-        start_spoa
+    if accept_release "$CURRENT_RELEASE"; then
+        LAST_RELEASE="$CURRENT_RELEASE"
     else
-        echo "[supervisor] current release changed — reloading coraza-spoa" >&2
-        kill -HUP "$SPOA_PID"
+        # Do not validate the same rejected release on every poll. Apply
+        # restores the previous symlink, and that change is still noticed.
+        LAST_RELEASE="$CURRENT_RELEASE"
     fi
-    LAST_RELEASE="$CURRENT_RELEASE"
 done

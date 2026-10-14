@@ -233,7 +233,7 @@ def _coraza_serves_every_application(monkeypatch: pytest.MonkeyPatch) -> None:
     """No coraza-spoa runs in unit/integration tests; treat every app as loaded.
 
     Config apply waits for Coraza before reloading HAProxy. Tests that cover
-    that wait patch `_wait_for_coraza_apps` themselves.
+    that wait patch `_wait_for_coraza_apps` or `_wait_for_coraza_reload`.
     """
     from app.services import config_apply
 
@@ -241,4 +241,9 @@ def _coraza_serves_every_application(monkeypatch: pytest.MonkeyPatch) -> None:
         config_apply,
         "_wait_for_coraza_apps",
         lambda app_names: config_apply.CommandResult(ok=True, output="test"),
+    )
+    monkeypatch.setattr(
+        config_apply,
+        "_wait_for_coraza_reload",
+        lambda release: config_apply.CommandResult(ok=True, output="test"),
     )

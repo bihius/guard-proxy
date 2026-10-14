@@ -10,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -32,6 +33,9 @@ from app.services.config_renderer import render_coraza_spoa_yaml
 #   coraza/<application>/rule-overrides.conf
 CORAZA_SPOA_YAML = "coraza-spoa.yaml"
 CORAZA_APPS_DIR = "coraza"
+# Written by docker/coraza-supervisor.sh after it validates a release.
+CORAZA_STATUS_DIR = "coraza-status"
+CORAZA_STATUS_FILE = "reload-status"
 
 logger = logging.getLogger(__name__)
 
@@ -153,13 +157,14 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
     # HAProxy picks the Coraza application per vhost and coraza-spoa fails
     # closed (503) on a name it does not know, so the two must switch in an
     # order where every name HAProxy sends is loaded in Coraza:
-    # - new names: Coraza loads them first, then HAProxy is reloaded;
-    # - dropped names: HAProxy stops sending them first, Coraza drops them
-    #   when it picks up the release (HAProxy reloads synchronously, Coraza
-    #   only on its supervisor's next poll).
-    # When a release does both, Coraza first loads a bridge release that also
-    # keeps the dropped applications, then the final release once HAProxy no
-    # longer references them.
+    # - new names, or new rules for names HAProxy already sends: Coraza
+    #   accepts them first, then HAProxy is reloaded;
+    # - dropped names only: HAProxy stops sending them first, then apply waits
+    #   for Coraza to accept the release. The supervisor validates before it
+    #   reloads, so the drop happens after this HAProxy reload.
+    # When a release both adds and drops names, Coraza first loads a bridge
+    # release that also keeps the dropped applications, then the final release
+    # once HAProxy no longer references them.
     previous_apps = _release_app_names(previous_target)
     new_apps = {app.name for app in generated.coraza_apps}
     added_apps = new_apps - previous_apps
@@ -185,7 +190,37 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
                 active_path=str(_resolve_current(current_link)),
             )
 
-    _swap_current_link(current_link, bridge_dir or candidate_dir, runtime_root)
+    swapped_dir = bridge_dir or candidate_dir
+    _swap_current_link(current_link, swapped_dir, runtime_root)
+    # A release that only drops applications is validated after HAProxy
+    # reloads. Waiting first would let Coraza drop those names while HAProxy
+    # is still sending them.
+    drops_apps_only = bool(retired_apps) and bridge_dir is None
+    preload_coraza = _coraza_tree_changed(
+        previous_target, swapped_dir
+    ) and not drops_apps_only
+
+    if preload_coraza:
+        coraza_status = _wait_for_coraza_reload(
+            _release_relpath(runtime_root, swapped_dir)
+        )
+        if not coraza_status.ok:
+            logger.error(
+                "config-apply coraza rejected the release correlation_id=%s output=%s",
+                correlation_id,
+                coraza_status.output,
+            )
+            return _coraza_reload_failed(
+                current_link=current_link,
+                previous_target=previous_target,
+                candidate_dir=candidate_dir,
+                bridge_dir=bridge_dir,
+                runtime_root=runtime_root,
+                correlation_id=correlation_id,
+                checksum=checksum,
+                validation_output=validation.output,
+                detail=coraza_status.output,
+            )
 
     if added_apps:
         coraza_wait = _wait_for_coraza_apps(added_apps)
@@ -198,25 +233,20 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
             )
             # HAProxy was not reloaded, so restoring the previous release is
             # enough: Coraza picks it up again on its next poll.
-            if previous_target is None:
-                current_link.unlink(missing_ok=True)
-            else:
-                _swap_current_link(current_link, previous_target, runtime_root)
-            shutil.rmtree(candidate_dir, ignore_errors=True)
-            if bridge_dir is not None:
-                shutil.rmtree(bridge_dir, ignore_errors=True)
-            return ApplyResult(
-                status=ApplyStatus.coraza_reload_failed,
+            return _coraza_reload_failed(
+                current_link=current_link,
+                previous_target=previous_target,
+                candidate_dir=candidate_dir,
+                bridge_dir=bridge_dir,
+                runtime_root=runtime_root,
                 correlation_id=correlation_id,
                 checksum=checksum,
+                validation_output=validation.output,
+                detail=coraza_wait.output,
                 message=(
                     "Coraza did not load the new WAF policies; the previous "
                     "release is still active. Check the coraza container logs."
                 ),
-                candidate_path=str(candidate_dir),
-                active_path=str(_resolve_current(current_link)),
-                validation_output=validation.output,
-                reload_output=coraza_wait.output,
             )
 
     reload_result = _reload_haproxy()
@@ -225,6 +255,23 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
         # point at the candidate, and the bridge directory is removed.
         _swap_current_link(current_link, candidate_dir, runtime_root)
         shutil.rmtree(bridge_dir, ignore_errors=True)
+    coraza_after_reload: CommandResult | None = None
+    if (
+        reload_result.ok
+        and drops_apps_only
+        and _coraza_tree_changed(previous_target, candidate_dir)
+    ):
+        coraza_after_reload = _wait_for_coraza_reload(
+            _release_relpath(runtime_root, candidate_dir)
+        )
+        if not coraza_after_reload.ok:
+            logger.error(
+                "config-apply coraza rejected the release after HAProxy reload "
+                "correlation_id=%s output=%s",
+                correlation_id,
+                coraza_after_reload.output,
+            )
+            reload_result = coraza_after_reload
     if reload_result.ok:
         logger.info(
             "config-apply success correlation_id=%s",
@@ -310,6 +357,20 @@ def _apply_locked(generated: GeneratedConfig) -> ApplyResult:
             correlation_id,
             rollback_reload.output,
         )
+        if coraza_after_reload is not None and not coraza_after_reload.ok:
+            return _coraza_reload_failed(
+                current_link=current_link,
+                previous_target=None,
+                candidate_dir=candidate_dir,
+                bridge_dir=None,
+                runtime_root=runtime_root,
+                correlation_id=correlation_id,
+                checksum=checksum,
+                validation_output=validation.output,
+                detail=coraza_after_reload.output,
+                rollback_output=rollback_reload.output,
+                restore_current=False,
+            )
         return ApplyResult(
             status=ApplyStatus.reload_failed_rolled_back,
             correlation_id=correlation_id,
@@ -544,6 +605,160 @@ def _reload_haproxy() -> CommandResult:
     output = b"".join(output_chunks).decode("utf-8", errors="replace").strip()
     ok = _RELOAD_SUCCESS_RE.match(output) is not None
     return CommandResult(ok=ok, output=output)
+
+
+def parse_coraza_reload_status(text: str) -> tuple[str, str, str] | None:
+    """Return `(release, result, detail)` from a complete supervisor status file.
+
+    A short or partial write is ignored so a reader never treats a torn file
+    as a successful reload.
+    """
+    lines = text.splitlines()
+    if len(lines) != 3:
+        return None
+    release_line, result_line, detail_line = lines
+    if not release_line.startswith("release=") or not result_line.startswith("result="):
+        return None
+    if not detail_line.startswith("detail="):
+        return None
+    release = release_line.split("=", 1)[1]
+    result = result_line.split("=", 1)[1]
+    detail = detail_line.split("=", 1)[1]
+    if release == "" or result not in {"ok", "error"}:
+        return None
+    return release, result, detail
+
+
+def _coraza_reload_status_path() -> Path:
+    return (
+        Path(settings.runtime_generated_config_root)
+        / CORAZA_STATUS_DIR
+        / CORAZA_STATUS_FILE
+    )
+
+
+def _wait_for_coraza_reload(release: str) -> CommandResult:
+    """Wait until the supervisor reports `release`, or the timeout expires.
+
+    `result=error` is a compile failure. A missing file, or a status line for
+    another release, is a timeout — that is what an older Coraza image does,
+    because it never writes this file.
+    """
+    path = _coraza_reload_status_path()
+    deadline = time.monotonic() + settings.coraza_reload_timeout_seconds
+    while True:
+        parsed: tuple[str, str, str] | None = None
+        try:
+            parsed = parse_coraza_reload_status(
+                path.read_text(encoding="utf-8", errors="replace")
+            )
+        except OSError:
+            parsed = None
+        if parsed is not None and parsed[0] == release:
+            _release, result, detail = parsed
+            if result == "ok":
+                return CommandResult(ok=True, output=f"coraza accepted {release}")
+            return CommandResult(
+                ok=False,
+                output=detail or f"coraza rejected {release}",
+            )
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.2)
+    return CommandResult(
+        ok=False,
+        output=(
+            f"coraza did not report reload status for {release} within "
+            f"{settings.coraza_reload_timeout_seconds}s. An older Coraza image "
+            "does not write this status file."
+        ),
+    )
+
+
+def _coraza_reload_message(detail: str) -> str:
+    if "does not write this status file" in detail:
+        return (
+            "Coraza did not report whether it loaded the new WAF configuration; "
+            "the previous release is still active. An older Coraza image does not "
+            "write reload status — upgrade the coraza container together "
+            "with the backend."
+        )
+    return (
+        "Coraza rejected the new WAF configuration; the previous release "
+        "is still active. Check the coraza container logs."
+    )
+
+
+def _coraza_reload_failed(
+    *,
+    current_link: Path,
+    previous_target: Path | None,
+    candidate_dir: Path,
+    bridge_dir: Path | None,
+    runtime_root: Path,
+    correlation_id: str,
+    checksum: str,
+    validation_output: str | None,
+    detail: str,
+    message: str | None = None,
+    rollback_output: str | None = None,
+    restore_current: bool = True,
+) -> ApplyResult:
+    """Put the previous release back and report `coraza_reload_failed`.
+
+    `restore_current=False` is for the caller that already switched `current`
+    back and reloaded HAProxy.
+    """
+    if restore_current:
+        if previous_target is None:
+            current_link.unlink(missing_ok=True)
+        else:
+            _swap_current_link(current_link, previous_target, runtime_root)
+        if bridge_dir is not None:
+            shutil.rmtree(bridge_dir, ignore_errors=True)
+    shutil.rmtree(candidate_dir, ignore_errors=True)
+    return ApplyResult(
+        status=ApplyStatus.coraza_reload_failed,
+        correlation_id=correlation_id,
+        checksum=checksum,
+        message=message or _coraza_reload_message(detail),
+        candidate_path=str(candidate_dir),
+        active_path=str(_resolve_current(current_link)),
+        validation_output=validation_output,
+        reload_output=detail,
+        rollback_output=rollback_output,
+    )
+
+
+def _coraza_tree_changed(previous: Path | None, candidate: Path) -> bool:
+    return _coraza_tree_token(previous) != _coraza_tree_token(candidate)
+
+
+def _coraza_tree_token(release_dir: Path | None) -> bytes:
+    """Hash of the Coraza files in a release. HAProxy config is not included."""
+    digest = hashlib.sha256()
+    if release_dir is None or not release_dir.is_dir():
+        return digest.digest()
+    yaml_path = release_dir / CORAZA_SPOA_YAML
+    if yaml_path.is_file():
+        digest.update(b"yaml\0")
+        digest.update(yaml_path.read_bytes())
+    apps_dir = release_dir / CORAZA_APPS_DIR
+    if apps_dir.is_dir():
+        files = sorted(
+            path for path in apps_dir.rglob("*") if path.is_file()
+        )
+        for path in files:
+            digest.update(path.relative_to(release_dir).as_posix().encode())
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+    return digest.digest()
+
+
+def _release_relpath(runtime_root: Path, release_dir: Path) -> str:
+    """Symlink text the supervisor reads from `current`."""
+    return Path(os.path.relpath(release_dir, start=runtime_root)).as_posix()
 
 
 def _wait_for_coraza_apps(app_names: set[str]) -> CommandResult:

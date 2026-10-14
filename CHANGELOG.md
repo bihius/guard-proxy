@@ -67,6 +67,18 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   the offset, a Host longer than 255 characters is shortened so ingest does
   not reject it, and a read timeout no longer crashes the shipper. CI runs
   the log-shipper tests.
+- `POST /config/apply` no longer reports success when Coraza rejects a rule
+  change for a policy that already exists. The Coraza supervisor compiles the
+  new release with `coraza-spoa -validate` before it reloads, and writes the
+  result under `/runtime/coraza-status/reload-status`. Apply waits for that
+  status whenever the Coraza files changed, and restores the previous release
+  when compilation fails or the status never arrives. An older Coraza image
+  does not write this file: apply then waits for `CORAZA_RELOAD_TIMEOUT_SECONDS`
+  and rolls back, so the backend and the `coraza` image have to be updated
+  together. The Compose files mount a writable `coraza_status` volume at
+  `/runtime/coraza-status` (the rest of `/runtime` stays read-only). A stack
+  that keeps an older Compose file still runs, but rule changes fail apply
+  until that volume is mounted.
 - Policy editor fields stay on aligned rows when DDoS protection, automatic
   IP banning or country filtering are expanded, and the dashboard's empty
   "Recent blocks" card matches the height of its neighbours.
