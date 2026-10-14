@@ -16,7 +16,11 @@ from pydantic import ValidationError
 
 # JWT_SECRET_KEY musi być ustawiony zanim załaduje się settings singleton.
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-onlyx")
-os.environ.setdefault("LOG_INGEST_SHARED_SECRET", "test-log-ingest-secret")
+os.environ.setdefault("LOG_INGEST_SHARED_SECRET", "test-log-ingest-secret-for-pytest")
+
+# Ważne sekrety muszą mieć co najmniej 32 znaki i być różne od siebie.
+_VALID_JWT_SECRET = "unit-test-jwt-secret-key-0123456789ab"
+_VALID_INGEST_SECRET = "unit-test-log-ingest-secret-0123456789ab"
 
 
 # ---------------------------------------------------------------------------
@@ -52,10 +56,10 @@ def _make_settings(**env_overrides: str) -> object:
 def test_jwt_secret_key_valid() -> None:
     """Poprawny klucz powinien być zaakceptowany."""
     s = _make_settings(
-        JWT_SECRET_KEY="moj-super-tajny-klucz",
-        LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
-    assert getattr(s, "jwt_secret_key") == "moj-super-tajny-klucz"
+    assert getattr(s, "jwt_secret_key") == _VALID_JWT_SECRET
 
 
 def test_jwt_secret_key_empty_raises() -> None:
@@ -63,7 +67,7 @@ def test_jwt_secret_key_empty_raises() -> None:
     with pytest.raises(ValidationError, match="must not be empty"):
         _make_settings(
             JWT_SECRET_KEY="",
-            LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
         )
 
 
@@ -72,17 +76,17 @@ def test_jwt_secret_key_whitespace_only_raises() -> None:
     with pytest.raises(ValidationError, match="must not be empty"):
         _make_settings(
             JWT_SECRET_KEY="   ",
-            LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
         )
 
 
 def test_jwt_secret_key_with_spaces_valid() -> None:
     """Klucz z spacjami w środku (ale nie tylko spacje) jest poprawny."""
     s = _make_settings(
-        JWT_SECRET_KEY="klucz z spacjami w srodku",
-        LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+        JWT_SECRET_KEY="klucz z spacjami w srodku i podloga 1234",
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
-    assert getattr(s, "jwt_secret_key") == "klucz z spacjami w srodku"
+    assert getattr(s, "jwt_secret_key") == "klucz z spacjami w srodku i podloga 1234"
 
 
 # ---------------------------------------------------------------------------
@@ -92,32 +96,32 @@ def test_jwt_secret_key_with_spaces_valid() -> None:
 
 def test_default_algorithm_is_hs256() -> None:
     s = _make_settings(
-        JWT_SECRET_KEY="sekret",
-        LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
     assert getattr(s, "jwt_algorithm") == "HS256"
 
 
 def test_default_access_token_expire_minutes() -> None:
     s = _make_settings(
-        JWT_SECRET_KEY="sekret",
-        LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
     assert getattr(s, "jwt_access_token_expire_minutes") == 30
 
 
 def test_default_refresh_token_expire_days() -> None:
     s = _make_settings(
-        JWT_SECRET_KEY="sekret",
-        LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
     assert getattr(s, "jwt_refresh_token_expire_days") == 7
 
 
 def test_default_auth_refresh_cookie_path_covers_api_prefix() -> None:
     s = _make_settings(
-        JWT_SECRET_KEY="sekret",
-        LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
     assert getattr(s, "auth_refresh_cookie_path") == "/"
 
@@ -125,24 +129,24 @@ def test_default_auth_refresh_cookie_path_covers_api_prefix() -> None:
 def test_auth_refresh_cookie_path_must_be_absolute() -> None:
     with pytest.raises(ValidationError, match="AUTH_REFRESH_COOKIE_PATH"):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
-            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             AUTH_REFRESH_COOKIE_PATH="auth",
         )
 
 
 def test_log_ingest_shared_secret_valid() -> None:
     s = _make_settings(
-        JWT_SECRET_KEY="sekret",
-        LOG_INGEST_SHARED_SECRET="another-secret",
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
-    assert getattr(s, "log_ingest_shared_secret") == "another-secret"
+    assert getattr(s, "log_ingest_shared_secret") == _VALID_INGEST_SECRET
 
 
 def test_log_ingest_shared_secret_empty_raises() -> None:
     with pytest.raises(ValidationError, match="must not be empty"):
         _make_settings(
-            JWT_SECRET_KEY="sekret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
             LOG_INGEST_SHARED_SECRET="",
         )
 
@@ -151,15 +155,42 @@ def test_jwt_secret_key_placeholder_raises() -> None:
     with pytest.raises(ValidationError, match="must be replaced"):
         _make_settings(
             JWT_SECRET_KEY="replace-this-with-a-random-secret",
-            LOG_INGEST_SHARED_SECRET="test-log-ingest-secret",
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
         )
 
 
 def test_log_ingest_shared_secret_placeholder_raises() -> None:
     with pytest.raises(ValidationError, match="must be replaced"):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
             LOG_INGEST_SHARED_SECRET="replace-this-with-a-second-random-secret",
+        )
+
+
+def test_secret_shorter_than_minimum_length_raises() -> None:
+    with pytest.raises(ValidationError, match="at least 32 characters"):
+        _make_settings(
+            JWT_SECRET_KEY="a" * 31,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+        )
+
+
+def test_secret_at_minimum_length_is_accepted() -> None:
+    secret = "b" * 32
+    s = _make_settings(
+        JWT_SECRET_KEY=secret,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+    )
+    assert getattr(s, "jwt_secret_key") == secret
+
+
+def test_identical_jwt_and_ingest_secrets_are_rejected() -> None:
+    with pytest.raises(
+        ValidationError, match="must differ from LOG_INGEST_SHARED_SECRET"
+    ):
+        _make_settings(
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_JWT_SECRET,
         )
 
 
@@ -183,9 +214,9 @@ def test_secrets_shipped_in_the_example_files_are_rejected(example: str) -> None
 
     for name, value in values.items():
         overrides = {
-            "JWT_SECRET_KEY": value if name == "JWT_SECRET_KEY" else "real-secret",
+            "JWT_SECRET_KEY": value if name == "JWT_SECRET_KEY" else _VALID_JWT_SECRET,
             "LOG_INGEST_SHARED_SECRET": (
-                value if name == "LOG_INGEST_SHARED_SECRET" else "real-log-secret"
+                value if name == "LOG_INGEST_SHARED_SECRET" else _VALID_INGEST_SECRET
             ),
         }
         with pytest.raises(ValidationError, match="must be replaced"):
@@ -198,8 +229,8 @@ def test_auth_refresh_cookie_samesite_none_requires_secure() -> None:
         match="AUTH_REFRESH_COOKIE_SECURE must be true",
     ):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
-            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             AUTH_REFRESH_COOKIE_SAMESITE="none",
             AUTH_REFRESH_COOKIE_SECURE="false",
         )
@@ -224,8 +255,8 @@ def test_database_settings_accept_database_url_without_runtime_secrets() -> None
 def test_settings_reject_empty_database_url() -> None:
     with pytest.raises(ValidationError, match="DATABASE_URL must not be empty\\."):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
-            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             DATABASE_URL="   ",
         )
 
@@ -250,8 +281,8 @@ def test_settings_ignore_dot_env_example(
     (tmp_path / ".env").write_text(
         "\n".join(
             [
-                "JWT_SECRET_KEY=real-secret-from-dot-env",
-                "LOG_INGEST_SHARED_SECRET=real-log-secret-from-dot-env",
+                "JWT_SECRET_KEY=real-secret-from-dot-env-0123456789abcd",
+                "LOG_INGEST_SHARED_SECRET=real-log-secret-from-dot-env-0123456789ab",
             ]
         ),
         encoding="utf-8",
@@ -259,17 +290,20 @@ def test_settings_ignore_dot_env_example(
 
     settings = Settings()
 
-    assert getattr(settings, "jwt_secret_key") == "real-secret-from-dot-env"
     assert (
-        getattr(settings, "log_ingest_shared_secret") == "real-log-secret-from-dot-env"
+        getattr(settings, "jwt_secret_key") == "real-secret-from-dot-env-0123456789abcd"
+    )
+    assert (
+        getattr(settings, "log_ingest_shared_secret")
+        == "real-log-secret-from-dot-env-0123456789ab"
     )
 
 
 def test_settings_reject_empty_haproxy_master_socket_path() -> None:
     with pytest.raises(ValidationError, match="Runtime path settings must not be empty"):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
-            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             HAPROXY_MASTER_SOCKET_PATH="   ",
         )
 
@@ -280,8 +314,8 @@ def test_settings_reject_non_positive_reload_timeout() -> None:
         match="Runtime timeout settings must be greater than zero",
     ):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
-            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             HAPROXY_RELOAD_TIMEOUT_SECONDS="0",
         )
 
@@ -293,8 +327,8 @@ def test_settings_reject_non_positive_reload_timeout() -> None:
 
 def test_geoip_defaults() -> None:
     s = _make_settings(
-        JWT_SECRET_KEY="real-secret-value",
-        LOG_INGEST_SHARED_SECRET="real-log-secret",
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
     )
     assert getattr(s, "geoip_database_url") == "https://downloads.ip66.dev/db/ip66.mmdb"
     assert getattr(s, "geoip_refresh_interval_days") == 1
@@ -307,8 +341,8 @@ def test_geoip_refresh_interval_days_zero_raises() -> None:
         match="GEOIP_REFRESH_INTERVAL_DAYS must be greater than zero",
     ):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
-            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             GEOIP_REFRESH_INTERVAL_DAYS="0",
         )
 
@@ -319,7 +353,7 @@ def test_geoip_database_url_empty_raises() -> None:
         match="GEOIP_DATABASE_URL must not be empty",
     ):
         _make_settings(
-            JWT_SECRET_KEY="real-secret-value",
-            LOG_INGEST_SHARED_SECRET="real-log-secret",
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
             GEOIP_DATABASE_URL="   ",
         )
