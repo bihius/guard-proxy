@@ -1,6 +1,6 @@
 [project]
 name = "guard-proxy-backend"
-version = "0.1.0b8"
+version = "0.1.0b9"
 description = "Guard Proxy — admin panel REST API"
 requires-python = ">=3.13"
 dependencies = [

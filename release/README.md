@@ -29,7 +29,7 @@ for what is kept off the volumes, then
 
 ## 1. Get the release kit
 
-Download and extract the `guard-proxy-release-v0.1.0-beta.8.tar.gz` asset
+Download and extract the `guard-proxy-release-v0.1.0-beta.9.tar.gz` asset
 from the [GitHub Releases page](https://github.com/bihius/guard-proxy/releases),
 or copy this `release/` directory if you already have the repository
 checked out. You should end up with:
@@ -53,7 +53,7 @@ cp .env.example .env
 Edit `.env` and replace every `change-me` placeholder:
 
 - `GUARD_PROXY_IMAGE_TAG` — pin this to the release you're installing,
-  e.g. `v0.1.0-beta.8`. Do not use a mutable tag like `beta` or `latest` for
+  e.g. `v0.1.0-beta.9`. Do not use a mutable tag like `beta` or `latest` for
   anything you want to reproduce later: both follow the newest beta release.
 - `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `LOG_INGEST_SHARED_SECRET` —
   generate real secrets, e.g. `openssl rand -hex 32`.
@@ -145,6 +145,38 @@ HTTPS keep working. Two things are stored outside the volumes:
   re-registered on the next renewal instead of being reused. The issued
   certificate itself is stored in the database and on `generated_config`, so
   sites keep serving their existing certificate throughout the upgrade.
+
+### v0.1.0-beta.9
+
+- **The images are multi-arch now.** Both `linux/amd64` and `linux/arm64` are
+  published, so an Apple Silicon or ARM host pulls and runs the stack
+  natively: drop `DOCKER_DEFAULT_PLATFORM=linux/amd64` from your Compose
+  commands if you had set it for the `no matching manifest` error. Tags
+  published before this release stay `linux/amd64` only, so that workaround is
+  still the way to run, for example, v0.1.0-beta.8 on ARM.
+- **`beta` and `latest` follow the newest beta.** This release is published as
+  a normal GitHub release rather than a prerelease, and updates `latest` with
+  `beta`. Keep pinning `GUARD_PROXY_IMAGE_TAG` to a version if you want to
+  reproduce a deployment.
+- **Bans and rate counters survive Apply configuration.** The generated config
+  now wires the DDoS stick-tables to an HAProxy `peers` section, so applying a
+  change no longer lifts a ban. Two exceptions, both described in
+  [What an upgrade does not carry over](#what-an-upgrade-does-not-carry-over):
+  the **first** Apply after this upgrade still starts the tables empty (the
+  worker being replaced was started from a config that had no such section),
+  and a restarted or recreated HAProxy container always starts empty.
+- **`ACME_SERVER_URL` (optional) points the certificate flow at another ACME
+  directory** — Let's Encrypt staging, or a local server such as Pebble — so
+  issuance can be exercised without spending production rate limits. Leave it
+  unset for Let's Encrypt production. Trusting the certificate authority of
+  such a server needs no Guard Proxy setting: export `REQUESTS_CA_BUNDLE` with
+  its PEM file and certbot reads it. See `.env.example`.
+- **`docker-compose.yml` and the seed `haproxy/*.cfg` are unchanged from
+  v0.1.0-beta.8**, so changing `GUARD_PROXY_IMAGE_TAG` and running the steps
+  above is enough; extract the new kit only if you want the updated
+  `.env.example` and this guide.
+- **Database migrations:** none added since v0.1.0-beta.8. Back up `pgdata`
+  first anyway, as in the steps above.
 
 ### v0.1.0-beta.8
 
