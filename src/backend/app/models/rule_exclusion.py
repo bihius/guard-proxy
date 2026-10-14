@@ -54,7 +54,9 @@ _SINGLE_VALUE_TARGET_TYPES = frozenset(
 # Characters a target value may contain so it can be written verbatim into
 # generated `ctl:ruleRemoveTargetById=<id>;<VARIABLE>:<value>` syntax. Checked
 # on create/update and again at config generation.
-TARGET_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_.:/@-]+$")
+# \Z, not $: `$` also matches just before a trailing newline, so "token\n"
+# passed and rendered an extra, broken line into the generated SecLang.
+TARGET_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_.:/@-]+\Z")
 
 
 def target_error(target_type: TargetType, target_value: str | None) -> str | None:

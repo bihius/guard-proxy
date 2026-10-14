@@ -227,3 +227,27 @@ def test_custom_rule_context_rejects_line_break_in_operator_argument() -> None:
             actions="deny,status:403,log",
             is_active=True,
         )
+
+
+def test_custom_rule_context_rejects_trailing_newline_in_variables() -> None:
+    """The last line of defence for rows saved before the schema check existed."""
+    with pytest.raises(ValueError, match="unsafe for generated Coraza variable syntax"):
+        CustomRuleRenderContext(
+            rule_id=9000001,
+            phase=RulePhase.REQUEST_HEADERS,
+            variables="ARGS\n",
+            operator=RuleOperator.RX,
+            operator_argument=".*",
+            actions="deny,status:403,log",
+            is_active=True,
+        )
+
+
+def test_scoped_exclusion_context_rejects_trailing_newline_in_target_value() -> None:
+    with pytest.raises(ValueError, match="letters, digits"):
+        RuleExclusionRenderContext(
+            rule_id=942100,
+            target_type=TargetType.ARGS,
+            target_value="token\n",
+            scope_path="/api/login",
+        )
