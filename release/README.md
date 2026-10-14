@@ -5,9 +5,11 @@ It does not require cloning the source repository or building anything
 locally.
 
 **Beta status.** This is a beta build for early testers. Expect
-rough edges. Ban/rate-limit state, generated configs, and the database are
-all persisted in Docker volumes, but no upgrade-path guarantees are made
-between beta releases yet — back up `pgdata` before upgrading. See
+rough edges. Generated configs, the GeoIP database and PostgreSQL data all
+live in Docker volumes, but no upgrade-path guarantees are made between beta
+releases yet — back up `pgdata` before upgrading. See
+[What an upgrade does not carry over](#what-an-upgrade-does-not-carry-over)
+for the two pieces of state that deliberately do not persist, then
 [Known limitations](#known-limitations) and
 [Reporting feedback](#reporting-feedback) below.
 
@@ -88,6 +90,12 @@ If you set `ADMIN_EMAIL`/`ADMIN_PASSWORD` in `.env` instead, remove them
 again after the account is created — they aren't read at container
 startup, so leaving them there only leaves a plaintext password at rest.
 
+Pick a real address here: this email also becomes the ACME contact for the
+built-in certificate flow, and Let's Encrypt rejects reserved domains such as
+`example.com`. Leaving the placeholder in place makes every certificate
+request fail with `The ACME server believes ... is an invalid email
+address`.
+
 Log in to the admin UI at `http://<host>:${FRONTEND_PORT:-3000}` (or
 through HAProxy on port 80/443, once you've added a vhost — see below).
 
@@ -114,6 +122,27 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 3. Update `GUARD_PROXY_IMAGE_TAG` in `.env` to the new version.
 4. `docker compose pull && docker compose up -d`. The backend runs
    `alembic upgrade head` automatically on startup.
+
+### What an upgrade does not carry over
+
+Everything you configure in the admin UI survives an upgrade: it lives in
+PostgreSQL and is re-rendered onto the `generated_config` volume (which also
+holds the GeoIP database and the vhost certificates), so vhosts, policies and
+HTTPS keep working. Two pieces of state are deliberately not persisted:
+
+- **Bans and rate-limit counters.** These are HAProxy stick-tables, held in
+  the HAProxy process's memory and never written to disk. Any HAProxy reload
+  or restart starts them empty, so a source IP's ban and its request counters
+  are dropped — including by **Apply configuration**, which reloads HAProxy.
+  A tag-only upgrade does not recreate the pinned `haproxy` container, so the
+  tables do happen to survive one, but do not rely on that. See the DDoS
+  Protection & Auto-Ban section of `docs/architecture.md`.
+- **Certbot's ACME account key and renewal configuration.** The built-in
+  certificate flow runs certbot inside the `backend` container with its
+  configuration under `/tmp`, which is not a volume, so the account is
+  re-registered on the next renewal instead of being reused. The issued
+  certificate itself is stored in the database and on `generated_config`, so
+  sites keep serving their existing certificate throughout the upgrade.
 
 ### v0.1.0-beta.8
 

@@ -253,6 +253,28 @@ that is rewritten is `UK`, which the database uses for a handful of networks
 that ISO 3166-1 spells `GB`; without that alias, blocking `GB` would silently
 miss them.
 
+## DDoS Protection & Auto-Ban
+
+A policy with `ddos_protection_enabled` gives each vhost a per-vhost HAProxy
+stick-table, `st_ddos_vhost_<id>`, that stores `http_req_rate()` over
+`rate_limit_window_seconds` and the current connection count. Requests over
+`rate_limit_requests` or `max_connections_per_ip` are answered `429`. With
+`auto_ban_enabled`, a second table, `st_ban_vhost_<id>`, tracks a `gpc0`
+counter: each rate or connection violation increments it, and once it passes
+`ban_threshold` the source is denied until `ban_duration_seconds` of
+inactivity. ACME HTTP-01 challenge paths are exempt from both, so a flood of
+challenges cannot lock a vhost's own certificate renewal out.
+
+**The state is volatile.** Stick-tables live in the HAProxy worker's memory;
+nothing writes them to a file or to PostgreSQL. A fresh worker — `Apply
+configuration`, which reloads through the master socket, or a
+restarted/recreated HAProxy container — starts with empty tables, so every
+ban and every rate counter is dropped. `GET /security/banned-ips` reads them
+back through the HAProxy admin Runtime API rather than the database, and
+therefore also reports an empty list after a reload; the dashboard's banned-IP
+count is the one overview metric that can fail independently of PostgreSQL.
+A source that was banned before the reload starts from zero afterwards.
+
 ## Authentication & Rate Limiting
 
 The FastAPI backend issues short-lived **JWT access tokens** (30 min, HS256) and
