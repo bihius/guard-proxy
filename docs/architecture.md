@@ -122,15 +122,21 @@ events are attributed to the vhost's policy.
    (`SecAuditEngine RelevantOnly` — only transactions where at least one rule
    fired produce an entry).
 2. The **log-shipper** sidecar (`src/log-shipper/`) tails the audit file from a
-   persisted byte-offset checkpoint. For each complete line it maps the Coraza
-   JSON to a `LogIngestRequest` payload (see `configs/coraza/README.md` for the
-   field mapping) and `POST`s it to `/logs/ingest` with
-   `X-Guard-Proxy-Ingest-Secret`.
-3. The offset is only advanced and persisted after a `2xx` response or a
-   deliberate skip (parse error or `4xx` rejection). Transient failures
-   (`5xx`, network errors, `429`) trigger exponential backoff without advancing
-   the offset — so a backend outage stalls the pipeline rather than dropping
-   events. The `coraza_audit` file itself is the durable buffer.
+   persisted checkpoint: a byte offset plus the file's device and inode. For
+   each complete line it maps the Coraza JSON to a `LogIngestRequest` payload
+   (see `configs/coraza/README.md` for the field mapping) and `POST`s it to
+   `/logs/ingest` with `X-Guard-Proxy-Ingest-Secret`. A `Host` value is shortened
+   to 255 characters so it fits the ingest schema.
+3. The offset is advanced and persisted only after a `2xx` response or a
+   deliberate skip (parse error, over-long line, or `4xx` rejection). A skipped
+   line is appended to a dead-letter file beside the offset before the offset
+   moves. Transient failures (`5xx`, network errors, timeouts, `429`, and auth
+   errors `401`/`403`) retry with exponential backoff and leave the offset
+   unchanged, so a backend outage stalls the pipeline rather than dropping
+   events. The `coraza_audit` file itself is the durable buffer. When the path
+   points at a new file, the shipper finishes the previous file and then reads
+   the new one from the start. A shorter file with the same identity is treated
+   as truncation and read from the start.
 4. Idempotency is guaranteed via `producer_event_id` = Coraza
    `transaction.id`; the backend returns `200` for a duplicate rather than
    creating a second row.
