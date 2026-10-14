@@ -11,6 +11,13 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Changed
 
+- GitHub Actions are pinned to commit SHAs instead of mutable tags, and every
+  workflow declares a `permissions:` block (CI and the smoke run are read-only;
+  publishing keeps `contents: read` and `packages: write`). A tag such as `@v4`
+  can be repointed by whoever controls the action repository, which would run
+  their code with this repository's workflow token. The `version-pins` check now
+  fails on a workflow action that is not pinned and on a workflow without a
+  permissions block, and the backend suite covers those rules.
 - **Breaking:** the example secrets are now rejected at startup. The values
   shipped in `docker/.env.example` and `release/.env.example` were accepted, so
   an install that copied an example file and never replaced `JWT_SECRET_KEY` or

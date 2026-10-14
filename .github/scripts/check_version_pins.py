@@ -29,6 +29,7 @@ COMPOSE_PATHSPECS = [
     "benchmarks/lab/docker-compose*.yml",
 ]
 RUNNER_PATHSPECS = ["benchmarks/lab/runners/*.sh"]
+WORKFLOW_PATHSPECS = [".github/workflows/*.yml"]
 
 BACKEND_DOCKERFILE = "src/backend/Dockerfile"
 HAPROXY_REPOSITORY = "haproxy"
@@ -46,6 +47,12 @@ RUNNER_IMAGE_ASSIGNMENT = re.compile(
     r"^\s*(?:export\s+)?[A-Z0-9_]*IMAGE=(?P<quote>[\"']?)(?P<ref>[^\"'\s]+)(?P=quote)\s*$"
 )
 DOCKER_RUN_LINE = re.compile(r"(?:^|\s)docker\s+run\s+(?P<args>.*)$")
+# GitHub Actions: `uses: owner/repo@<ref>`, where <ref> must be a commit SHA.
+USES_LINE = re.compile(
+    r"^\s*(?:-\s*)?uses:\s*(?P<action>[^\s@]+)@(?P<ref>[^\s#]+)"
+)
+PINNED_ACTION_REF = re.compile(r"^[0-9a-f]{40}$")
+PERMISSIONS_LINE = re.compile(r"^permissions:")
 
 
 def tracked_files(pathspecs: list[str]) -> list[str]:
@@ -115,6 +122,54 @@ def runner_refs(path: str) -> list[tuple[int, str]]:
     return refs
 
 
+def workflow_action_refs(path: Path) -> list[tuple[int, str, str]]:
+    """``uses:`` references a workflow pulls in, as ``(line, action, ref)``.
+
+    A tag such as ``@v4`` is mutable: whoever controls the action repository can
+    repoint it and run different code with this workflow's token. Pinning to the
+    commit SHA (with the version in a trailing comment) removes that.
+    """
+    refs: list[tuple[int, str, str]] = []
+    for number, line in enumerate(path.read_text().splitlines(), start=1):
+        match = USES_LINE.match(line)
+        if match is not None:
+            refs.append((number, match["action"], match["ref"]))
+    return refs
+
+
+def workflow_declares_permissions(path: Path) -> bool:
+    """Whether a workflow scopes its token instead of taking the default.
+
+    A top-level `permissions:` key (with its mapping on the following lines, or
+    `{}` inline) is enough: it replaces the default scopes.
+    """
+    return any(
+        PERMISSIONS_LINE.match(line) is not None
+        for line in path.read_text().splitlines()
+    )
+
+
+def workflow_errors(workflow_dir: Path) -> tuple[list[str], int]:
+    """Pin and token-scope problems in a directory of workflow files."""
+    errors: list[str] = []
+    checked = 0
+    for path in sorted(workflow_dir.glob("*.yml")):
+        location = path.relative_to(REPO_ROOT) if REPO_ROOT in path.parents else path
+        if not workflow_declares_permissions(path):
+            errors.append(
+                f"{location}: no `permissions:` block; the workflow runs with the "
+                "repository's default token scopes"
+            )
+        for number, action, ref in workflow_action_refs(path):
+            checked += 1
+            if PINNED_ACTION_REF.match(ref) is None:
+                errors.append(
+                    f"{location}:{number}: {action}@{ref} is not pinned to a commit "
+                    "SHA (mutable tag)"
+                )
+    return errors, checked
+
+
 def image_variant(ref: str) -> str:
     """Tag without its version numbers: the role a repository is pinned for.
 
@@ -173,6 +228,9 @@ def main() -> int:
                     f"references: {listing}"
                 )
 
+    workflow_problems, action_refs = workflow_errors(REPO_ROOT / ".github/workflows")
+    errors.extend(workflow_problems)
+
     deb_version = haproxy_deb_version()
     if deb_version is None:
         errors.append(
@@ -200,7 +258,10 @@ def main() -> int:
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
-    print(f"Version pins OK: {len(refs)} image references checked.")
+    print(
+        f"Version pins OK: {len(refs)} image references and "
+        f"{action_refs} workflow action references checked."
+    )
     return 0
 
 
