@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [Unreleased]
+
+### Changed
+
+- The published images (`backend`, `frontend`, `coraza`, `log-shipper`) are
+  multi-arch now: `linux/amd64` and `linux/arm64`, each built on a runner of
+  that architecture. Apple Silicon and ARM servers pull them natively instead
+  of emulating `amd64` through `DOCKER_DEFAULT_PLATFORM`.
+- Beta tags such as `v0.1.0-beta.9` publish a normal (non-prerelease) GitHub
+  release and update the `:latest` image tag. Only `-alpha` and `-rc` tags
+  remain prereleases and leave `:latest` where it is.
+- `publish.yml` can be started by hand (`workflow_dispatch`) as a build-only
+  dry run: it builds every image for both architectures without pushing a tag
+  or creating a release.
+
 ## [0.1.0-beta.8] - 2026-10-14
 
 ### Added
@@ -425,6 +440,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[Unreleased]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.8...HEAD
 [0.1.0-beta.8]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.7...v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.6...v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.5...v0.1.0-beta.6

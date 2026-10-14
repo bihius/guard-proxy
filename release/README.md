@@ -15,12 +15,12 @@ between beta releases yet — back up `pgdata` before upgrading. See
 
 - Docker Engine with the Compose plugin (`docker compose version` prints
   something).
-- An `amd64` host, or an emulation layer for it: the published images are
-  built for `linux/amd64` only, so on an `arm64` host (Apple Silicon, an
-  ARM server) `docker compose pull` stops with `no matching manifest for
-  linux/arm64/v8`. Run Compose with `DOCKER_DEFAULT_PLATFORM=linux/amd64`
-  there, which runs the stack under emulation — noticeably slower, fine for
-  evaluating.
+- A `linux/amd64` or `linux/arm64` host: the published images are multi-arch,
+  so Apple Silicon and ARM servers run the stack natively. Another
+  architecture has no image and `docker compose pull` stops with
+  `no matching manifest for <arch>`; run Compose with
+  `DOCKER_DEFAULT_PLATFORM=linux/amd64` there, which runs the stack under
+  emulation — noticeably slower, fine for evaluating.
 - A domain or hostname you control, pointed at the machine you're
   deploying to, if you want HTTPS via the app's built-in cert flow.
   HTTP-only testing works with `localhost` too.
@@ -51,8 +51,8 @@ cp .env.example .env
 Edit `.env` and replace every `change-me` placeholder:
 
 - `GUARD_PROXY_IMAGE_TAG` — pin this to the release you're installing,
-  e.g. `v0.1.0-beta.8`. Do not use a mutable tag like `beta` for anything
-  you want to reproduce later.
+  e.g. `v0.1.0-beta.8`. Do not use a mutable tag like `beta` or `latest` for
+  anything you want to reproduce later: both follow the newest beta release.
 - `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `LOG_INGEST_SHARED_SECRET` —
   generate real secrets, e.g. `openssl rand -hex 32`.
 - `CORS_ORIGINS` — the URL(s) you'll open the admin UI from.
