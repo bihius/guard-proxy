@@ -15,6 +15,12 @@ between beta releases yet — back up `pgdata` before upgrading. See
 
 - Docker Engine with the Compose plugin (`docker compose version` prints
   something).
+- An `amd64` host, or an emulation layer for it: the published images are
+  built for `linux/amd64` only, so on an `arm64` host (Apple Silicon, an
+  ARM server) `docker compose pull` stops with `no matching manifest for
+  linux/arm64/v8`. Run Compose with `DOCKER_DEFAULT_PLATFORM=linux/amd64`
+  there, which runs the stack under emulation — noticeably slower, fine for
+  evaluating.
 - A domain or hostname you control, pointed at the machine you're
   deploying to, if you want HTTPS via the app's built-in cert flow.
   HTTP-only testing works with `localhost` too.
@@ -118,9 +124,12 @@ it — the static `haproxy.cfg` seed is replaced at that point.
   `/var/lib/guard-proxy/generated/coraza-status`) and the seed
   `haproxy/*.cfg`. Extract the new kit, keep your `.env`, and copy your
   `haproxy/` files only if you edited them by hand. A stack that keeps the
-  old Compose file still runs, but Coraza rule changes then fail **Apply
-  configuration** (the apply waits out `CORAZA_RELOAD_TIMEOUT_SECONDS` and
-  rolls back).
+  old Compose file still proxies traffic through HAProxy, but the admin UI
+  and the API become unreachable: the old file publishes and health-checks
+  the frontend container's old port 5173 while the new frontend image
+  serves nginx on 8080, so the container never reports healthy. Coraza rule
+  changes then also fail **Apply configuration** (the apply waits out
+  `CORAZA_RELOAD_TIMEOUT_SECONDS` and rolls back).
 - **Upgrade `backend` and `coraza` together.** They are published from one
   tag; pinning them to different versions leaves the backend waiting for a
   reload status the older Coraza image never writes, so every apply rolls
