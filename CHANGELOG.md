@@ -59,6 +59,17 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Fixed
 
+- A WAF payload can no longer forge its own anomaly score. The shipper took the
+  first `(Total Score: N)` it found in any audit message, but the request data
+  it matched appears inside the message of the rule that matched, so a payload
+  containing that text — a query parameter was enough — replaced the real score
+  with its own. A value that large overflows the score column, which made
+  ingest answer `500` and the shipper retry the same event forever. The score
+  is now read only from the CRS blocking-evaluation rule's own message text,
+  the ingest schema bounds it to what the column can store, and a store-level
+  data error answers `422` (dead-lettered) instead of `500`. HTTP methods
+  longer than 16 characters, which the client chooses, and scoped IPv6 client
+  addresses no longer make an event unmappable either.
 - Coraza inspects request bodies. HAProxy buffers the request body
   (`option http-buffer-request`, `tune.bufsize 65536`) before the SPOE message
   is built, so a payload written after the headers, or past the first buffer,

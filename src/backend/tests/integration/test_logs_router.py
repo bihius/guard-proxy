@@ -2,7 +2,9 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
 from app.models.log import Log, LogAction, LogSeverity
@@ -428,6 +430,50 @@ def test_ingest_log_event_rejects_invalid_payload(
     )
     assert resp.status_code == 422
     assert [err["loc"] for err in resp.json()["detail"]] == [["body", "source_ip"]]
+
+
+def test_ingest_log_event_rejects_anomaly_score_too_large_for_the_column(
+    client: TestClient,
+    log_ingest_headers: dict[str, str],
+) -> None:
+    """A score the integer column cannot store must be a 422, not a 500.
+
+    A 5xx is retried by the log shipper forever, which wedges the pipeline on
+    the offending event; a 4xx is dead-lettered instead.
+    """
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(anomaly_score=2_147_483_648),
+        headers=log_ingest_headers,
+    )
+
+    assert resp.status_code == 422
+    assert [err["loc"] for err in resp.json()["detail"]] == [
+        ["body", "anomaly_score"]
+    ]
+
+
+def test_ingest_log_event_translates_a_store_data_error_into_422(
+    client: TestClient,
+    db: Session,
+    log_ingest_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A value the store refuses is permanent, so it must not surface as a 5xx."""
+
+    def raise_data_error() -> None:
+        raise DataError("INSERT INTO logs", {}, Exception("integer out of range"))
+
+    monkeypatch.setattr(db, "commit", raise_data_error)
+
+    resp = client.post(
+        "/logs/ingest",
+        json=_ingest_payload(),
+        headers=log_ingest_headers,
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Event carries a value the log store cannot hold"
 
 
 def test_ingest_log_event_allows_optional_fields_to_be_omitted(

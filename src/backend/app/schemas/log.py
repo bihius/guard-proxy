@@ -8,6 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.log import LogAction, LogSeverity
 
+# Upper bound for an ingest anomaly score: PostgreSQL stores it in an INTEGER
+# column, so a larger value raises DataError (not IntegrityError) and turns into
+# a 500 that the log shipper retries forever. Rejecting it here answers 422, a
+# permanent failure the shipper can dead-letter.
+_MAX_ANOMALY_SCORE = 2_147_483_647
+
 
 class LogResponse(BaseModel):
     """Single persisted event returned by the API."""
@@ -68,7 +74,7 @@ class LogIngestRequest(BaseModel):
     status_code: int | None = Field(default=None, ge=100, le=599)
     rule_id: int | None = Field(default=None, gt=0)
     rule_message: str | None = None
-    anomaly_score: int | None = Field(default=None, ge=0)
+    anomaly_score: int | None = Field(default=None, ge=0, le=_MAX_ANOMALY_SCORE)
     paranoia_level: int | None = Field(default=None, ge=1, le=4)
     message: str | None = None
     raw_context: dict[str, Any] | None = None
