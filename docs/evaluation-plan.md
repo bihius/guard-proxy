@@ -240,7 +240,7 @@ git clone https://github.com/bihius/guard-proxy.git ~/guard-proxy
 cd ~/guard-proxy
 git submodule update --init --recursive   # CRS v4.25.0
 
-cp docker/.env.example docker/.env
+make env                                  # docker/.env with generated backend secrets
 cp benchmarks/lab/.env.example benchmarks/lab/.env
 # docker/.env must include ADMIN_EMAIL and ADMIN_PASSWORD for lab seeding.
 # Do not set LAB_POLICY_* or LAB_PL2_POLICY_* in benchmarks/lab/.env.

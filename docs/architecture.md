@@ -346,7 +346,8 @@ services:
   postgres:     # internal port 5432
 ```
 
-Prepare `docker/.env` from `docker/.env.example`, then use
+Prepare `docker/.env` with `make env` (it copies `docker/.env.example`
+and generates the two secrets the backend requires), then use
 `make run` for the normal stack or `make dev` for HAProxy `-d` output and
 Coraza debug logging. The end-to-end smoke test is
 `benchmarks/smoke/e2e.sh`; it starts the stack, waits for healthy services,

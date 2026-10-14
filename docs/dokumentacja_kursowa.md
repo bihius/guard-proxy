@@ -403,7 +403,7 @@ Aplikacja jest (prawie) responsywna i korzysta z backendowego REST API przez `fe
 Przygotowanie konfiguracji:
 
 ```bash
-cp docker/.env.example docker/.env
+make env
 ```
 
 Uruchomienie pelnego stacka:

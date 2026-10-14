@@ -4,8 +4,23 @@ COMPOSE_FILE := docker/docker-compose.yml
 COMPOSE_DEBUG_FILE := docker/docker-compose.debug.yml
 ENV_FILE := docker/.env
 
-.PHONY: run dev down clean logs ps seed coraza-build \
+.PHONY: env run dev down clean logs ps seed coraza-build \
         eval-up eval-down eval-clean eval-ftw eval-corpus eval-load eval-metrics eval-all eval-results
+
+# Create docker/.env from the example and generate its secrets. The example
+# ships rejected placeholders, so the stack cannot start from a plain copy.
+env:
+	@if [ -f $(ENV_FILE) ]; then \
+		echo "$(ENV_FILE) already exists, leaving it untouched."; \
+	else \
+		cp docker/.env.example $(ENV_FILE); \
+		sed -i.bak \
+			-e "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$$(openssl rand -hex 32)|" \
+			-e "s|^LOG_INGEST_SHARED_SECRET=.*|LOG_INGEST_SHARED_SECRET=$$(openssl rand -hex 32)|" \
+			$(ENV_FILE); \
+		rm -f $(ENV_FILE).bak; \
+		echo "Created $(ENV_FILE) with generated JWT_SECRET_KEY and LOG_INGEST_SHARED_SECRET."; \
+	fi
 
 run:
 	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up --build -d

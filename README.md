@@ -59,8 +59,8 @@ See [docs/architecture.md](docs/architecture.md) for the full data flow.
 ### Run
 
 ```bash
-cp docker/.env.example docker/.env
-# Edit docker/.env and set your secrets
+make env       # copies docker/.env.example and generates JWT_SECRET_KEY
+               # and LOG_INGEST_SHARED_SECRET (openssl rand -hex 32)
 
 make run       # normal mode or
 make dev       # HAProxy + Coraza debug logging

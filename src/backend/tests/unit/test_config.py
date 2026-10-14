@@ -163,6 +163,35 @@ def test_log_ingest_shared_secret_placeholder_raises() -> None:
         )
 
 
+@pytest.mark.parametrize("example", ["docker/.env.example", "release/.env.example"])
+def test_secrets_shipped_in_the_example_files_are_rejected(example: str) -> None:
+    """Copying an example file must not start the stack with published secrets."""
+    repo_root = next(
+        parent
+        for parent in Path(__file__).resolve().parents
+        if (parent / ".git").exists()
+    )
+    values: dict[str, str] = {}
+    for line in (repo_root / example).read_text(encoding="utf-8").splitlines():
+        if line.startswith(("JWT_SECRET_KEY=", "LOG_INGEST_SHARED_SECRET=")):
+            name, _, value = line.partition("=")
+            values[name] = value
+
+    assert set(values) == {"JWT_SECRET_KEY", "LOG_INGEST_SHARED_SECRET"}, (
+        f"{example} must define both secrets"
+    )
+
+    for name, value in values.items():
+        overrides = {
+            "JWT_SECRET_KEY": value if name == "JWT_SECRET_KEY" else "real-secret",
+            "LOG_INGEST_SHARED_SECRET": (
+                value if name == "LOG_INGEST_SHARED_SECRET" else "real-log-secret"
+            ),
+        }
+        with pytest.raises(ValidationError, match="must be replaced"):
+            _make_settings(**overrides)
+
+
 def test_auth_refresh_cookie_samesite_none_requires_secure() -> None:
     with pytest.raises(
         ValidationError,
