@@ -22,9 +22,14 @@ _PLACEHOLDER_SECRET_MARKERS = (
     "openssl-rand",
 )
 
+# A short signing secret is brute-forceable. `openssl rand -hex 32` produces 64
+# hex characters, so 32 leaves room for other generators while staying well
+# above a guessable value.
+_MIN_SECRET_LENGTH = 32
+
 
 def _validate_secret(value: str, field_name: str) -> str:
-    """Reject empty or template placeholder secrets."""
+    """Reject empty, template placeholder, or too-short secrets."""
     normalized = value.strip()
     if not normalized:
         raise ValueError(f"{field_name} must not be empty.")
@@ -38,6 +43,12 @@ def _validate_secret(value: str, field_name: str) -> str:
             "the value still looks like the placeholder from .env.example. "
             "Generate one with `openssl rand -hex 32` (or `make env` when "
             "setting up docker/.env)."
+        )
+    if len(normalized) < _MIN_SECRET_LENGTH:
+        raise ValueError(
+            f"{field_name} must be at least {_MIN_SECRET_LENGTH} characters long: "
+            "a shorter secret can be brute-forced. Generate one with "
+            "`openssl rand -hex 32`."
         )
     return normalized
 
@@ -228,6 +239,16 @@ class Settings(EnvFileSettings):
             raise ValueError(
                 "AUTH_REFRESH_COOKIE_SECURE must be true when "
                 "AUTH_REFRESH_COOKIE_SAMESITE is 'none'."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def secrets_must_differ(self) -> "Settings":
+        if self.jwt_secret_key == self.log_ingest_shared_secret:
+            raise ValueError(
+                "JWT_SECRET_KEY must differ from LOG_INGEST_SHARED_SECRET: "
+                "sharing one value means leaking either compromises both. "
+                "Generate a second one with `openssl rand -hex 32`."
             )
         return self
 
