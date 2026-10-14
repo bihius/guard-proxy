@@ -24,9 +24,8 @@ jobs:
       # One place decides the channel, so the GitHub release and the :latest
       # tag cannot disagree. Beta releases are public stable releases (owner
       # decision): v*-beta.* and vX.Y.Z go out as normal, Latest releases and
-      # update :latest; only -alpha and -rc stay prereleases off :latest. A
-      # manual run is on a branch ref, so both stay false and no mutable tag is
-      # ever published from main.
+      # update :latest; only -alpha and -rc stay prereleases off :latest.
+      # A manual run builds and pushes nothing, whichever ref it runs on.
       - name: Derive the release channel from the tag
         id: channel
         run: |
@@ -190,7 +189,7 @@ jobs:
   release-kit:
     name: release-kit
     needs: [publish, merge, channel]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
