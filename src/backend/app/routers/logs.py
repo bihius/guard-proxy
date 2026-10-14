@@ -5,7 +5,7 @@ from secrets import compare_digest
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import IPvAnyAddress
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
@@ -80,6 +80,15 @@ def _persist_log_event(
     db.add(log)
     try:
         db.commit()
+    except DataError as exc:
+        # A value the column cannot store (e.g. a score too large for an
+        # integer). That is permanent, so answer 4xx: a 5xx would leave the
+        # shipper retrying the same event forever.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Event carries a value the log store cannot hold",
+        ) from exc
     except IntegrityError:
         db.rollback()
         if producer_event_id is None:

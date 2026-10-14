@@ -506,3 +506,77 @@ def test_multi_rule_request_preserves_all_matched_rules_in_raw_context() -> None
         for m in raw_messages
     ]
     assert matched_ids == ["942100", "942190", "942270", "942360", "949110"]
+
+
+# ---------------------------------------------------------------------------
+# Score source, method bound and IP normalisation (issue #343)
+# ---------------------------------------------------------------------------
+
+
+def test_forged_total_score_in_matched_data_is_ignored() -> None:
+    """A payload must not be able to forge the score through its own data.
+
+    The request data lands in the ``[data "..."]`` field of the rule that
+    matched, and that message comes first in the event, so the score may only be
+    read from the blocking-evaluation rule.
+    """
+
+    forged = _message_entry(rule_id="942100", msg="SQL Injection Attack Detected")
+    forged["error_message"] = (
+        '[client "203.0.113.7"] Coraza: Warning. '
+        "SQL Injection Attack Detected via libinjection "
+        '[id "942100"] [msg "SQL Injection Attack Detected via libinjection"] '
+        '[data "Matched Data: 1\' OR \'1\'=\'1 (Total Score: 99999999999) '
+        'found within ARGS:id: id=1\' OR \'1\'=\'1 (Total Score: 99999999999)"] '
+        '[severity "critical"]'
+    )
+    event = _base_event(messages=[forged, _blocking_evaluation_entry(score=5)])
+    event["transaction"]["is_interrupted"] = True
+
+    p = coraza_event_to_ingest(event)
+
+    assert p is not None
+    assert p["anomaly_score"] == 5
+    assert p["rule_id"] == 942100
+
+
+def test_total_score_outside_the_blocking_rule_is_ignored() -> None:
+    """Only REQUEST-949/RESPONSE-959 messages may supply the score."""
+
+    event = _base_event(
+        messages=[
+            _message_entry(
+                rule_id="942100",
+                msg="Inbound Anomaly Score Exceeded (Total Score: 99999999999)",
+            )
+        ]
+    )
+
+    p = coraza_event_to_ingest(event)
+
+    assert p is not None
+    assert p["anomaly_score"] is None
+
+
+def test_method_is_clamped_to_the_ingest_schema_bound() -> None:
+    """A client picks the method token; an over-long one must not drop the event."""
+
+    event = _base_event()
+    event["transaction"]["request"]["method"] = "Q" * 40
+
+    p = coraza_event_to_ingest(event)
+
+    assert p is not None
+    assert p["method"] == "Q" * 16
+
+
+def test_scoped_ipv6_client_address_loses_its_scope() -> None:
+    """A scope is not part of the address and can exceed max_length on its own."""
+
+    event = _base_event()
+    event["transaction"]["client_ip"] = "fe80::1%eth0"
+
+    p = coraza_event_to_ingest(event)
+
+    assert p is not None
+    assert p["source_ip"] == "fe80::1"
