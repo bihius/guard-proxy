@@ -59,6 +59,15 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ### Fixed
 
+- WAF events no longer keep credentials. The shipper stores the whole Coraza
+  audit event as `raw_context` so an event can be investigated, and that event
+  includes the request headers, so cookies, `Authorization` values and API keys
+  belonging to the protected application's users were written to the database
+  and shown in the log viewer to every authenticated user. Values of
+  credential-bearing fields — headers named `Cookie`, `Authorization`,
+  `X-Api-Key` and similar, or any field matching password/secret/token/
+  credential — are replaced with `[redacted]` at ingest. Rule messages, which
+  the exclusion suggester parses, are left as they are.
 - Login rate limiting can no longer be bypassed by spoofing
   `X-Forwarded-For`. The limiter keyed on the left-most entry of the header,
   but the proxy in front of the backend appends the address it observed instead

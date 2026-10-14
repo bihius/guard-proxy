@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.log import LogAction, LogSeverity
+from app.services.log_redaction import redact_raw_context
 
 # Upper bound for an ingest anomaly score: PostgreSQL stores it in an INTEGER
 # column, so a larger value raises DataError (not IntegrityError) and turns into
@@ -110,3 +111,19 @@ class LogIngestRequest(BaseModel):
         if not normalized:
             raise ValueError("request_uri cannot be empty")
         return normalized
+
+    @field_validator("raw_context")
+    @classmethod
+    def redact_credentials(
+        cls, value: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Strip credentials from the stored audit event.
+
+        The event carries the request headers, so cookies, authorization
+        headers and API keys would otherwise be readable by every authenticated
+        user through the log viewer.
+        """
+        if value is None:
+            return None
+        redacted = redact_raw_context(value)
+        return redacted if isinstance(redacted, dict) else None
