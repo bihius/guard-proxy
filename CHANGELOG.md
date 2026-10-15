@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [0.1.0-beta.10] - 2026-10-15
+
+### Fixed
+
+- Bans and rate-limit counters can no longer be lost by an **Apply
+  configuration** that arrives while the outgoing worker is still finishing its
+  peers resync — the reload did not start the stick-table handover at all in
+  that window, silently and without a log line. `config_apply` now waits for
+  the worker it is about to replace to become able to hand the tables over
+  before reloading, bounded by HAProxy's own five-second window. Measured on
+  the v0.1.0-beta.8 → v0.1.0-beta.9 upgrade path, which lost a ban in 5 of 8
+  applies: a rapid Apply loop now keeps it 21 times out of 21, and a fresh
+  install 20 out of 20. Two cases still start the tables empty, and this
+  release changes neither: the first Apply after upgrading from
+  v0.1.0-beta.8 or older (the worker being replaced has no `peers` section and
+  cannot teach anything), and a restarted or recreated HAProxy container.
+  Documented in `docs/architecture.md` and `release/README.md`.
+
 ## [0.1.0-beta.9] - 2026-10-14
 
 ### Added
@@ -459,6 +477,7 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   exclusions, and custom rules, plus runtime config generation and apply.
 - Coraza audit-log ingestion via the log-shipper sidecar.
 
+[0.1.0-beta.10]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.9...v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.8...v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.7...v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/bihius/guard-proxy/compare/v0.1.0-beta.6...v0.1.0-beta.7
