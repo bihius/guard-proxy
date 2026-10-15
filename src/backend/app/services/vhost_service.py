@@ -134,6 +134,7 @@ class VHostService:
         primary_backend_url = str(backend_payloads[0]["url"])
 
         ssl_expires_at = None
+        acme_contact_email = None
         if ssl_provider == "upload" and ssl_cert:
             ssl_expires_at = self._parse_cert_expiration(ssl_cert)
         elif ssl_provider == "letsencrypt":
@@ -142,6 +143,7 @@ class VHostService:
             try:
                 ssl_cert, ssl_key = certbot.provision_cert(domain, email)
                 ssl_expires_at = self._parse_cert_expiration(ssl_cert)
+                acme_contact_email = email
             except CertbotError as e:
                 logger.error(f"Failed to provision cert for {domain}: {e}")
                 # We can either fail the creation or save it without certs.
@@ -157,6 +159,7 @@ class VHostService:
             ssl_cert=ssl_cert,
             ssl_key=ssl_key,
             ssl_expires_at=ssl_expires_at,
+            acme_contact_email=acme_contact_email,
             is_active=is_active,
             policy_id=policy_id,
             created_by=created_by,
@@ -253,6 +256,9 @@ class VHostService:
                     patch_data["ssl_cert"] = new_cert
                     patch_data["ssl_key"] = new_key
                     patch_data["ssl_expires_at"] = self._parse_cert_expiration(new_cert)
+                    # Re-issuance registers a new ACME account, so the stored
+                    # contact follows the certificate it belongs to.
+                    patch_data["acme_contact_email"] = email
                 except CertbotError as e:
                     logger.error(f"Failed to provision cert for {domain}: {e}")
                     raise ValueError(f"Let's Encrypt provisioning failed: {e}")

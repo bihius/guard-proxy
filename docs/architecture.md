@@ -495,6 +495,18 @@ account and the renewal lineage are recreated by the first renewal after a
 container replacement. That costs one account registration per upgrade and
 nothing else, since each request re-issues the certificate from scratch anyway.
 
+Because every renewal registers the ACME account again, it must present the
+same contact the certificate was issued with: Let's Encrypt rejects a reserved
+or mismatched address, so a renewal that invented its own contact could fail
+for a domain whose issuance had succeeded. The contact is therefore
+snapshotted on the `VHost` row as `acme_contact_email` when the certificate is
+issued — the creating admin's own address, or `admin@<domain>` when the caller
+passes none — and the renewal job reuses it. Certificates issued before that
+column existed keep a NULL contact and renew with the older `admin@<domain>`
+fallback; the creating admin is not looked up at renewal time, because a user
+row can be edited or deleted after issuance, while the ACME account keeps the
+address it registered with.
+
 `ACME_SERVER_URL` overrides the ACME directory (certbot's default is Let's
 Encrypt production) and is passed through as `--server`; it is what makes the
 staging directory or a local ACME server usable for testing without consuming
