@@ -29,7 +29,7 @@ for what is kept off the volumes, then
 
 ## 1. Get the release kit
 
-Download and extract the `guard-proxy-release-v0.1.0-beta.9.tar.gz` asset
+Download and extract the `guard-proxy-release-v0.1.0-beta.10.tar.gz` asset
 from the [GitHub Releases page](https://github.com/bihius/guard-proxy/releases),
 or copy this `release/` directory if you already have the repository
 checked out. You should end up with:
@@ -53,7 +53,7 @@ cp .env.example .env
 Edit `.env` and replace every `change-me` placeholder:
 
 - `GUARD_PROXY_IMAGE_TAG` — pin this to the release you're installing,
-  e.g. `v0.1.0-beta.9`. Do not use a mutable tag like `beta` or `latest` for
+  e.g. `v0.1.0-beta.10`. Do not use a mutable tag like `beta` or `latest` for
   anything you want to reproduce later: both follow the newest beta release.
 - `POSTGRES_PASSWORD`, `JWT_SECRET_KEY`, `LOG_INGEST_SHARED_SECRET` —
   generate real secrets, e.g. `openssl rand -hex 32`.
@@ -136,17 +136,50 @@ HTTPS keep working. Two things are stored outside the volumes:
   worker it is about to replace is able to hand them over before reloading, so
   a ban is not lifted just because an admin changed something. A tag-only
   upgrade leaves the pinned `haproxy` container running, so they survive that
-  too, but the **first** Apply after such an upgrade still clears them: the
-  worker that is running at that point predates the `peers` section and cannot
-  teach it anything. Every later Apply carries them over. A restarted or
-  recreated HAProxy container starts empty, and nothing can recover that. See
-  the DDoS Protection & Auto-Ban section of `docs/architecture.md`.
+  too — except on the **first** Apply after coming from v0.1.0-beta.8 or older:
+  the worker running at that point predates the `peers` section and cannot
+  teach it anything. Every later Apply carries them over, and an upgrade from
+  v0.1.0-beta.9 already generates the section, so it keeps them on the first
+  Apply as well. A restarted or recreated HAProxy container starts empty, and
+  nothing can recover that. See the DDoS Protection & Auto-Ban section of
+  `docs/architecture.md`.
 - **Certbot's ACME account key and renewal configuration.** The built-in
   certificate flow runs certbot inside the `backend` container with its
   configuration under `/tmp`, which is not a volume, so the account is
   re-registered on the next renewal instead of being reused. The issued
   certificate itself is stored in the database and on `generated_config`, so
   sites keep serving their existing certificate throughout the upgrade.
+
+### v0.1.0-beta.10
+
+- **Bans and rate counters now survive every Apply configuration.**
+  v0.1.0-beta.9 wired the DDoS stick-tables to an HAProxy `peers` section, but
+  HAProxy only starts the handover of those tables when the worker being
+  replaced has finished its own resync — up to five seconds after that worker
+  started. An Apply that arrived inside that window dropped every ban and
+  counter, silently and without a log line, and an Apply issued right after a
+  ban was created was the most reliable way to lose it. The backend now waits
+  for the outgoing worker before asking HAProxy to reload (bounded by those
+  five seconds, and free when the worker has nothing to wait for). On the
+  v0.1.0-beta.8 → v0.1.0-beta.9 upgrade path, which lost the ban in 5 of 8
+  applies, a rapid Apply loop now keeps it 21 times out of 21; a fresh install
+  keeps it 20 out of 20. The DDoS Protection & Auto-Ban section of
+  `docs/architecture.md` describes the mechanism.
+- **Two cases still start the tables empty**, and this release does not change
+  either:
+  - the **first** Apply after upgrading from v0.1.0-beta.8 or older: the worker
+    being replaced was started from a config with no `peers` section and cannot
+    teach anything. Every Apply after that one carries the tables over, and an
+    upgrade from v0.1.0-beta.9 — which already generates the section — keeps
+    them on the first Apply too;
+  - a **restarted or recreated `haproxy` container**: there is no predecessor
+    left to synchronize from.
+- **`docker-compose.yml` and the seed `haproxy/*.cfg` are unchanged from
+  v0.1.0-beta.9**, so changing `GUARD_PROXY_IMAGE_TAG` and running the steps
+  above is enough; extract the new kit only if you want the updated
+  `.env.example` and this guide.
+- **Database migrations:** none added since v0.1.0-beta.9. Back up `pgdata`
+  first anyway, as in the steps above.
 
 ### v0.1.0-beta.9
 

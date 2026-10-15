@@ -4,7 +4,7 @@ name: guard-proxy-release
 #
 # This file pulls prebuilt images from GHCR instead of building from
 # source. Set GUARD_PROXY_IMAGE_TAG (see .env.example) to the release
-# you want to run, e.g. v0.1.0-beta.9.
+# you want to run, e.g. v0.1.0-beta.10.
 
 services:
   postgres:
@@ -26,7 +26,7 @@ services:
       - gp_internal
 
   backend:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-backend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.9}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-backend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.10}
     restart: unless-stopped
     env_file:
       - .env
@@ -56,7 +56,7 @@ services:
       - gp_internal
 
   frontend:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-frontend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.9}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-frontend:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.10}
     restart: unless-stopped
     # Serves the built SPA from nginx and proxies /api/v1 to the backend, so
     # the UI and the API share an origin. Put this port behind TLS (your own
@@ -78,7 +78,7 @@ services:
       - gp_internal
 
   coraza:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-coraza:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.9}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-coraza:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.10}
     restart: unless-stopped
     depends_on:
       backend:
@@ -101,7 +101,7 @@ services:
       - gp_internal
 
   log-shipper:
-    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-log-shipper:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.9}
+    image: ${GUARD_PROXY_IMAGE_REPO:-ghcr.io/bihius}/guard-proxy-log-shipper:${GUARD_PROXY_IMAGE_TAG:?set GUARD_PROXY_IMAGE_TAG in .env, e.g. v0.1.0-beta.10}
     restart: unless-stopped
     env_file:
       - .env
