@@ -17,6 +17,7 @@ from app.services.config_apply import (
     apply,
     calculate_checksum,
     parse_coraza_reload_status,
+    peers_handover_pending,
     seed_runtime_config,
 )
 from app.services.config_generator import CorazaAppConfig, GeneratedConfig
@@ -1116,3 +1117,211 @@ def test_write_candidate_tightens_certs_written_by_an_earlier_release(
     )
 
     assert stat.S_IMODE(legacy_pem.stat().st_mode) == 0o600
+
+
+# ---------------------------------------------------------------------------
+# Stick-table handover before a reload
+# ---------------------------------------------------------------------------
+
+# `show peers` on HAProxy 3.0: one section line, then the peer's own lines. The
+# section's `flags` word reports the resync state; only the section line also
+# carries `disabled=`.
+_PEERS_WAITING = (
+    "0x7fa9: [21/Nov/2026:21:25:09] id=gp_stick_tables disabled=0 flags=0x0 "
+    "resync_timeout=3s task_calls=1\n"
+    "  0x7fb2: id=localpeer(local,inactive) addr=127.0.0.1:10001 "
+    "app_state=STOPPED learn_state=NOTASSIGNED last_status=NONE "
+    "last_hdshk=<NEVER>\n"
+    "        flags=0x0\n"
+    "        shared tables:\n"
+    "          0x7fc1 local_id=1 remote_id=1 flags=0x0 remote_data=0x440\n"
+)
+_PEERS_TAUGHT = _PEERS_WAITING.replace(
+    "flags=0x0 resync_timeout=3s", "flags=0x11000003 resync_timeout=<PAST>"
+)
+# A worker whose predecessor could not teach only finishes its (empty) resync
+# when the window expires; it can hand its tables over from then on.
+_PEERS_GAVE_UP = _PEERS_WAITING.replace(
+    "flags=0x0 resync_timeout=3s", "flags=0x300003 resync_timeout=<PAST>"
+)
+
+
+def test_peers_handover_pending_tracks_the_section_resync_flags() -> None:
+    assert peers_handover_pending(_PEERS_WAITING) is True
+    # Local resync finished is not enough: the remote half is still missing.
+    assert (
+        peers_handover_pending(
+            _PEERS_WAITING.replace("flags=0x0 resync", "flags=0x1 resync")
+        )
+        is True
+    )
+    assert peers_handover_pending(_PEERS_TAUGHT) is False
+    assert peers_handover_pending(_PEERS_GAVE_UP) is False
+
+
+def test_peers_handover_pending_ignores_non_section_flags_lines() -> None:
+    """Per-peer and per-table lines print `flags` too and must not be mistaken
+    for a section that has not finished resyncing."""
+    assert peers_handover_pending(_PEERS_TAUGHT) is False
+
+
+def test_peers_handover_pending_is_false_without_a_peers_section() -> None:
+    assert peers_handover_pending("") is False
+    assert peers_handover_pending("No such peers section\n") is False
+
+
+class _FakeClock:
+    """Clock the wait function may drive without sleeping for real."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps = 0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps += 1
+        self.now += seconds
+
+
+class _FakeMasterSocket:
+    """Stand-in for the master CLI socket, recording what was sent."""
+
+    def __init__(self, events: list[str], reply: bytes = b"Success=1\n") -> None:
+        self.events = events
+        self.reply = reply
+
+    def __enter__(self) -> _FakeMasterSocket:
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+    def settimeout(self, _timeout: float) -> None:
+        pass
+
+    def connect(self, _path: str) -> None:
+        pass
+
+    def sendall(self, data: bytes) -> None:
+        self.events.append(data.decode("utf-8").strip())
+
+    def shutdown(self, _how: int) -> None:
+        pass
+
+    def recv(self, _size: int) -> bytes:
+        reply, self.reply = self.reply, b""
+        return reply
+
+
+def test_reload_waits_for_the_handover_before_replacing_the_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wait must happen before the master is asked to reload: afterwards the
+    outgoing worker is gone and its tables with it."""
+    from app.services import ban_list_service, config_apply
+
+    events: list[str] = []
+    clock = _FakeClock()
+    replies = [_PEERS_WAITING, _PEERS_WAITING, _PEERS_TAUGHT]
+
+    def fake_send_runtime_command(command: str) -> str:
+        events.append(command)
+        return replies.pop(0)
+
+    monkeypatch.setattr(config_apply.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(config_apply.time, "sleep", clock.sleep)
+    monkeypatch.setattr(
+        ban_list_service, "send_runtime_command", fake_send_runtime_command
+    )
+    monkeypatch.setattr(
+        config_apply.socket,
+        "socket",
+        lambda *_a, **_k: _FakeMasterSocket(events),
+    )
+
+    result = config_apply._reload_haproxy()
+
+    assert result.ok is True
+    assert events == ["show peers", "show peers", "show peers", "reload"]
+    assert clock.sleeps == 2
+
+
+def test_reload_proceeds_when_the_runtime_api_cannot_be_reached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreadable state must never block a reload."""
+    from app.services import ban_list_service, config_apply
+
+    events: list[str] = []
+    clock = _FakeClock()
+
+    def unreachable(_command: str) -> str:
+        raise ban_list_service.RuntimeSocketUnreachableError("no such socket")
+
+    monkeypatch.setattr(config_apply.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(config_apply.time, "sleep", clock.sleep)
+    monkeypatch.setattr(ban_list_service, "send_runtime_command", unreachable)
+    monkeypatch.setattr(
+        config_apply.socket, "socket", lambda *_a, **_k: _FakeMasterSocket(events)
+    )
+
+    result = config_apply._reload_haproxy()
+
+    assert result.ok is True
+    assert events == ["reload"]
+    assert clock.sleeps == 0
+
+
+def test_reload_gives_up_waiting_and_logs_when_the_handover_never_comes(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.services import ban_list_service, config_apply
+
+    events: list[str] = []
+    clock = _FakeClock()
+
+    monkeypatch.setattr(config_apply.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(config_apply.time, "sleep", clock.sleep)
+    monkeypatch.setattr(
+        ban_list_service, "send_runtime_command", lambda _c: _PEERS_WAITING
+    )
+    monkeypatch.setattr(
+        config_apply.socket, "socket", lambda *_a, **_k: _FakeMasterSocket(events)
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.services.config_apply"):
+        result = config_apply._reload_haproxy()
+
+    assert result.ok is True
+    assert events[-1] == "reload"
+    # Bounded: HAProxy's own window is 5s, so the wait cannot run away.
+    assert clock.now <= 7.0
+    assert any("handover still pending" in record.message for record in caplog.records)
+
+
+def test_reload_does_not_wait_without_a_peers_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import ban_list_service, config_apply
+
+    events: list[str] = []
+    clock = _FakeClock()
+
+    monkeypatch.setattr(config_apply.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(config_apply.time, "sleep", clock.sleep)
+
+    def no_peers_section(command: str) -> str:
+        events.append(command)
+        return ""
+
+    monkeypatch.setattr(ban_list_service, "send_runtime_command", no_peers_section)
+    monkeypatch.setattr(
+        config_apply.socket, "socket", lambda *_a, **_k: _FakeMasterSocket(events)
+    )
+
+    assert config_apply._reload_haproxy().ok is True
+    assert events == ["show peers", "reload"]
+    assert clock.sleeps == 0

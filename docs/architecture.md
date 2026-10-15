@@ -275,17 +275,37 @@ is still running while the new one starts, so the new worker pulls the table
 contents from it and bans and rate counters carry over instead of resetting.
 HAProxy silently discards a peers section that does not name the local peer,
 and a stick-table whose peers section was discarded stops synchronizing without
-reporting an error, which is why the two have to be emitted together. The
-outgoing worker is the one that serves the synchronization, so the *first*
-reload that introduces the peers section — the Apply that follows an upgrade
-from a version that did not generate it — still starts empty; every reload
-after that carries the tables over.
+reporting an error, which is why the two have to be emitted together.
 
-A **restarted or recreated HAProxy container still starts empty**: there is no
-predecessor left to synchronize from. `GET /security/banned-ips` reads the
-tables back through the HAProxy admin Runtime API rather than the database, so
-the dashboard's banned-IP count is the one overview metric that can fail
-independently of PostgreSQL.
+The handover only starts once the *outgoing* worker's own resync is over
+(`__process_stopping_peer_sync` in HAProxy's `peers.c`), and a worker that
+received nothing from its predecessor — the first one that generates the peers
+section after an upgrade from a version without it — only reaches that state
+when its resync window expires, five seconds later. A reload that arrives
+before then is not served at all: the outgoing worker never connects, nothing
+is logged, and the new worker starts with empty tables. `config_apply` therefore
+waits for that state (`_wait_for_stick_table_handover`, bounded by HAProxy's
+5-second window) before asking the master to reload, instead of gambling on the
+timing of "Apply configuration"; a worker that did carry the tables over is
+ready immediately, so the wait costs nothing in the normal case. Measured on
+`haproxy:3.0.29-alpine` with a locally built backend image: on a stack whose
+running worker had never received the tables — the state the first Apply after
+an upgrade leaves behind — applies issued within five seconds of each other
+lost the ban in 21 of 21 reloads before the wait and kept it in 21 of 21 after
+it, the first of those reloads waiting about four seconds for the outgoing
+worker; a fresh stack kept it in 20 of 20 reloads.
+
+Two cases still start empty, and do not depend on this timing:
+
+- the **first** Apply after upgrading from a version that did not generate the
+  peers section: the outgoing worker has no such section at all and cannot
+  teach anything. Every Apply after that one carries the tables over;
+- a **restarted or recreated** HAProxy container: there is no predecessor left
+  to synchronize from.
+
+`GET /security/banned-ips` reads the tables back through the HAProxy admin
+Runtime API rather than the database, so the dashboard's banned-IP count is the
+one overview metric that can fail independently of PostgreSQL.
 
 ## Authentication & Rate Limiting
 

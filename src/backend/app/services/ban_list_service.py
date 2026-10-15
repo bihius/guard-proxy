@@ -94,7 +94,7 @@ class BanTableEntry:
     expires_in_seconds: int
 
 
-def _send_runtime_command(command: str) -> str:
+def send_runtime_command(command: str) -> str:
     """Send one Runtime API command over the admin stats socket and return output.
 
     Raises `RuntimeSocketUnreachableError` when the socket itself cannot be
@@ -176,7 +176,7 @@ class BanListService:
         failures = 0
         for vhost, table_name, ban_threshold in tables:
             try:
-                raw = _send_runtime_command(f"show table {table_name}")
+                raw = send_runtime_command(f"show table {table_name}")
                 entries = _parse_show_table(raw)
             except RuntimeTableNotProvisionedError:
                 logger.info(
@@ -219,7 +219,7 @@ class BanListService:
         `cleared` counts tables where HAProxy confirmed the `clear table`
         command (including a no-op when the key was already absent) — not
         merely tables where the socket write succeeded, since
-        `_send_runtime_command` raises on an HAProxy-reported error too.
+        `send_runtime_command` raises on an HAProxy-reported error too.
         Tolerates individual table failures (one dead table must not block
         clearing the others) but raises `RuntimeApiError` if every attempted
         table failed for a genuine reason, so a fully unreachable Runtime
@@ -246,7 +246,7 @@ class BanListService:
         failures = 0
         for _vhost, table_name, _threshold in tables:
             try:
-                _send_runtime_command(f"clear table {table_name} key {key}")
+                send_runtime_command(f"clear table {table_name} key {key}")
                 cleared += 1
             except RuntimeTableNotProvisionedError:
                 logger.info(

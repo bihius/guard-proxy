@@ -56,7 +56,7 @@ def test_list_banned_ips_returns_entries_for_admin(
 
     monkeypatch.setattr(
         ban_list_service,
-        "_send_runtime_command",
+        "send_runtime_command",
         lambda _cmd: "0x1: key=203.0.113.5 use=0 exp=60000 gpc0=99\n",
     )
 
@@ -98,7 +98,7 @@ def test_list_banned_ips_returns_502_when_runtime_api_unreachable(
     def fake_send(_command: str) -> str:
         raise ban_list_service.RuntimeApiError("connection refused")
 
-    monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+    monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
     response = client.get("/security/banned-ips", headers=admin_token)
 
@@ -119,7 +119,7 @@ def test_list_banned_ips_returns_empty_when_table_not_yet_provisioned(
     def fake_send(_command: str) -> str:
         raise ban_list_service.RuntimeTableNotProvisionedError("No such table")
 
-    monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+    monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
     response = client.get("/security/banned-ips", headers=admin_token)
 
@@ -150,7 +150,7 @@ def test_unban_clears_entry_for_admin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_banned_vhost(db)
-    monkeypatch.setattr(ban_list_service, "_send_runtime_command", lambda _cmd: "")
+    monkeypatch.setattr(ban_list_service, "send_runtime_command", lambda _cmd: "")
 
     response = client.delete("/security/banned-ips/203.0.113.5", headers=admin_token)
 
@@ -177,7 +177,7 @@ def test_unban_returns_502_when_runtime_api_unreachable(
     def fake_send(_command: str) -> str:
         raise ban_list_service.RuntimeApiError("connection refused")
 
-    monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+    monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
     response = client.delete("/security/banned-ips/203.0.113.5", headers=admin_token)
 
@@ -195,7 +195,7 @@ def test_unban_returns_200_with_cleared_zero_when_table_not_yet_provisioned(
     def fake_send(_command: str) -> str:
         raise ban_list_service.RuntimeTableNotProvisionedError("No such table")
 
-    monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+    monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
     response = client.delete("/security/banned-ips/203.0.113.5", headers=admin_token)
 
