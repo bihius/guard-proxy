@@ -33,9 +33,11 @@ def renew_certificates() -> None:
                 logger.info(f"Renewing certificate for {vhost.domain}")
                 certbot = CertbotService()
                 try:
-                    # In a real background job, we'd find the admin email
-                    # or use the generic one.
-                    email = f"admin@{vhost.domain}"
+                    # The renewal re-registers the ACME account, so it must
+                    # reuse the contact the certificate was issued with —
+                    # Let's Encrypt rejects a mismatched or reserved address.
+                    # NULL means the certificate predates that snapshot.
+                    email = vhost.acme_contact_email or f"admin@{vhost.domain}"
                     cert, key = certbot.provision_cert(vhost.domain, email)
                     vhost.ssl_cert = cert
                     vhost.ssl_key = key

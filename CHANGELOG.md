@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Python distributions use the [PEP 440](https://peps.python.org/pep-0440/)
 spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
+## [Unreleased]
+
+### Fixed
+
+- Certificate renewal registers its ACME account with the same contact the
+  certificate was issued with. The renewal job used to invent
+  `admin@<domain>` for every vhost, which Let's Encrypt refuses for reserved
+  and undeliverable domains, so a certificate could be issued successfully and
+  then fail on every renewal. The issuing contact is now snapshotted on the
+  vhost (`vhosts.acme_contact_email`, new column); certificates issued before
+  this release keep a NULL contact and renew with the previous
+  `admin@<domain>` fallback. Documented in `docs/architecture.md`.
+
 ## [0.1.0-beta.10] - 2026-10-15
 
 ### Fixed

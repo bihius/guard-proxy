@@ -11,6 +11,7 @@ from app.models.policy import Policy
 from app.models.policy_binding import PolicyBinding
 from app.models.user import User
 from app.models.vhost import VHost
+from app.services import vhost_service as vhost_service_module
 from app.services.vhost_service import (
     PolicyBindingAlreadyExistsError,
     PolicyBindingDefaultManagedByVHostError,
@@ -670,3 +671,102 @@ def test_delete_policy_binding_missing_raises_not_found(
 
     with pytest.raises(PolicyBindingNotFoundError):
         service.delete_policy_binding(vhost.id, 99999)
+
+
+class _FakeCertbot:
+    """Stands in for CertbotService; records which contact it registered with."""
+
+    calls: list[tuple[str, str]] = []
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def provision_cert(self, domain: str, email: str) -> tuple[str, str]:
+        _FakeCertbot.calls.append((domain, email))
+        return "cert-pem", "key-pem"
+
+
+def _fake_letsencrypt(monkeypatch: pytest.MonkeyPatch) -> None:
+    _FakeCertbot.calls = []
+    monkeypatch.setattr(vhost_service_module, "CertbotService", _FakeCertbot)
+    monkeypatch.setattr(
+        VHostService, "_parse_cert_expiration", staticmethod(lambda cert: None)
+    )
+
+
+def test_create_vhost_with_letsencrypt_snapshots_the_issuing_admin_email(
+    db: Session,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The renewal job cannot know which admin issued the cert, so store it."""
+    _fake_letsencrypt(monkeypatch)
+    service = VHostService(db)
+
+    vhost = service.create_vhost(
+        domain="lease.example.com",
+        backend_url="http://localhost:3000",
+        description=None,
+        ssl_enabled=True,
+        ssl_provider="letsencrypt",
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+        user_email=admin_user.email,
+    )
+
+    assert vhost.acme_contact_email == "admin@example.com"
+    assert _FakeCertbot.calls == [("lease.example.com", "admin@example.com")]
+
+
+def test_create_vhost_with_letsencrypt_without_a_user_email_uses_the_fallback(
+    db: Session,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The snapshot records the address certbot actually registered with."""
+    _fake_letsencrypt(monkeypatch)
+    service = VHostService(db)
+
+    vhost = service.create_vhost(
+        domain="nouser.example.com",
+        backend_url="http://localhost:3000",
+        description=None,
+        ssl_enabled=True,
+        ssl_provider="letsencrypt",
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+        user_email=None,
+    )
+
+    assert vhost.acme_contact_email == "admin@nouser.example.com"
+    assert _FakeCertbot.calls == [("nouser.example.com", "admin@nouser.example.com")]
+
+
+def test_update_vhost_reissuing_letsencrypt_updates_the_stored_contact(
+    db: Session,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fake_letsencrypt(monkeypatch)
+    service = VHostService(db)
+    vhost = service.create_vhost(
+        domain="renew.example.com",
+        backend_url="http://localhost:3000",
+        description=None,
+        ssl_enabled=False,
+        is_active=True,
+        policy_id=None,
+        created_by=admin_user.id,
+    )
+    assert vhost.acme_contact_email is None
+
+    updated = service.update_vhost(
+        vhost.id,
+        {"ssl_provider": "letsencrypt"},
+        user_email="ops@example.com",
+    )
+
+    assert updated.acme_contact_email == "ops@example.com"
+    assert _FakeCertbot.calls == [("renew.example.com", "ops@example.com")]
