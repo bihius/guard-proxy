@@ -19,7 +19,7 @@ from app.services.ban_list_service import (
     RuntimeSocketUnreachableError,
     RuntimeTableNotProvisionedError,
     _parse_show_table,
-    _send_runtime_command,
+    send_runtime_command,
 )
 
 
@@ -87,7 +87,7 @@ class TestParseShowTable:
 
 class TestRuntimeApiErrorRegex:
     """The Runtime API reports failures as plain text in the command's own
-    response rather than as a socket error, so `_send_runtime_command` must
+    response rather than as a socket error, so `send_runtime_command` must
     classify replies itself — a real `show table`/`clear table` data line
     or header must never false-positive as an error.
     """
@@ -130,7 +130,7 @@ class TestTableNotFoundRegex:
 class _FakeSocket:
     """In-memory stand-in for `socket.socket(AF_UNIX, SOCK_STREAM)`.
 
-    `_send_runtime_command` only uses `connect`/`settimeout`/`sendall`/
+    `send_runtime_command` only uses `connect`/`settimeout`/`sendall`/
     `shutdown`/`recv`/context-manager exit — faking those avoids spinning up
     a real OS-level Unix socket (and the thread-timing races that come with
     one) just to test response classification.
@@ -175,7 +175,7 @@ class TestSendRuntimeCommand:
         monkeypatch.setattr(socket, "socket", fake_socket)
 
         with pytest.raises(RuntimeSocketUnreachableError):
-            _send_runtime_command("show table st_ban_vhost_1")
+            send_runtime_command("show table st_ban_vhost_1")
 
     def test_raises_table_not_provisioned_for_no_such_table(
         self, monkeypatch: pytest.MonkeyPatch
@@ -185,7 +185,7 @@ class TestSendRuntimeCommand:
         )
 
         with pytest.raises(RuntimeTableNotProvisionedError):
-            _send_runtime_command("show table st_ban_vhost_1")
+            send_runtime_command("show table st_ban_vhost_1")
 
     def test_raises_generic_runtime_api_error_for_other_errors(
         self, monkeypatch: pytest.MonkeyPatch
@@ -195,7 +195,7 @@ class TestSendRuntimeCommand:
         )
 
         with pytest.raises(RuntimeApiError) as excinfo:
-            _send_runtime_command("show table st_ban_vhost_1")
+            send_runtime_command("show table st_ban_vhost_1")
         assert not isinstance(excinfo.value, RuntimeTableNotProvisionedError)
         assert not isinstance(excinfo.value, RuntimeSocketUnreachableError)
 
@@ -206,7 +206,7 @@ class TestSendRuntimeCommand:
             lambda *a, **k: _FakeSocket(b"0x1: key=192.0.2.1 use=0 exp=1000 gpc0=1\n"),
         )
 
-        output = _send_runtime_command("show table st_ban_vhost_1")
+        output = send_runtime_command("show table st_ban_vhost_1")
 
         assert "192.0.2.1" in output
 
@@ -249,7 +249,7 @@ class TestListBanned:
             sent_commands.append(command)
             return "0x1: key=203.0.113.5 use=0 exp=60000 gpc0=99\n"
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         service = BanListService(db)
         results = service.list_banned()
@@ -274,7 +274,7 @@ class TestListBanned:
 
         monkeypatch.setattr(
             ban_list_service,
-            "_send_runtime_command",
+            "send_runtime_command",
             lambda _cmd: "0x1: key=192.0.2.1 use=0 exp=1000 gpc0=3\n",
         )
 
@@ -297,7 +297,7 @@ class TestListBanned:
                 raise RuntimeApiError("connection refused")
             return "0x1: key=192.0.2.1 use=0 exp=1000 gpc0=1\n"
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         results = BanListService(db).list_banned()
 
@@ -318,7 +318,7 @@ class TestListBanned:
         def fake_send(_command: str) -> str:
             raise RuntimeApiError("connection refused")
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         with pytest.raises(RuntimeApiError):
             BanListService(db).list_banned()
@@ -338,7 +338,7 @@ class TestListBanned:
                 raise RuntimeTableNotProvisionedError("No such table")
             return "0x1: key=192.0.2.1 use=0 exp=1000 gpc0=1\n"
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         results = BanListService(db).list_banned()
 
@@ -356,7 +356,7 @@ class TestListBanned:
         def fake_send(_command: str) -> str:
             raise RuntimeTableNotProvisionedError("No such table")
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         assert BanListService(db).list_banned() == []
 
@@ -378,7 +378,7 @@ class TestUnban:
             sent_commands.append(command)
             return ""
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         result = BanListService(db).unban("203.0.113.9")
 
@@ -392,7 +392,7 @@ class TestUnban:
     def test_rejects_invalid_ip_without_calling_socket(self, db: Session) -> None:
         send = Mock()
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(ban_list_service, "_send_runtime_command", send)
+            mp.setattr(ban_list_service, "send_runtime_command", send)
             with pytest.raises(InvalidIpError):
                 BanListService(db).unban("not-an-ip")
         send.assert_not_called()
@@ -416,7 +416,7 @@ class TestUnban:
 
         send = Mock()
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(ban_list_service, "_send_runtime_command", send)
+            mp.setattr(ban_list_service, "send_runtime_command", send)
             with pytest.raises(InvalidIpError):
                 BanListService(db).unban(ip)
         send.assert_not_called()
@@ -431,7 +431,7 @@ class TestUnban:
 
         sent_commands: list[str] = []
         monkeypatch.setattr(
-            ban_list_service, "_send_runtime_command", sent_commands.append
+            ban_list_service, "send_runtime_command", sent_commands.append
         )
 
         result = BanListService(db).unban("2001:0DB8:0000::0001")
@@ -456,7 +456,7 @@ class TestUnban:
                 raise RuntimeApiError("connection refused")
             return ""
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         result = BanListService(db).unban("203.0.113.9")
 
@@ -473,7 +473,7 @@ class TestUnban:
         def fake_send(_command: str) -> str:
             raise RuntimeApiError("connection refused")
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         with pytest.raises(RuntimeApiError):
             BanListService(db).unban("203.0.113.9")
@@ -498,7 +498,7 @@ class TestUnban:
                 raise RuntimeTableNotProvisionedError("No such table")
             return ""
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         result = BanListService(db).unban("203.0.113.9")
 
@@ -515,7 +515,7 @@ class TestUnban:
         def fake_send(_command: str) -> str:
             raise RuntimeTableNotProvisionedError("No such table")
 
-        monkeypatch.setattr(ban_list_service, "_send_runtime_command", fake_send)
+        monkeypatch.setattr(ban_list_service, "send_runtime_command", fake_send)
 
         result = BanListService(db).unban("203.0.113.9")
 

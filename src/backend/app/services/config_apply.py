@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from app.config import settings
-from app.services import coraza_probe
+from app.services import ban_list_service, coraza_probe
 from app.services.config_generator import CorazaAppConfig, GeneratedConfig
 from app.services.config_renderer import render_coraza_spoa_yaml
 
@@ -630,7 +630,80 @@ def _validate_haproxy(config_path: Path) -> CommandResult:
     return CommandResult(ok=result.returncode == 0, output=output)
 
 
+# HAProxy starts the stick-table handover only when the outgoing worker's own
+# peers resync has finished (`__process_stopping_peer_sync`, peers.c). A worker
+# that received nothing from its predecessor — the first one that generates a
+# peers section after an upgrade, or one whose predecessor could not teach —
+# reaches that state only when its resync window expires, `PEER_RESYNC_TIMEOUT`,
+# 5s in HAProxy 3.0. A reload that arrives earlier loses every ban and rate
+# counter silently: the outgoing worker never even connects, so no log line
+# reports it. Wait for the handover to become possible instead of racing it.
+STICK_TABLE_HANDOVER_TIMEOUT_SECONDS = 6.0
+STICK_TABLE_HANDOVER_POLL_SECONDS = 0.1
+# `show peers` section line. Only the section line carries `disabled=`, which is
+# what distinguishes it from the per-peer and per-table lines that also print a
+# `flags` value, e.g.
+#   0x7f..: [21/Nov/2026:21:25:09] id=gp_stick_tables disabled=0
+#           flags=0x0 resync_timeout=3s task_calls=1
+_PEERS_SECTION_RE = re.compile(r"\bdisabled=0\s+flags=0x([0-9a-fA-F]+)\b")
+# PEERS_F_RESYNC_LOCAL_FINISHED | PEERS_F_RESYNC_REMOTE_FINISHED.
+_PEERS_RESYNC_FINISHED = 0x3
+
+
+def peers_handover_pending(show_peers_output: str) -> bool:
+    """True when a peers section has not finished its resync yet.
+
+    Output without a section line — no `peers` section in the running config,
+    or a `show peers` this parser does not recognise — reports "nothing to hand
+    over" so an unreadable state never blocks a reload.
+    """
+    for line in show_peers_output.splitlines():
+        match = _PEERS_SECTION_RE.search(line)
+        if (
+            match
+            and int(match.group(1), 16) & _PEERS_RESYNC_FINISHED
+            != _PEERS_RESYNC_FINISHED
+        ):
+            return True
+    return False
+
+
+def _wait_for_stick_table_handover() -> None:
+    """Give the running worker time to become able to teach its stick-tables.
+
+    Called before every reload. Bounded on purpose: HAProxy's own resync window
+    is 5s, and waiting forever would be worse than reloading and dropping the
+    tables.
+    """
+    started = time.monotonic()
+    deadline = started + STICK_TABLE_HANDOVER_TIMEOUT_SECONDS
+    while True:
+        try:
+            output = ban_list_service.send_runtime_command("show peers")
+        except ban_list_service.RuntimeApiError:
+            # No Runtime API to observe (HAProxy down, socket missing): waiting
+            # would not make the state readable, and the reload below reports it.
+            return
+        if not peers_handover_pending(output):
+            waited = time.monotonic() - started
+            if waited > STICK_TABLE_HANDOVER_POLL_SECONDS:
+                logger.info(
+                    "stick-table handover ready before reload waited=%.1fs",
+                    waited,
+                )
+            return
+        if time.monotonic() >= deadline:
+            logger.warning(
+                "stick-table handover still pending after %.0fs; reloading anyway, "
+                "bans and rate counters may be dropped",
+                STICK_TABLE_HANDOVER_TIMEOUT_SECONDS,
+            )
+            return
+        time.sleep(STICK_TABLE_HANDOVER_POLL_SECONDS)
+
+
 def _reload_haproxy() -> CommandResult:
+    _wait_for_stick_table_handover()
     socket_path = settings.haproxy_master_socket_path
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:

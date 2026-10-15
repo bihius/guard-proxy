@@ -132,13 +132,15 @@ HTTPS keep working. Two things are stored outside the volumes:
 
 - **Bans and rate-limit counters.** These are HAProxy stick-tables, held in
   the HAProxy process's memory and never written to disk. The generated config
-  wires them to a `peers` section, so a worker reloaded by **Apply
-  configuration** pulls them from the worker it replaces and a ban is not
-  lifted just because an admin changed something. A tag-only upgrade leaves
-  the pinned `haproxy` container running, so they survive that too — but a
-  restarted or recreated HAProxy container starts empty, and nothing can
-  recover them. See the DDoS Protection & Auto-Ban section of
-  `docs/architecture.md`.
+  wires them to a `peers` section, and **Apply configuration** waits until the
+  worker it is about to replace is able to hand them over before reloading, so
+  a ban is not lifted just because an admin changed something. A tag-only
+  upgrade leaves the pinned `haproxy` container running, so they survive that
+  too, but the **first** Apply after such an upgrade still clears them: the
+  worker that is running at that point predates the `peers` section and cannot
+  teach it anything. Every later Apply carries them over. A restarted or
+  recreated HAProxy container starts empty, and nothing can recover that. See
+  the DDoS Protection & Auto-Ban section of `docs/architecture.md`.
 - **Certbot's ACME account key and renewal configuration.** The built-in
   certificate flow runs certbot inside the `backend` container with its
   configuration under `/tmp`, which is not a volume, so the account is
