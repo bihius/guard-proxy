@@ -288,7 +288,7 @@ waits for that state (`_wait_for_stick_table_handover`, bounded by HAProxy's
 5-second window) before asking the master to reload, instead of gambling on the
 timing of "Apply configuration"; a worker that did carry the tables over is
 ready immediately, so the wait costs nothing in the normal case. Measured on
-`haproxy:3.0.29-alpine` with a backend built from this branch: on a stack whose
+`haproxy:3.0.29-alpine` with a locally built backend image: on a stack whose
 running worker had never received the tables — the state the first Apply after
 an upgrade leaves behind — applies issued within five seconds of each other
 lost the ban in 21 of 21 reloads before the wait and kept it in 21 of 21 after
