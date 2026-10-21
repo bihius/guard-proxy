@@ -1,10 +1,7 @@
 import logging
 import os
-import tomllib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _package_version
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -47,35 +44,11 @@ from app.routers import (
 )
 from app.services.config_apply import seed_runtime_config
 from app.services.config_generator import generate
+from app.services.config_version import check_seed_config
 from app.services.scheduler import start_scheduler, stop_scheduler
+from app.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_app_version() -> str:
-    """Return the app version, reading from a single source of truth.
-
-    Prefers installed package metadata (present in dev venvs where the
-    project is installed editable). The production Docker image installs
-    only dependencies as a distinct layer and copies app source on top
-    without installing the project itself, so no dist-info exists there —
-    fall back to parsing `pyproject.toml` directly in that case.
-    """
-    try:
-        return _package_version("guard-proxy-backend")
-    except PackageNotFoundError:
-        pyproject_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
-        try:
-            with pyproject_path.open("rb") as f:
-                version = tomllib.load(f)["project"]["version"]
-            if not isinstance(version, str):
-                raise KeyError("project.version is not a string")
-            return version
-        except (OSError, KeyError):  # pragma: no cover - defensive fallback
-            return "0.0.0+unknown"
-
-
-APP_VERSION = _resolve_app_version()
 
 
 class _HealthcheckAccessFilter(logging.Filter):
@@ -105,6 +78,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "sent over plain HTTP. Enable it once the admin UI is served over "
             "HTTPS."
         )
+    seed_config = check_seed_config()
+    if not seed_config.ok:
+        # Log once at startup; the probes re-read the file, so replacing it
+        # clears the degraded state without a restart.
+        logger.error("Refusing to report healthy: %s", seed_config.detail)
     _seed_runtime_config()
     start_scheduler()
     yield
@@ -183,6 +161,7 @@ def _reconcile_runtime_operation_checksum(
 
 
 
+
 app = FastAPI(
     title=settings.app_name,
     version=APP_VERSION,
@@ -219,10 +198,22 @@ app.include_router(vhosts.router)
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
-    """Liveness probe — always returns 200 if the process is running."""
+    """Liveness probe — always returns 200 if the process is running.
+
+    Reports `degraded` when the bind-mounted seed config does not match this
+    image (issue #312): the process is alive, but HAProxy may be enforcing a
+    different policy set than the one this release expects.
+    """
+    seed_config = check_seed_config()
+    if seed_config.ok:
+        return {
+            "status": "healthy",
+            "version": APP_VERSION,
+        }
     return {
-        "status": "healthy",
+        "status": "degraded",
         "version": APP_VERSION,
+        "detail": seed_config.detail or "",
     }
 
 
@@ -256,6 +247,21 @@ def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
         checks["runtime_config"] = {
             "status": "error",
             "detail": f"{config_root} is not a writable directory",
+        }
+        all_ok = False
+
+    # Check 3: the bind-mounted seed config matches this image (issue #312).
+    # The release kit's backend healthcheck calls this endpoint, so a half-done
+    # upgrade leaves the stack unhealthy instead of silently enforcing the
+    # wrong Coraza application.
+    seed_config = check_seed_config()
+    if seed_config.ok:
+        checks["seed_config"] = {"status": "ok"}
+    else:
+        logger.error("Readiness check failed: %s", seed_config.detail)
+        checks["seed_config"] = {
+            "status": "error",
+            "detail": seed_config.detail or "seed config version mismatch",
         }
         all_ok = False
 

@@ -119,9 +119,27 @@ it — the static `haproxy.cfg` seed is replaced at that point.
    breaking-change callouts.
 2. Back up the `pgdata` volume (`docker compose exec postgres pg_dump ...`
    or a volume snapshot) before upgrading, out of caution during beta.
-3. Update `GUARD_PROXY_IMAGE_TAG` in `.env` to the new version.
+3. Update `GUARD_PROXY_IMAGE_TAG` in `.env` to the new version **and** replace
+   the `haproxy/` directory (`haproxy.cfg` and `coraza.cfg`) with the one from
+   that release. The tag and the files are one unit: the config files are
+   bind-mounted into the containers, not shipped in the images.
 4. `docker compose pull && docker compose up -d`. The backend runs
    `alembic upgrade head` automatically on startup.
+
+### A tag-only upgrade is refused
+
+The shipped `haproxy/haproxy.cfg` and `haproxy/coraza.cfg` carry a
+`# guard-proxy-config-version: N` stamp, and the backend knows the version its
+image expects. If you bump the tag but keep the old files, `GET /health`
+reports `degraded`, `GET /ready` — which the backend container's healthcheck
+calls — fails, and `POST /config/apply` answers `409`; each names the stale
+file. Replace the `haproxy/` files and restart the backend.
+
+The check exists because the failure it catches is otherwise invisible: an old
+`coraza.cfg` tells HAProxy to inspect every request with the `default` Coraza
+application instead of the vhost's `policy_<id>`. Traffic is still inspected
+and attacks are still blocked, so nothing looks broken — the vhost's own
+paranoia level, thresholds and rule overrides are simply not applied.
 
 ### What an upgrade does not carry over
 

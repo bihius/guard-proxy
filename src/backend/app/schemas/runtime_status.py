@@ -43,6 +43,21 @@ class ActiveRuntimeConfig(BaseModel):
     warning: str | None = None
 
 
+class VersionAgreement(BaseModel):
+    """Versions the stack pieces must agree on (issue #316).
+
+    `configured_image_tag` is the tag the operator wrote into `.env`; it is
+    None when the backend is not run from the release kit. `warning` is set
+    when that tag and this backend's own version disagree, which means the
+    stack mixes images from different releases.
+    """
+
+    app_version: str
+    configured_image_tag: str | None
+    crs_version: str
+    warning: str | None = None
+
+
 class RuntimeOperationSnapshot(BaseModel):
     """Latest persisted status for a specific runtime operation type."""
 
@@ -62,5 +77,6 @@ class RuntimeStatusResponse(BaseModel):
     deployment_state: DeploymentState
     generated_config: RuntimeGeneratedConfigStatus
     active_config: ActiveRuntimeConfig
+    version_agreement: VersionAgreement
     latest_validation: RuntimeOperationSnapshot | None = None
     latest_reload: RuntimeOperationSnapshot | None = None

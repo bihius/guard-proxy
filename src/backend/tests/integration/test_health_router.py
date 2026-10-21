@@ -157,3 +157,64 @@ def test_ready_body_includes_both_checks_on_full_failure(
     data = response.json()
     assert data["checks"]["database"]["status"] == "error"
     assert data["checks"]["runtime_config"]["status"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# Seed config version stamp (issue #312)
+# ---------------------------------------------------------------------------
+
+
+def test_health_reports_degraded_for_a_stale_seed_config(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale = tmp_path / "coraza.cfg"
+    stale.write_text("[coraza]\nspoe-message coraza-req\n    args app=str(default)\n")
+    monkeypatch.setattr(main_module.settings, "seed_coraza_config_path", str(stale))
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert str(stale) in data["detail"]
+
+
+def test_health_is_healthy_for_the_current_seed_config(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_config = (
+        Path(main_module.__file__).resolve().parents[3] / "configs/haproxy/coraza.cfg"
+    )
+    monkeypatch.setattr(
+        main_module.settings, "seed_coraza_config_path", str(repo_config)
+    )
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+
+
+def test_ready_returns_503_for_a_stale_seed_config(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The release kit healthcheck calls /ready, so a tag-only upgrade fails it."""
+    stale = tmp_path / "coraza.cfg"
+    stale.write_text("[coraza]\n")
+    monkeypatch.setattr(
+        main_module.settings, "runtime_generated_config_root", str(tmp_path)
+    )
+    monkeypatch.setattr(main_module.settings, "seed_coraza_config_path", str(stale))
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    data = response.json()
+    assert data["checks"]["seed_config"]["status"] == "error"
+    assert str(stale) in data["checks"]["seed_config"]["detail"]
+    assert data["checks"]["database"]["status"] == "ok"

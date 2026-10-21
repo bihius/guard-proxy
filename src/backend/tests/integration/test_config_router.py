@@ -288,3 +288,48 @@ def test_apply_validation_failure_records_failed_validation_only(
     assert body["deployment_state"] == "never_deployed"
     assert body["latest_validation"]["status"] == "failed"
     assert body["latest_reload"] is None
+
+
+# ---------------------------------------------------------------------------
+# Seed config version stamp (issue #312)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_refuses_when_the_seed_config_is_stale(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale = tmp_path / "coraza.cfg"
+    stale.write_text("[coraza]\nspoe-message coraza-req\n    args app=str(default)\n")
+    monkeypatch.setattr(settings, "seed_coraza_config_path", str(stale))
+
+    resp = client.post("/config/apply", headers=admin_token)
+
+    assert resp.status_code == 409
+    assert str(stale) in resp.json()["detail"]
+
+
+def test_apply_succeeds_with_the_current_seed_config(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings, "runtime_generated_config_root", str(tmp_path / "generated")
+    )
+    monkeypatch.setattr(
+        "app.services.config_apply._validate_haproxy", _mock_validate_ok
+    )
+    monkeypatch.setattr("app.services.config_apply._reload_haproxy", _mock_reload_ok)
+    monkeypatch.setattr(
+        settings,
+        "seed_coraza_config_path",
+        str(Path(__file__).resolve().parents[3] / "configs/haproxy/coraza.cfg"),
+    )
+
+    resp = client.post("/config/apply", headers=admin_token)
+
+    assert resp.status_code == 200

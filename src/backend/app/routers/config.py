@@ -1,5 +1,6 @@
 """Config apply router — triggers generate + apply pipeline."""
 
+import logging
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,6 +25,9 @@ from app.schemas.config import ConfigApplyResponse, CorazaAppOut, GeneratedConfi
 from app.services.config_apply import ApplyResult, ApplyStatus
 from app.services.config_apply import apply as _apply
 from app.services.config_generator import generate
+from app.services.config_version import check_seed_config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -92,6 +96,17 @@ def apply_config(
             detail="Another config apply is already in progress",
         )
     try:
+        seed_config = check_seed_config()
+        if not seed_config.ok:
+            # HAProxy reads the bind-mounted seed config at runtime, so a
+            # stale one applies the wrong Coraza application no matter what
+            # this release generates (issue #312).
+            logger.error("Refusing config apply: %s", seed_config.detail)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Refusing to apply: {seed_config.detail}",
+            )
+
         vhosts = db.query(VHost).options(selectinload(VHost.backends)).all()
         policies = db.query(Policy).all()
         rule_overrides = db.query(RuleOverride).all()

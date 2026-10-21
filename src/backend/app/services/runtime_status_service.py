@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
+from app.constants.versions import CRS_VERSION
 from app.models.custom_rule import CustomRule
 from app.models.policy import Policy
 from app.models.policy_binding import PolicyBinding
@@ -27,6 +28,7 @@ from app.schemas.runtime_status import (
     RuntimeGeneratedConfigStatus,
     RuntimeOperationSnapshot,
     RuntimeStatusResponse,
+    VersionAgreement,
 )
 from app.services.config_apply import (
     CORAZA_SPOA_YAML,
@@ -34,6 +36,12 @@ from app.services.config_apply import (
     calculate_checksum,
 )
 from app.services.config_generator import generate
+from app.services.config_version import (
+    check_seed_config,
+    configured_image_tag,
+    image_tag_warning,
+)
+from app.version import APP_VERSION
 
 _FRONTEND_CONTRACT_VERSION = "1"
 
@@ -68,6 +76,7 @@ def classify_active_release(
 def _active_config_warning(
     haproxy_source: HaproxyConfigSource,
     coraza_source: CorazaConfigSource,
+    seed_config_detail: str | None = None,
 ) -> str | None:
     parts: list[str] = []
     if haproxy_source == "seed":
@@ -85,6 +94,8 @@ def _active_config_warning(
             "request is inspected at paranoia level 1 in detect-only mode and "
             "per-policy settings are ignored."
         )
+    if seed_config_detail is not None:
+        parts.append(seed_config_detail)
     return " ".join(parts) or None
 
 
@@ -106,6 +117,12 @@ class RuntimeStatusService:
             deployment_state=deployment_state,
             generated_config=generated_config,
             active_config=self._build_active_config_status(),
+            version_agreement=VersionAgreement(
+                app_version=APP_VERSION,
+                configured_image_tag=configured_image_tag(),
+                crs_version=CRS_VERSION,
+                warning=image_tag_warning(),
+            ),
             latest_validation=latest_validation,
             latest_reload=latest_reload,
         )
@@ -120,12 +137,19 @@ class RuntimeStatusService:
         """
         current_link = Path(settings.runtime_generated_config_root) / "current"
         haproxy_source, coraza_source = classify_active_release(current_link)
-        degraded = haproxy_source != "generated" or coraza_source != "generated"
+        seed_config_detail = check_seed_config().detail
+        degraded = (
+            haproxy_source != "generated"
+            or coraza_source != "generated"
+            or seed_config_detail is not None
+        )
         return ActiveRuntimeConfig(
             haproxy_source=haproxy_source,
             coraza_source=coraza_source,
             degraded=degraded,
-            warning=_active_config_warning(haproxy_source, coraza_source),
+            warning=_active_config_warning(
+                haproxy_source, coraza_source, seed_config_detail
+            ),
         )
 
     def _build_generated_config_status(self) -> RuntimeGeneratedConfigStatus:

@@ -369,18 +369,27 @@ The backend exposes two probe endpoints, both unauthenticated:
 
 | Endpoint | Type | Returns | Checks |
 |----------|------|---------|--------|
-| `GET /health` | Liveness | 200 always | None — proves the process is alive |
-| `GET /ready` | Readiness | 200 / 503 | DB connectivity (`SELECT 1`), runtime config volume writable |
+| `GET /health` | Liveness | 200 always | Process aliveness, plus the seed config version stamp (issue #312) |
+| `GET /ready` | Readiness | 200 / 503 | DB connectivity (`SELECT 1`), runtime config volume writable, seed config version stamp |
 
 `/ready` returns a JSON body with per-check status so operators can tell which dependency is down:
 
 ```json
 // 200 — all clear
-{"status": "ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "ok"}}}
+{"status": "ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "ok"}, "seed_config": {"status": "ok"}}}
 
 // 503 — one or more dependencies unavailable
-{"status": "not ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "error", "detail": "/var/lib/guard-proxy/generated is not a writable directory"}}}
+{"status": "not ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "error", "detail": "/var/lib/guard-proxy/generated is not a writable directory"}, "seed_config": {"status": "ok"}}}
 ```
+
+Both probes also compare the bind-mounted seed `coraza.cfg` with the
+`guard-proxy-config-version` stamp this image expects. A missing or older
+stamp — the tag-only upgrade of issue #312, where HAProxy would silently
+inspect every request with the `default` Coraza application instead of the
+vhost's `policy_<id>` — makes `/health` report `degraded` and `/ready` fail
+with the stale file named. `POST /config/apply` refuses with `409` for the
+same reason. Outside a release kit the file is absent and the check is
+skipped.
 
 The Docker Compose `healthcheck` for the `backend` service targets `/ready`. Almost every other service in the stack (`frontend`, `haproxy`, `coraza`, `log-shipper`) depends on `backend` with `condition: service_healthy`, so `/ready` must pass before dependents start. This prevents dependents from launching while the database is still initialising or the config volume is unavailable.
 

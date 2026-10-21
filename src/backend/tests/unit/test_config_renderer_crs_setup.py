@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app.constants.versions import CRS_VERSION
 from app.models.policy import PolicyEnforcementMode
 from app.services.config_renderer import CrsPolicyRenderContext, render_crs_setup
 
@@ -75,3 +76,14 @@ def test_crs_setup_pl1_baseline_matches_reference_modulo_engine_line() -> None:
 
     rendered_without_engine = rendered.replace("SecRuleEngine On\n\n", "")
     assert _normalise_config(rendered_without_engine) == _normalise_config(reference)
+
+
+def test_crs_setup_takes_the_crs_version_from_the_constants() -> None:
+    """No CRS version literal in the template: the constant supplies it (#316)."""
+    rendered = render_crs_setup(_policy())
+
+    assert f"ver:'OWASP_CRS/{CRS_VERSION}'" in rendered
+    assert "setvar:tx.crs_setup_version=4250" in rendered
+    assert "{{" not in rendered
+    template = (REPO_ROOT / "src/backend/app/templates/crs-setup.conf.j2").read_text()
+    assert "OWASP_CRS/4." not in template
