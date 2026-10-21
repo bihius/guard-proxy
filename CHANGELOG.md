@@ -28,9 +28,10 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   `policy_<id>`. The shipped `haproxy/haproxy.cfg` and `haproxy/coraza.cfg`
   carry a `# guard-proxy-config-version: N` stamp; the backend compares the
   mounted `coraza.cfg` with the version its image expects at startup, in
-  `GET /health` (`degraded`), in `GET /ready` (fails, so the release kit's
-  backend healthcheck fails too) and in `POST /config/apply` (`409`). Every
-  report names the stale file. See `release/README.md`.
+  `GET /health` (`degraded`, naming the file), in `GET /ready` (fails, so the
+  release kit's backend healthcheck fails too; the path stays in the server
+  log like the other readiness checks) and in `POST /config/apply` (`409`,
+  naming the file). See `release/README.md`.
 - Certificate renewal registers its ACME account with the same contact the
   certificate was issued with. The renewal job used to invent
   `admin@<domain>` for every vhost, which Let's Encrypt refuses for reserved
@@ -39,6 +40,20 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   vhost (`vhosts.acme_contact_email`, new column); certificates issued before
   this release keep a NULL contact and renew with the previous
   `admin@<domain>` fallback. Documented in `docs/architecture.md`.
+
+### Changed
+
+- `CORS_ORIGINS` now rejects `*` at startup: the API always sends credentialed
+  requests, so a wildcard origin is invalid (and version-dependent in browsers).
+- `GET /ready` no longer returns the runtime config path in its error detail;
+  the path is logged server-side instead.
+
+### Documented
+
+- `GET /logs` is global to all authenticated users, including `viewer`, by
+  design; per-vhost log isolation is not implemented.
+- The rate-limit key trusts `X-Forwarded-For` only because HAProxy overwrites
+  it and the backend is not published on a host port.
 
 ## [0.1.0-beta.10] - 2026-10-15
 

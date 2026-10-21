@@ -244,9 +244,12 @@ def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
     if config_root.is_dir() and os.access(config_root, os.W_OK | os.X_OK):
         checks["runtime_config"] = {"status": "ok"}
     else:
+        logger.error(
+            "Readiness check failed: %s is not a writable directory", config_root
+        )
         checks["runtime_config"] = {
             "status": "error",
-            "detail": f"{config_root} is not a writable directory",
+            "detail": "runtime config directory is not writable",
         }
         all_ok = False
 
@@ -261,7 +264,7 @@ def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
         logger.error("Readiness check failed: %s", seed_config.detail)
         checks["seed_config"] = {
             "status": "error",
-            "detail": seed_config.detail or "seed config version mismatch",
+            "detail": "seed config version does not match this image",
         }
         all_ok = False
 

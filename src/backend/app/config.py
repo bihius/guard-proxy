@@ -257,6 +257,17 @@ class Settings(EnvFileSettings):
         return value
 
     @model_validator(mode="after")
+    def cors_origins_must_not_be_wildcard(self) -> "Settings":
+        if "*" in self.cors_origins:
+            # The API always sends credentials (HTTP-only refresh cookie), which
+            # browsers reject together with a "*" origin.
+            raise ValueError(
+                "CORS_ORIGINS must list explicit origins: '*' cannot be combined "
+                "with credentialed requests."
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_cookie_settings(self) -> "Settings":
         if (
             self.auth_refresh_cookie_samesite == "none"

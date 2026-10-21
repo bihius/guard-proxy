@@ -111,21 +111,28 @@ def test_ready_returns_503_when_db_fails(
 def test_ready_returns_503_when_config_dir_missing(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Missing config dir → 503 with runtime_config check reporting error."""
+    """Missing config dir → 503 with a generic detail; the path stays in logs."""
+    config_root = "/nonexistent/guard-proxy-test-path"
     monkeypatch.setattr(
         main_module.settings,
         "runtime_generated_config_root",
-        "/nonexistent/guard-proxy-test-path",
+        config_root,
     )
 
-    response = client.get("/ready")
+    with caplog.at_level("ERROR"):
+        response = client.get("/ready")
 
     assert response.status_code == 503
     data = response.json()
     assert data["status"] == "not ready"
     assert data["checks"]["runtime_config"]["status"] == "error"
-    assert "detail" in data["checks"]["runtime_config"]
+    assert data["checks"]["runtime_config"]["detail"] == (
+        "runtime config directory is not writable"
+    )
+    assert config_root not in response.text
+    assert config_root in caplog.text
     # DB check should still have passed
     assert data["checks"]["database"]["status"] == "ok"
 
@@ -202,8 +209,14 @@ def test_ready_returns_503_for_a_stale_seed_config(
     client: TestClient,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The release kit healthcheck calls /ready, so a tag-only upgrade fails it."""
+    """The release kit healthcheck calls /ready, so a tag-only upgrade fails it.
+
+    The body stays generic like the other readiness checks; the stale path is
+    logged server-side and stays available to admins through `/health`,
+    `/runtime/status` and the `POST /config/apply` error.
+    """
     stale = tmp_path / "coraza.cfg"
     stale.write_text("[coraza]\n")
     monkeypatch.setattr(
@@ -211,10 +224,15 @@ def test_ready_returns_503_for_a_stale_seed_config(
     )
     monkeypatch.setattr(main_module.settings, "seed_coraza_config_path", str(stale))
 
-    response = client.get("/ready")
+    with caplog.at_level("ERROR", logger="app.main"):
+        response = client.get("/ready")
 
     assert response.status_code == 503
     data = response.json()
     assert data["checks"]["seed_config"]["status"] == "error"
-    assert str(stale) in data["checks"]["seed_config"]["detail"]
+    assert data["checks"]["seed_config"]["detail"] == (
+        "seed config version does not match this image"
+    )
+    assert str(stale) not in response.text
     assert data["checks"]["database"]["status"] == "ok"
+    assert str(stale) in caplog.text

@@ -131,9 +131,14 @@ it — the static `haproxy.cfg` seed is replaced at that point.
 The shipped `haproxy/haproxy.cfg` and `haproxy/coraza.cfg` carry a
 `# guard-proxy-config-version: N` stamp, and the backend knows the version its
 image expects. If you bump the tag but keep the old files, `GET /health`
-reports `degraded`, `GET /ready` — which the backend container's healthcheck
-calls — fails, and `POST /config/apply` answers `409`; each names the stale
-file. Replace the `haproxy/` files and restart the backend.
+reports `degraded` naming the stale file, `GET /ready` — which the backend
+container's healthcheck calls — fails, and `POST /config/apply` answers `409`
+naming the file. The readiness body itself stays generic; the `backend`
+container log carries the path. A tag-only upgrade therefore leaves the stack
+reporting unhealthy and refusing to start: `frontend`, `haproxy`, `coraza` and
+`log-shipper` wait for `backend` to become healthy, so nothing runs until the
+`haproxy/` files from the same release are put in place and the backend is
+restarted.
 
 The check exists because the failure it catches is otherwise invisible: an old
 `coraza.cfg` tells HAProxy to inspect every request with the `default` Coraza

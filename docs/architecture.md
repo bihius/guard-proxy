@@ -151,7 +151,11 @@ events are attributed to the vhost's policy.
    nullable `vhost_id` and `policy_id` snapshots on the log row. `GET /logs`
    policy filtering uses the stored `logs.policy_id`, so results reflect the
    policy assignment captured at event-ingest time, not a later vhost reassignment.
-6. `GET /logs` exposes stored events for the admin panel log viewer.
+6. `GET /logs` exposes stored events for the admin panel log viewer. The view
+   is global: every authenticated user, `viewer` included, sees events from
+   all vhosts (including `raw_context`). This matches the read-only role
+   definition and is intentional for the single-tenant MVP — per-vhost log
+   isolation is not implemented.
 
 ### Log Retention
 `LOG_RETENTION_DAYS` (default `30`) controls how long `Log` rows are kept.
@@ -339,9 +343,15 @@ http-request set-header X-Forwarded-For %[src]
 
 This overwrites any client-supplied `X-Forwarded-For` value with the real source
 IP before the request reaches the backend, preventing header-spoofing bypass of
-the rate limit. The backend's key function reads the first (and only) XFF entry
-and falls back to the socket peer when the header is absent (direct connections in
-development and test).
+the rate limit. The backend's key function reads the right-most XFF entry (the
+address the nearest proxy observed) and falls back to the socket peer when the
+header is absent (direct connections in development and test). Client-supplied
+entries to the left of that one cannot shift the bucket.
+
+**Security dependency:** with HAProxy overwriting the header and the backend
+not published on a host port (it is only reachable on `gp_internal`), the XFF
+value can be trusted. If anything else can reach the backend directly, it can
+forge the header and bypass or poison the per-IP rate limit.
 
 ### Timing-attack mitigation
 
@@ -360,6 +370,7 @@ CORS is restricted to the methods and headers the panel actually uses:
   array); the built-in default lists only local dev origins
   (`localhost`/`127.0.0.1` on ports 3000, 5173, 5174) and must be overridden with the
   production panel origin(s) via environment configuration before deployment.
+  `*` is rejected at startup because credentials are always enabled.
 
 ## Deployment
 
@@ -379,17 +390,19 @@ The backend exposes two probe endpoints, both unauthenticated:
 {"status": "ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "ok"}, "seed_config": {"status": "ok"}}}
 
 // 503 — one or more dependencies unavailable
-{"status": "not ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "error", "detail": "/var/lib/guard-proxy/generated is not a writable directory"}, "seed_config": {"status": "ok"}}}
+{"status": "not ready", "checks": {"database": {"status": "ok"}, "runtime_config": {"status": "error", "detail": "runtime config directory is not writable"}, "seed_config": {"status": "ok"}}}
 ```
 
 Both probes also compare the bind-mounted seed `coraza.cfg` with the
 `guard-proxy-config-version` stamp this image expects. A missing or older
 stamp — the tag-only upgrade of issue #312, where HAProxy would silently
 inspect every request with the `default` Coraza application instead of the
-vhost's `policy_<id>` — makes `/health` report `degraded` and `/ready` fail
-with the stale file named. `POST /config/apply` refuses with `409` for the
-same reason. Outside a release kit the file is absent and the check is
-skipped.
+vhost's `policy_<id>` — makes `/health` report `degraded` with the stale file
+named and `/ready` fail. The readiness body stays generic like its other
+checks (the path is logged server-side); the file name remains available to an
+authenticated admin through `/health`, `GET /runtime/status` and the
+`POST /config/apply` error, which refuses with `409`. Outside a release kit the
+file is absent and the check is skipped.
 
 The Docker Compose `healthcheck` for the `backend` service targets `/ready`. Almost every other service in the stack (`frontend`, `haproxy`, `coraza`, `log-shipper`) depends on `backend` with `condition: service_healthy`, so `/ready` must pass before dependents start. This prevents dependents from launching while the database is still initialising or the config volume is unavailable.
 
