@@ -66,6 +66,13 @@ class VHost(Base):
     ssl_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     ssl_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Contact address of the ACME account that issued ssl_cert, snapshotted at
+    # issuance (a later renewal re-registers the account, so it cannot recover
+    # the issuing admin's address from anywhere else). NULL for certificates
+    # issued before this column existed; renewal then falls back to
+    # admin@<domain>.
+    acme_contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # Relationship to Policy — each vhost can have one WAF policy
     # nullable=True — vhost can operate without a policy (no WAF filtering)
     # ondelete="SET NULL" — if the policy is deleted, this field becomes NULL

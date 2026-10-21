@@ -31,6 +31,14 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   `GET /health` (`degraded`), in `GET /ready` (fails, so the release kit's
   backend healthcheck fails too) and in `POST /config/apply` (`409`). Every
   report names the stale file. See `release/README.md`.
+- Certificate renewal registers its ACME account with the same contact the
+  certificate was issued with. The renewal job used to invent
+  `admin@<domain>` for every vhost, which Let's Encrypt refuses for reserved
+  and undeliverable domains, so a certificate could be issued successfully and
+  then fail on every renewal. The issuing contact is now snapshotted on the
+  vhost (`vhosts.acme_contact_email`, new column); certificates issued before
+  this release keep a NULL contact and renew with the previous
+  `admin@<domain>` fallback. Documented in `docs/architecture.md`.
 
 ## [0.1.0-beta.10] - 2026-10-15
 
