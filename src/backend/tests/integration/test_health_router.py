@@ -111,21 +111,28 @@ def test_ready_returns_503_when_db_fails(
 def test_ready_returns_503_when_config_dir_missing(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Missing config dir → 503 with runtime_config check reporting error."""
+    """Missing config dir → 503 with a generic detail; the path stays in logs."""
+    config_root = "/nonexistent/guard-proxy-test-path"
     monkeypatch.setattr(
         main_module.settings,
         "runtime_generated_config_root",
-        "/nonexistent/guard-proxy-test-path",
+        config_root,
     )
 
-    response = client.get("/ready")
+    with caplog.at_level("ERROR"):
+        response = client.get("/ready")
 
     assert response.status_code == 503
     data = response.json()
     assert data["status"] == "not ready"
     assert data["checks"]["runtime_config"]["status"] == "error"
-    assert "detail" in data["checks"]["runtime_config"]
+    assert data["checks"]["runtime_config"]["detail"] == (
+        "runtime config directory is not writable"
+    )
+    assert config_root not in response.text
+    assert config_root in caplog.text
     # DB check should still have passed
     assert data["checks"]["database"]["status"] == "ok"
 

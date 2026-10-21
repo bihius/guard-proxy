@@ -151,7 +151,11 @@ events are attributed to the vhost's policy.
    nullable `vhost_id` and `policy_id` snapshots on the log row. `GET /logs`
    policy filtering uses the stored `logs.policy_id`, so results reflect the
    policy assignment captured at event-ingest time, not a later vhost reassignment.
-6. `GET /logs` exposes stored events for the admin panel log viewer.
+6. `GET /logs` exposes stored events for the admin panel log viewer. The view
+   is global: every authenticated user, `viewer` included, sees events from
+   all vhosts (including `raw_context`). This matches the read-only role
+   definition and is intentional for the single-tenant MVP — per-vhost log
+   isolation is not implemented.
 
 ### Log Retention
 `LOG_RETENTION_DAYS` (default `30`) controls how long `Log` rows are kept.
@@ -339,9 +343,15 @@ http-request set-header X-Forwarded-For %[src]
 
 This overwrites any client-supplied `X-Forwarded-For` value with the real source
 IP before the request reaches the backend, preventing header-spoofing bypass of
-the rate limit. The backend's key function reads the first (and only) XFF entry
-and falls back to the socket peer when the header is absent (direct connections in
-development and test).
+the rate limit. The backend's key function reads the right-most XFF entry (the
+address the nearest proxy observed) and falls back to the socket peer when the
+header is absent (direct connections in development and test). Client-supplied
+entries to the left of that one cannot shift the bucket.
+
+**Security dependency:** with HAProxy overwriting the header and the backend
+not published on a host port (it is only reachable on `gp_internal`), the XFF
+value can be trusted. If anything else can reach the backend directly, it can
+forge the header and bypass or poison the per-IP rate limit.
 
 ### Timing-attack mitigation
 
@@ -360,6 +370,7 @@ CORS is restricted to the methods and headers the panel actually uses:
   array); the built-in default lists only local dev origins
   (`localhost`/`127.0.0.1` on ports 3000, 5173, 5174) and must be overridden with the
   production panel origin(s) via environment configuration before deployment.
+  `*` is rejected at startup because credentials are always enabled.
 
 ## Deployment
 
