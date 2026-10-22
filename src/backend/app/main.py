@@ -253,9 +253,12 @@ def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
     if config_root.is_dir() and os.access(config_root, os.W_OK | os.X_OK):
         checks["runtime_config"] = {"status": "ok"}
     else:
+        logger.error(
+            "Readiness check failed: %s is not a writable directory", config_root
+        )
         checks["runtime_config"] = {
             "status": "error",
-            "detail": f"{config_root} is not a writable directory",
+            "detail": "runtime config directory is not writable",
         }
         all_ok = False
 

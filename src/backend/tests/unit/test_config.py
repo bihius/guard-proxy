@@ -362,6 +362,33 @@ def test_geoip_database_url_empty_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# cors_origins
+# ---------------------------------------------------------------------------
+
+
+def test_cors_origins_wildcard_is_rejected() -> None:
+    """`*` cannot be combined with the credentialed requests the API sends."""
+    with pytest.raises(
+        ValidationError,
+        match=r"CORS_ORIGINS must list explicit origins",
+    ):
+        _make_settings(
+            JWT_SECRET_KEY=_VALID_JWT_SECRET,
+            LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+            CORS_ORIGINS='["https://panel.example.com", "*"]',
+        )
+
+
+def test_cors_origins_explicit_values_are_accepted() -> None:
+    s = _make_settings(
+        JWT_SECRET_KEY=_VALID_JWT_SECRET,
+        LOG_INGEST_SHARED_SECRET=_VALID_INGEST_SECRET,
+        CORS_ORIGINS='["https://panel.example.com"]',
+    )
+    assert getattr(s, "cors_origins") == ["https://panel.example.com"]
+
+
+# ---------------------------------------------------------------------------
 # acme_server_url
 # ---------------------------------------------------------------------------
 

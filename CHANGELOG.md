@@ -20,6 +20,20 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
   this release keep a NULL contact and renew with the previous
   `admin@<domain>` fallback. Documented in `docs/architecture.md`.
 
+### Changed
+
+- `CORS_ORIGINS` now rejects `*` at startup: the API always sends credentialed
+  requests, so a wildcard origin is invalid (and version-dependent in browsers).
+- `GET /ready` no longer returns the runtime config path in its error detail;
+  the path is logged server-side instead.
+
+### Documented
+
+- `GET /logs` is global to all authenticated users, including `viewer`, by
+  design; per-vhost log isolation is not implemented.
+- The rate-limit key trusts `X-Forwarded-For` only because HAProxy overwrites
+  it and the backend is not published on a host port.
+
 ## [0.1.0-beta.10] - 2026-10-15
 
 ### Fixed
