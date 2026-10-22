@@ -9,8 +9,29 @@ spelling of the same version (e.g. `0.1.0b2` for `0.1.0-beta.2`).
 
 ## [Unreleased]
 
+### Added
+
+- `GET /runtime/status` reports `version_agreement` (`app_version`,
+  `configured_image_tag`, `crs_version`) and warns when the tag in
+  `GUARD_PROXY_IMAGE_TAG` and the backend's own version disagree, so a stack
+  mixing images from two releases is visible instead of assumed absent.
+- The generated CRS metadata (`ver:'OWASP_CRS/...'` and
+  `tx.crs_setup_version`) comes from one constant that a test pins to the
+  `configs/coraza/crs` submodule, replacing the hardcoded `4.25.0` / `4250` in
+  the template. Bumping the submodule without the constant now fails a test
+  instead of silently mislabelling the rules that load.
+
 ### Fixed
 
+- A tag-only upgrade (new images, old bind-mounted `haproxy/` files) no longer
+  runs silently with the `default` Coraza application instead of each vhost's
+  `policy_<id>`. The shipped `haproxy/haproxy.cfg` and `haproxy/coraza.cfg`
+  carry a `# guard-proxy-config-version: N` stamp; the backend compares the
+  mounted `coraza.cfg` with the version its image expects at startup, in
+  `GET /health` (`degraded`, naming the file), in `GET /ready` (fails, so the
+  release kit's backend healthcheck fails too; the path stays in the server
+  log like the other readiness checks) and in `POST /config/apply` (`409`,
+  naming the file). See `release/README.md`.
 - Certificate renewal registers its ACME account with the same contact the
   certificate was issued with. The renewal job used to invent
   `admin@<domain>` for every vhost, which Let's Encrypt refuses for reserved

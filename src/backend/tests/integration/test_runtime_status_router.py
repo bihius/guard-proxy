@@ -4,12 +4,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.constants.versions import CRS_VERSION
 from app.models.runtime_operation import (
     RuntimeOperation,
     RuntimeOperationStatus,
     RuntimeOperationType,
 )
 from app.models.vhost import VHost
+from app.version import APP_VERSION
 
 
 def test_runtime_status_requires_auth(client: TestClient) -> None:
@@ -231,3 +233,58 @@ def test_active_config_reports_coraza_fallback_warning(
     assert body["active_config"]["coraza_source"] == "fallback"
     assert body["active_config"]["degraded"] is True
     assert "detect-only" in body["active_config"]["warning"]
+
+
+def test_runtime_status_reports_version_agreement(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _point_runtime_root_at(monkeypatch, tmp_path / "generated")
+    monkeypatch.setattr(settings, "guard_proxy_image_tag", None)
+
+    body = client.get("/runtime/status", headers=admin_token).json()
+
+    agreement = body["version_agreement"]
+    assert agreement["configured_image_tag"] is None
+    assert agreement["crs_version"] == CRS_VERSION
+    assert agreement["app_version"] == APP_VERSION
+    assert agreement["warning"] is None
+
+
+def test_runtime_status_warns_when_the_image_tag_and_backend_version_skew(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _point_runtime_root_at(monkeypatch, tmp_path / "generated")
+    monkeypatch.setattr(settings, "guard_proxy_image_tag", "v0.0.1")
+
+    body = client.get("/runtime/status", headers=admin_token).json()
+
+    assert "v0.0.1" in body["version_agreement"]["warning"]
+
+
+def test_active_config_warns_about_a_stale_seed_config(
+    client: TestClient,
+    admin_token: dict[str, str],
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runtime_root = tmp_path / "generated"
+    release = runtime_root / "releases" / "abc"
+    release.mkdir(parents=True)
+    (release / "haproxy.cfg").write_text("global\n", encoding="utf-8")
+    (release / "coraza-spoa.yaml").write_text("applications: []\n")
+    current = _point_runtime_root_at(monkeypatch, runtime_root)
+    current.symlink_to("releases/abc")
+    stale = tmp_path / "coraza.cfg"
+    stale.write_text("[coraza]\n")
+    monkeypatch.setattr(settings, "seed_coraza_config_path", str(stale))
+
+    body = client.get("/runtime/status", headers=admin_token).json()
+
+    assert body["active_config"]["degraded"] is True
+    assert str(stale) in body["active_config"]["warning"]

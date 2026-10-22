@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
+from app.constants.versions import CRS_VERSION, EXPECTED_CONFIG_VERSION
 from app.coraza_syntax import VARIABLES_PATTERN, quoted_value_error
 from app.haproxy_syntax import host_error
 from app.models.custom_rule import RuleOperator, RulePhase
@@ -483,7 +484,17 @@ def render_haproxy_cfg_multi(vhost_contexts: list[HaproxyRenderContext]) -> str:
 
 def _render_haproxy_routes(routes: tuple[HaproxyRoute, ...]) -> str:
     template = _ENVIRONMENT.get_template("haproxy.cfg.j2")
-    return template.render(routes=routes, default_waf_app=CORAZA_DEFAULT_APP)
+    return template.render(
+        routes=routes,
+        default_waf_app=CORAZA_DEFAULT_APP,
+        config_version=EXPECTED_CONFIG_VERSION,
+    )
+
+
+def _crs_setup_version(version: str) -> int:
+    """CRS setup version integer derived from a release version (`4.25.0` -> 4250)."""
+    major, minor, patch = (int(part) for part in version.split("."))
+    return major * 1000 + minor * 10 + patch
 
 
 def render_crs_setup(policy: CrsPolicyRenderContext) -> str:
@@ -494,7 +505,12 @@ def render_crs_setup(policy: CrsPolicyRenderContext) -> str:
         if policy.enforcement_mode == PolicyEnforcementMode.detect_only
         else "On"
     )
-    return template.render(policy=policy, sec_rule_engine=sec_rule_engine)
+    return template.render(
+        policy=policy,
+        sec_rule_engine=sec_rule_engine,
+        crs_version=CRS_VERSION,
+        crs_setup_version=_crs_setup_version(CRS_VERSION),
+    )
 
 
 def render_coraza_spoa_yaml(app_names: tuple[str, ...], log_level: str) -> str:

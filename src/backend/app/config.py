@@ -107,6 +107,12 @@ class Settings(EnvFileSettings):
     haproxy_reload_timeout_seconds: int = 10
     haproxy_stats_socket_path: str = "/var/run/haproxy/admin.sock"
     haproxy_stats_timeout_seconds: int = 10
+    # Bind-mounted seed SPOE config from the release kit, checked against
+    # EXPECTED_CONFIG_VERSION (issue #312). Absent outside a container.
+    seed_coraza_config_path: str = "/usr/local/etc/haproxy/coraza.cfg"
+    # Image tag the operator pulled, compared with this backend's own version
+    # in /runtime/status. Set by the release kit's .env; unset in dev.
+    guard_proxy_image_tag: str | None = None
     log_retention_days: int = 30
     # Log level written into the generated coraza-spoa.yaml (debug, info,
     # warn, error). The debug compose overlay sets CORAZA_LOG_LEVEL=debug.
